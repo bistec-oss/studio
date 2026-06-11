@@ -1,15 +1,16 @@
 # 🦞 SpecClaw Dashboard
 
 **Project:** bistec-studio
-**Last Updated:** 2026-06-08 08:30 UTC
+**Last Updated:** 2026-06-11 17:09 UTC
 
 ## Active Changes
 
-_No active changes yet. Run `specclaw propose "<idea>"` to start._
+_No active changes._
 
 ## Pending Proposals
 
-_None._
+
+- 📋 **marketing-post-studio-v1** — proposal ready, awaiting planning
 
 ## Recently Completed
 
