@@ -118,13 +118,16 @@ POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → blob sto
 **Path B — AI-generated new design:**
 ```
 POST /api/design/assemble?mode=generate
-  → DesignOrchestrator.orchestrate(brief, brandKitId)
+  → resolve BrandKit (campaign → project → system default)
+  → DesignOrchestrator.orchestrate(brief, brandKit)
+    // brandKit supplies: active BrandKitPrompt (brand voice), canvaBrandKitId,
+    // and feedToAI artifacts (reference images, etc.) as brand context
     OpenAI Chat Completions (function calling, Canva MCP tools as functions)
     orchestrator loop (max 20 tool calls — EC-12 hard limit):
       may call: upload-asset-from-url, get-assets,
                 start-editing-transaction, perform-editing-operations,
                 commit-editing-transaction (or cancel on error)
-POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → blob storage
+POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → MinIO
 ```
 
 ### Frontend design system
@@ -184,20 +187,22 @@ model User {
 enum Role { ADMIN EDITOR }
 
 model Project {
-  id               String            @id @default(cuid())
-  name             String
-  defaultBrandKitId String?          // Canva brand kit ID (optional)
-  defaultTone      String?
-  isDeleted        Boolean           @default(false)
-  deletedAt        DateTime?
-  createdAt        DateTime          @default(now())
-  campaigns        ProjectCampaign[]
+  id                String            @id @default(cuid())
+  name              String
+  defaultBrandKitId String?           // FK → BrandKit (optional)
+  defaultBrandKit   BrandKit?         @relation("ProjectBrandKit", fields: [defaultBrandKitId], references: [id])
+  defaultTone       String?
+  isDeleted         Boolean           @default(false)
+  deletedAt         DateTime?
+  createdAt         DateTime          @default(now())
+  campaigns         ProjectCampaign[]
 }
 
 model Campaign {
   id           String            @id @default(cuid())
   name         String
-  brandKitId   String?           // overrides project default if set
+  brandKitId   String?           // FK → BrandKit, overrides project default if set
+  brandKit     BrandKit?         @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
   defaultTone  String?           // overrides project default if set
   isDeleted    Boolean           @default(false)
   deletedAt    DateTime?
@@ -281,14 +286,56 @@ model Post {
 enum Channel { INSTAGRAM LINKEDIN }
 enum PostStatus { PENDING SCHEDULED PUBLISHED FAILED CANCELLED }
 
-model BrandSystemPrompt {
-  id        String   @id @default(cuid())
-  content   String
-  version   Int      @default(1)        // for rollback — EC-13
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  createdBy String   // userId
+// A BrandKit is a first-class entity (admin-managed). It owns the brand voice
+// (versioned system prompt), brand assets (artifact folder in MinIO), and an
+// optional link to a Canva brand kit. Projects and Campaigns reference a BrandKit.
+model BrandKit {
+  id              String             @id @default(cuid())
+  name            String
+  source          BrandKitSource     @default(HYBRID) // CANVA | BACKEND | HYBRID
+  canvaBrandKitId String?            // link to a Canva brand kit (Path A templates, Path B kit)
+  artifactFolder  String?            // MinIO prefix holding this kit's artifacts
+  isDefault       Boolean            @default(false)  // system global default (one per system)
+  isDeleted       Boolean            @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  prompts         BrandKitPrompt[]
+  artifacts       BrandKitArtifact[]
+  projects        Project[]          @relation("ProjectBrandKit")
+  campaigns       Campaign[]         @relation("CampaignBrandKit")
 }
+
+enum BrandKitSource { CANVA BACKEND HYBRID }
+
+// Versioned brand voice / system prompt — prepended to Path B orchestration.
+// History retained so an admin can roll back to a prior version (EC-13).
+model BrandKitPrompt {
+  id         String   @id @default(cuid())
+  brandKitId String
+  brandKit   BrandKit @relation(fields: [brandKitId], references: [id])
+  content    String
+  version    Int      @default(1)
+  isActive   Boolean  @default(false)
+  createdBy  String   // userId
+  createdAt  DateTime @default(now())
+
+  @@unique([brandKitId, version])
+}
+
+// Brand assets stored in MinIO. Artifacts with feedToAI=true are passed to the
+// AI (Path B orchestration / image generation) as brand context.
+model BrandKitArtifact {
+  id         String       @id @default(cuid())
+  brandKitId String
+  brandKit   BrandKit     @relation(fields: [brandKitId], references: [id])
+  type       ArtifactType // LOGO | FONT | COLOR | REFERENCE_IMAGE | EXAMPLE_POST | OTHER
+  name       String
+  url        String       // MinIO object URL
+  feedToAI   Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+}
+
+enum ArtifactType { LOGO FONT COLOR REFERENCE_IMAGE EXAMPLE_POST OTHER }
 
 // Admin-curated list of models available to users per slot
 model AvailableProvider {
@@ -391,7 +438,10 @@ on the VPS. Security protocols:
 | `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts` | create | Link draft to campaign (shared asset) |
 | `src/app/api/campaigns/[id]/brandkit/route.ts` | create | Resolved brand kit for a campaign |
 | `src/app/api/library/route.ts` | create | Asset library + publish history (filterable by project/campaign) |
-| `src/app/api/admin/prompt/route.ts` | create | Brand system prompt CRUD (admin) |
+| `src/app/api/admin/brandkits/route.ts` | create | BrandKit CRUD (admin) |
+| `src/app/api/admin/brandkits/[id]/route.ts` | create | BrandKit update / soft-delete / set default (admin) |
+| `src/app/api/admin/brandkits/[id]/prompt/route.ts` | create | BrandKit prompt versions: list, add, activate (rollback) (admin) |
+| `src/app/api/admin/brandkits/[id]/artifacts/route.ts` | create | BrandKit artifact upload to MinIO / list / delete (admin) |
 | `src/app/(app)/projects/page.tsx` | create | Projects list UI |
 | `src/app/(app)/projects/[id]/page.tsx` | create | Project detail — campaigns + posts |
 | `src/app/(app)/campaigns/page.tsx` | create | Campaigns list UI (standalone + project-assigned) |
@@ -418,7 +468,7 @@ on the VPS. Security protocols:
 | `src/app/(app)/brief/` | create | Brief creation UI (Path A / B mode select) |
 | `src/app/(app)/draft/[id]/` | create | Draft refinement UI |
 | `src/app/(app)/library/` | create | Asset library + history |
-| `src/app/(app)/admin/settings/` | create | Admin: brand system prompt editor |
+| `src/app/(app)/admin/settings/` | create | Admin: provider management + brand kit manager (prompt versions, artifacts, Canva link, default) |
 | `.env.example` | create | Required env vars documented |
 | `Dockerfile` | create | Container image (shared by app + scheduler services) |
 | `docker-compose.yml` | create | Orchestrates app, scheduler, postgres, minio containers |
@@ -446,9 +496,17 @@ POST /api/publish               body: { draftId, channels } → { posts: Post[] 
 POST /api/schedule              body: { draftId, channels, scheduledAt } → { posts: Post[] }
 DELETE /api/posts/[id]          (cancel scheduled)      → 204
 GET  /api/library               → { drafts[], posts[] }
-GET  /api/admin/prompt                    (admin) → { prompt: BrandSystemPrompt }
-POST /api/admin/prompt                    (admin) body: { content } → { prompt }
-POST /api/admin/prompt/[id]/activate      (admin) → 204
+// Brand kits (admin only)
+GET    /api/admin/brandkits                       (admin) → { brandKits: BrandKit[] }  // excludes soft-deleted
+POST   /api/admin/brandkits                       (admin) body: { name, source, canvaBrandKitId? } → { brandKit }
+PATCH  /api/admin/brandkits/[id]                  (admin) body: { name?, source?, canvaBrandKitId?, isDefault? } → { brandKit }
+DELETE /api/admin/brandkits/[id]                  (admin) (soft-delete) → 204
+GET    /api/admin/brandkits/[id]/prompt           (admin) → { active, versions: BrandKitPrompt[] }
+POST   /api/admin/brandkits/[id]/prompt           (admin) body: { content } → { prompt }   // new version, becomes active
+POST   /api/admin/brandkits/[id]/prompt/[v]/activate (admin) → 204   // rollback (EC-13)
+GET    /api/admin/brandkits/[id]/artifacts        (admin) → { artifacts: BrandKitArtifact[] }
+POST   /api/admin/brandkits/[id]/artifacts        (admin) body: { type, name, file, feedToAI } → { artifact }  // uploads to MinIO
+DELETE /api/admin/brandkits/[id]/artifacts/[aid]  (admin) → 204
 GET  /api/admin/providers                 (admin) → { providers: AvailableProvider[] }
 POST /api/admin/providers                 (admin) body: { slot, providerKey, label } → { provider }
 PATCH /api/admin/providers/[id]           (admin) body: { isEnabled?, isDefault? } → { provider }
@@ -472,7 +530,9 @@ PATCH  /api/campaigns/[id]/projects       (admin) body: { projectIds } → { cam
 POST   /api/campaigns/[id]/drafts/[draftId]  → 204  // link a draft to a campaign (shared asset)
 
 // Brand kit resolution (used by brief UI on campaign select)
-GET    /api/campaigns/[id]/brandkit       → { brandKitId, source: "campaign"|"project"|"default" }
+GET    /api/campaigns/[id]/brandkit       → { brandKit: BrandKit, source: "campaign"|"project"|"default" }
+  // resolves the precedence chain and returns the full BrandKit (canvaBrandKitId,
+  // active prompt, feedToAI artifacts) so the brief UI can pre-fill brand context
 ```
 
 ## Key Decisions
@@ -514,10 +574,18 @@ main app, runs `src/scheduler/worker.ts`, and polls every 60 seconds. This share
 the Prisma client and business logic with zero code duplication. Docker Compose
 restarts the container automatically on failure (`restart: unless-stopped`).
 
-**6. Brand system prompt versioning with rollback (BrandSystemPrompt table)**
-EC-13 requires that a bad prompt can be reverted without a developer. Storing all
-versions with an `isActive` flag lets an admin activate any prior version instantly
-from the settings UI.
+**6. BrandKit as a first-class entity (owns prompt + artifacts + Canva link)**
+Rather than a free-floating `BrandSystemPrompt` table and raw Canva ID strings on
+Project/Campaign, a **BrandKit** is a proper entity that Projects and Campaigns
+reference by FK. It is **hybrid**: it can link to a Canva brand kit
+(`canvaBrandKitId`, for Path A templates and Path B), hold a backend artifact
+folder in MinIO (`BrandKitArtifact` rows), or both (`source = CANVA | BACKEND |
+HYBRID`). The brand voice lives in versioned `BrandKitPrompt` rows — history is
+retained with an `isActive` flag so an admin can roll back to any prior version
+(EC-13). Artifacts flagged `feedToAI` are passed to Path B orchestration and image
+generation as brand context. BrandKits are **admin-managed** (brand governance).
+Brand kit precedence at generation time stays: Campaign → Project default →
+system default (`BrandKit.isDefault = true`).
 
 ## Risks & Mitigations
 

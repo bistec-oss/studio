@@ -67,8 +67,12 @@ Project  (optional top-level grouping)
 Standalone post → "Uncategorized" (no campaign assigned)
 ```
 
-**Brand kit precedence at generation time:**
-Campaign brand kit → Project default brand kit → System global default
+**Brand kits (first-class, admin-managed):**
+- A `BrandKit` is its own entity — owns a name, a **versioned brand voice prompt** (`BrandKitPrompt`, rollback per EC-13), a folder of **artifacts** (`BrandKitArtifact` in MinIO — logos/fonts/colors/reference images), and an optional **Canva brand kit link**. Source is `CANVA | BACKEND | HYBRID`.
+- Artifacts flagged `feedToAI` are passed to Path B orchestration + image gen as brand context.
+- Managed by **admins only** (governance); editors select kits via projects/campaigns.
+- Projects/campaigns reference a BrandKit by FK. Precedence at generation time:
+  **Campaign brand kit → Project default brand kit → system default brand kit** (`BrandKit.isDefault`).
 
 **Key rules:**
 - Projects and campaigns: created/edited/deleted by any role (admin or editor)
@@ -109,8 +113,8 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 1. User writes a brief (design mode = "Generate new design")
 2. Backend calls **OpenAI Chat Completions with function calling**, passing:
    - The brief
-   - The admin-configured brand system prompt
-   - The resolved brand kit ID (campaign → project → global)
+   - The resolved BrandKit's active system prompt + feed-to-AI artifacts (campaign → project → default)
+   - The BrandKit's Canva brand kit ID
    - Canva MCP tool schemas as function definitions
 3. OpenAI orchestrates the full design assembly by calling Canva MCP tools directly
 4. OpenAI decides whether to generate imagery (gpt-image-1) or use an existing brand asset
@@ -169,7 +173,9 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 - `Brief` — topic, goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, imageProviderKey
 - `Draft` — copyText, imageUrl (MinIO), canvaDesignId, templateId, exportUrl (MinIO), status
 - `Post` — channel (INSTAGRAM | LINKEDIN), status, scheduledAt, publishedAt, platformId, errorReason
-- `BrandSystemPrompt` — content, version, isActive (versioned for rollback)
+- `BrandKit` — name, source (CANVA | BACKEND | HYBRID), canvaBrandKitId, artifactFolder, isDefault, isDeleted — first-class, admin-managed; referenced by Project.defaultBrandKitId and Campaign.brandKitId
+- `BrandKitPrompt` — brandKitId, content, version, isActive (versioned brand voice for rollback — EC-13)
+- `BrandKitArtifact` — brandKitId, type, name, url (MinIO), feedToAI (whether passed to AI as brand context)
 - `AvailableProvider` — slot (COPY | IMAGE), providerKey, label, isEnabled, isDefault
 
 ---
@@ -187,17 +193,17 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 
 ---
 
-## Task breakdown (25 tasks, 6 waves + Wave 5b)
+## Task breakdown (26 tasks, 6 waves + Wave 3b)
 
 | Wave | Focus | Tasks |
 |---|---|---|
 | 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
 | 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | Canva MCP client + MinIO storage | T09 Canva client (tx guard), T10 MinIO client |
+| 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
 | 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy/image routes, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
 | 5 | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
-| 5b | Projects & Campaigns | T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
-| 6 | Admin settings + E2E | T20 Admin settings (prompt + providers), T21 Draft refinement UI, T22 E2E Playwright tests |
+| 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI, T22 E2E Playwright tests |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).
 Start the Meta Business app registration **before** Wave 1 code begins — it blocks AC-3.

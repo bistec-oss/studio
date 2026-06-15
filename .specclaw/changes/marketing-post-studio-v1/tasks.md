@@ -2,14 +2,15 @@
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
-**Total Tasks:** 25
+**Total Tasks:** 26
 
 ## Summary
 
-25 tasks across 6 waves (plus Wave 5b). Waves 1–3 establish the foundation
-(project scaffold, design system, data layer, provider abstraction). Waves 4–5
-build the two design paths and publishing. Wave 5b adds the Projects & Campaigns
-layer. Wave 6 covers admin settings and end-to-end verification.
+26 tasks across 6 waves (plus Wave 3b). Waves 1–3 establish the foundation
+(project scaffold, design system, data layer, provider abstraction, Canva + MinIO
+clients). Wave 3b adds the brand kit, project, and campaign data layer (these are
+referenced by the brief/generation flow). Waves 4–5 build the two design paths and
+publishing. Wave 6 covers admin settings and end-to-end verification.
 
 The frontend follows the **Frozen Light** design system
 (`docs/ui-reference/DESIGN_SYSTEM.md`) — glassmorphic, dark + light themes
@@ -40,7 +41,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
   - Estimate: small
   - Depends: T02
-  - Notes: Full schema as defined in design.md: User, Project, Campaign, ProjectCampaign (M2M), CampaignDraft (M2M), Brief (campaignId nullable), Draft, Post, BrandSystemPrompt, AvailableProvider enums. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
+  - Notes: Full schema as defined in design.md: User, Project, Campaign, ProjectCampaign (M2M), CampaignDraft (M2M), Brief (campaignId nullable), Draft, Post, BrandKit, BrandKitPrompt (versioned), BrandKitArtifact, AvailableProvider + enums (Role, DesignMode, DraftStatus, Channel, PostStatus, ProviderSlot, BrandKitSource, ArtifactType). Project.defaultBrandKitId and Campaign.brandKitId are FKs → BrandKit. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
 
 - [ ] `T04` — Clerk auth integration + role middleware
   - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
@@ -84,7 +85,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ---
 
-### Wave 3 — Canva MCP client + blob storage
+### Wave 3 — Canva MCP client + MinIO storage
 
 - [ ] `T09` — Canva MCP client with transaction guard
   - Files: `src/lib/canva/client.ts`, `src/lib/canva/types.ts`
@@ -96,7 +97,29 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/lib/storage/minio.ts`
   - Estimate: small
   - Depends: T02
-  - Notes: Wraps `@aws-sdk/client-s3` (MinIO is S3-compatible; only the endpoint differs). Two methods: `uploadObject(buffer, bucket, key): Promise<string>` (returns a pre-signed GET URL, 7-day expiry for `generated-images`, no-expiry for `exported-designs`) and `getPresignedUrl(bucket, key): Promise<string>`. Endpoint, access key, and secret key from env vars (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`). Bucket names from env vars (`MINIO_BUCKET_IMAGES`, `MINIO_BUCKET_EXPORTS`). Creates buckets on startup if they do not exist. Used by image generation and design export routes.
+  - Notes: Wraps `@aws-sdk/client-s3` (MinIO is S3-compatible; only the endpoint differs). Two methods: `uploadObject(buffer, bucket, key): Promise<string>` (returns a pre-signed GET URL, 7-day expiry for `generated-images`, no-expiry for `exported-designs`) and `getPresignedUrl(bucket, key): Promise<string>`. Endpoint, access key, and secret key from env vars (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`). Bucket names from env vars (`MINIO_BUCKET_IMAGES`, `MINIO_BUCKET_EXPORTS`, `MINIO_BUCKET_BRANDKITS`). Creates buckets on startup if they do not exist. Used by image generation, design export, and brand kit artifact routes.
+
+---
+
+### Wave 3b — Brand kits, Projects & Campaigns (data layer)
+
+- [ ] `T26` — BrandKit management (API + admin UI)
+  - Files: `src/app/api/admin/brandkits/route.ts`, `src/app/api/admin/brandkits/[id]/route.ts`, `src/app/api/admin/brandkits/[id]/prompt/route.ts`, `src/app/api/admin/brandkits/[id]/artifacts/route.ts`, `src/lib/brandkit/resolve.ts`, `src/app/(app)/admin/settings/brandkits/page.tsx`
+  - Estimate: large
+  - Depends: T03, T04, T10, T25
+  - Notes: Admin-only BrandKit CRUD. A BrandKit is hybrid (`source = CANVA | BACKEND | HYBRID`) with optional `canvaBrandKitId` and an optional MinIO artifact folder. (1) Prompt versioning: list versions, POST new version (becomes active), POST `/prompt/[v]/activate` for rollback (EC-13). (2) Artifacts: upload to MinIO `brandkits` bucket with `type` + `feedToAI` flag, list, delete. (3) Set the system default kit (`isDefault`, one per system). (4) `src/lib/brandkit/resolve.ts` exports the shared precedence resolver (campaign → project default → system default) reused by T23 and T14. Admin-role-gated throughout. FR-25b–FR-29b, AC-5c, AC-5d, AC-5e.
+
+- [ ] `T23` — Project & Campaign API routes
+  - Files: `src/app/api/projects/route.ts`, `src/app/api/projects/[id]/route.ts`, `src/app/api/campaigns/route.ts`, `src/app/api/campaigns/[id]/route.ts`, `src/app/api/campaigns/[id]/projects/route.ts`, `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts`, `src/app/api/campaigns/[id]/brandkit/route.ts`
+  - Estimate: medium
+  - Depends: T03, T04, T26
+  - Notes: Full CRUD for Projects and Campaigns. `defaultBrandKitId` / `brandKitId` are FKs → BrandKit. Soft-delete sets `isDeleted=true` + `deletedAt`. Recovery clears both. Campaign → project reassignment is admin-gated (`requireRole('admin')`). `GET /api/campaigns/[id]/brandkit` uses `resolve.ts` (campaign → project default → system default) and returns the full resolved BrandKit + source label. `POST /api/campaigns/[id]/drafts/[draftId]` creates a `CampaignDraft` row (shared asset link). FR-P1–FR-P3, FR-C1–FR-C5, AC-11b, AC-11c, AC-17, AC-18.
+
+- [ ] `T24` — Projects & Campaigns UI
+  - Files: `src/app/(app)/projects/page.tsx`, `src/app/(app)/projects/[id]/page.tsx`, `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/campaigns/[id]/page.tsx`
+  - Estimate: medium
+  - Depends: T23, T25
+  - Notes: Projects list: name, default brand kit, campaign count, soft-delete + recover actions. Project detail: list of assigned campaigns + their posts. Campaigns list: shows standalone campaigns and project-assigned campaigns (with project badge). Campaign detail: posts grid. Brand kit selectors show admin-managed BrandKits. Admin-only UI for reassigning a campaign to a different project. Soft-deleted items shown in a "Deleted" tab with recover button. AC-11c, AC-18.
 
 ---
 
@@ -105,7 +128,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T11` — Brief creation (DB + API route)
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
-  - Depends: T03, T04, T08, T23, T25
+  - Depends: T03, T04, T08, T23, T25, T26
   - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Model dropdowns populate from `GET /api/providers/available`. Design mode radio (Path A / Path B). FR-5, FR-5a, FR-5b, FR-6, FR-28–FR-30, AC-13, AC-16, AC-17.
 
 - [ ] `T12` — Copy + image generation API routes
@@ -123,8 +146,8 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T14` — Path B: OpenAI orchestrator + design assembly
   - Files: `src/providers/implementations/orchestrator/openai-canva.ts`, `src/app/api/design/assemble/route.ts` (mode=generate branch)
   - Estimate: large
-  - Depends: T09, T12, T08
-  - Notes: Implements `DesignOrchestrator`. Passes brief + active `BrandSystemPrompt` + brand kit ID + Canva MCP tool schemas as OpenAI function definitions. Enforces 20-tool-call hard limit (EC-12). On any error: calls `cancelTransaction` before throwing (EC-11). Stores `canvaDesignId` on Draft. FR-18b–FR-21b.
+  - Depends: T09, T12, T08, T26
+  - Notes: Implements `DesignOrchestrator`. Resolves the BrandKit (campaign → project → system default) and passes brief + the kit's active `BrandKitPrompt` + feed-to-AI artifacts + `canvaBrandKitId` + Canva MCP tool schemas as OpenAI function definitions. Enforces 20-tool-call hard limit (EC-12). On any error: calls `cancelTransaction` before throwing (EC-11). Stores `canvaDesignId` on Draft. FR-18b–FR-21b, FR-27b.
 
 - [ ] `T15` — Design export API route
   - Files: `src/app/api/design/export/route.ts`
@@ -162,29 +185,13 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ---
 
-### Wave 5b — Projects & Campaigns
-
-- [ ] `T23` — Project & Campaign API routes
-  - Files: `src/app/api/projects/route.ts`, `src/app/api/projects/[id]/route.ts`, `src/app/api/campaigns/route.ts`, `src/app/api/campaigns/[id]/route.ts`, `src/app/api/campaigns/[id]/projects/route.ts`, `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts`, `src/app/api/campaigns/[id]/brandkit/route.ts`
-  - Estimate: medium
-  - Depends: T03, T04
-  - Notes: Full CRUD for Projects and Campaigns. Soft-delete sets `isDeleted=true` + `deletedAt`. Recovery clears both. Campaign → project reassignment is admin-gated (`requireRole('admin')`). `GET /api/campaigns/[id]/brandkit` resolves brand kit using precedence chain (campaign → project default → system global) and returns the resolved ID + source label. `POST /api/campaigns/[id]/drafts/[draftId]` creates a `CampaignDraft` row (shared asset link). FR-P1–FR-P3, FR-C1–FR-C5, AC-11b, AC-11c, AC-17, AC-18.
-
-- [ ] `T24` — Projects & Campaigns UI
-  - Files: `src/app/(app)/projects/page.tsx`, `src/app/(app)/projects/[id]/page.tsx`, `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/campaigns/[id]/page.tsx`
-  - Estimate: medium
-  - Depends: T23, T25
-  - Notes: Projects list: name, default brand kit, campaign count, soft-delete + recover actions. Project detail: list of assigned campaigns + their posts. Campaigns list: shows standalone campaigns and project-assigned campaigns (with project badge). Campaign detail: posts grid. Admin-only UI for reassigning a campaign to a different project. Soft-deleted items shown in a "Deleted" tab with recover button. AC-11c, AC-18.
-
----
-
 ### Wave 6 — Admin settings, refinement UI, end-to-end
 
-- [ ] `T20` — Admin: settings UI (brand prompt + provider management)
-  - Files: `src/app/api/admin/prompt/route.ts`, `src/app/api/admin/providers/route.ts`, `src/app/api/admin/providers/[id]/route.ts`, `src/app/(app)/admin/settings/page.tsx`
-  - Estimate: medium
-  - Depends: T14, T04, T08, T25
-  - Notes: Two sections in the admin settings page. (1) Brand system prompt: GET active prompt + version history, POST new version, POST `/activate` for rollback (EC-13). (2) Provider management: GET all registered providers per slot, PATCH to enable/disable or set as default, immediately reflected in `GET /api/providers/available` for all users' brief UIs. Admin-role-gated throughout. FR-26b, FR-27b, FR-31, AC-5c, AC-14, AC-15.
+- [ ] `T20` — Admin: provider management settings
+  - Files: `src/app/api/admin/providers/route.ts`, `src/app/api/admin/providers/[id]/route.ts`, `src/app/(app)/admin/settings/page.tsx`
+  - Estimate: small
+  - Depends: T04, T08, T25
+  - Notes: Provider management section of the admin settings page (brand kit management lives in T26). GET all registered providers per slot, PATCH to enable/disable or set as default, immediately reflected in `GET /api/providers/available` for all users' brief UIs. Links to the BrandKit manager (T26). Admin-role-gated. FR-31, AC-14, AC-15.
 
 - [ ] `T21` — Draft refinement UI
   - Files: `src/app/(app)/draft/[id]/page.tsx`

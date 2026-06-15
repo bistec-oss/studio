@@ -1,6 +1,6 @@
-<svg viewBox="0 0 1060 920" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Inter, system-ui, -apple-system, sans-serif">
+<svg viewBox="0 0 1100 1010" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Inter, system-ui, -apple-system, sans-serif">
   <title>bistec-studio Entity Relationship Diagram</title>
-  <desc>ERD for the Prisma data model: User, Project, Campaign, Brief, Draft, Post, two M:N join tables (ProjectCampaign, CampaignDraft), and two config tables (BrandSystemPrompt, AvailableProvider).</desc>
+  <desc>ERD for the Prisma data model: User, Project, Campaign, Brief, Draft, Post, two M:N join tables (ProjectCampaign, CampaignDraft), the BrandKit entity with BrandKitPrompt and BrandKitArtifact, and the AvailableProvider config table.</desc>
 
   <defs>
     <marker id="dot" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5">
@@ -8,18 +8,18 @@
     </marker>
   </defs>
 
-  <rect width="1060" height="920" fill="#f8fafc"/>
+  <rect width="1100" height="1010" fill="#f8fafc"/>
 
   <!-- Title -->
-  <text x="530" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">bistec-studio — Entity Relationship Diagram</text>
-  <text x="530" y="52" text-anchor="middle" font-size="11" fill="#64748b">Prisma schema · Project → Campaign → Brief → Draft → Post, with M:N joins</text>
+  <text x="550" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">bistec-studio — Entity Relationship Diagram</text>
+  <text x="550" y="52" text-anchor="middle" font-size="11" fill="#64748b">Prisma schema · Project → Campaign → Brief → Draft → Post · BrandKit owns prompt + artifacts + Canva link</text>
 
-  <!-- ═══════════ RELATIONSHIP LINES (drawn first, under boxes) ═══════════ -->
+  <!-- ═══════════ RELATIONSHIP LINES ═══════════ -->
   <g stroke="#94a3b8" stroke-width="1.4" fill="none">
     <!-- User → Brief -->
     <path d="M560,112 L640,112 L640,190" marker-end="url(#dot)"/>
     <!-- User → Post (routed right) -->
-    <path d="M620,86 L1045,86 L1045,470 L1040,470" marker-end="url(#dot)"/>
+    <path d="M620,86 L1055,86 L1055,470 L1040,470" marker-end="url(#dot)"/>
     <!-- Project → ProjectCampaign -->
     <path d="M135,356 L135,400 L200,400 L200,430" marker-end="url(#dot)"/>
     <!-- Campaign → ProjectCampaign -->
@@ -34,15 +34,23 @@
     <path d="M405,356 L405,470 L560,470" marker-end="url(#dot)"/>
     <!-- Draft → CampaignDraft -->
     <path d="M850,352 L850,486 L760,486" marker-end="url(#dot)"/>
+    <!-- Project → BrandKit (defaultBrandKit) -->
+    <path d="M60,356 L60,588 L95,588 L95,600" marker-end="url(#dot)"/>
+    <!-- Campaign → BrandKit (brandKit) -->
+    <path d="M340,356 L340,584 L170,584 L170,600" marker-end="url(#dot)"/>
+    <!-- BrandKit → BrandKitPrompt -->
+    <path d="M260,675 L300,675" marker-end="url(#dot)"/>
+    <!-- BrandKit → BrandKitArtifact -->
+    <path d="M120,762 L120,840 L300,840" marker-end="url(#dot)"/>
   </g>
 
-  <!-- Cardinality labels (white bg chips) -->
+  <!-- Cardinality labels -->
   <g font-size="10" font-weight="700" fill="#475569" text-anchor="middle">
     <rect x="551" y="104" width="14" height="14" rx="3" fill="#f8fafc"/><text x="558" y="115">1</text>
     <rect x="633" y="178" width="14" height="14" rx="3" fill="#f8fafc"/><text x="640" y="189">∞</text>
 
     <rect x="613" y="79" width="14" height="14" rx="3" fill="#f8fafc"/><text x="620" y="90">1</text>
-    <rect x="1033" y="463" width="14" height="14" rx="3" fill="#f8fafc"/><text x="1040" y="474">∞</text>
+    <rect x="1043" y="463" width="14" height="14" rx="3" fill="#f8fafc"/><text x="1050" y="474">∞</text>
 
     <rect x="128" y="370" width="14" height="14" rx="3" fill="#f8fafc"/><text x="135" y="381">1</text>
     <rect x="333" y="370" width="14" height="14" rx="3" fill="#f8fafc"/><text x="340" y="381">1</text>
@@ -62,9 +70,22 @@
     <rect x="540" y="463" width="16" height="14" rx="3" fill="#f8fafc"/><text x="548" y="474">∞</text>
     <rect x="857" y="362" width="14" height="14" rx="3" fill="#f8fafc"/><text x="864" y="373">1</text>
     <rect x="764" y="479" width="16" height="14" rx="3" fill="#f8fafc"/><text x="772" y="490">∞</text>
+
+    <!-- Project → BrandKit -->
+    <rect x="53" y="362" width="16" height="14" rx="3" fill="#f8fafc"/><text x="61" y="373">∞</text>
+    <rect x="88" y="585" width="14" height="14" rx="3" fill="#f8fafc"/><text x="95" y="596">1</text>
+    <!-- Campaign → BrandKit -->
+    <rect x="333" y="362" width="16" height="14" rx="3" fill="#f8fafc"/><text x="341" y="373">∞</text>
+    <rect x="163" y="585" width="14" height="14" rx="3" fill="#f8fafc"/><text x="170" y="596">1</text>
+    <!-- BrandKit → Prompt -->
+    <rect x="252" y="660" width="14" height="14" rx="3" fill="#f8fafc"/><text x="259" y="671">1</text>
+    <rect x="286" y="660" width="16" height="14" rx="3" fill="#f8fafc"/><text x="294" y="671">∞</text>
+    <!-- BrandKit → Artifact -->
+    <rect x="106" y="766" width="14" height="14" rx="3" fill="#f8fafc"/><text x="113" y="777">1</text>
+    <rect x="286" y="833" width="16" height="14" rx="3" fill="#f8fafc"/><text x="294" y="844">∞</text>
   </g>
 
-  <!-- ═══════════ ENTITIES ═══════════ -->
+  <!-- ═══════════ ENTITIES (top + middle) ═══════════ -->
 
   <!-- USER -->
   <g>
@@ -83,7 +104,7 @@
     <text x="40" y="249" font-size="12" font-weight="700" fill="#fff">Project</text>
     <text x="40" y="274" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="230" y="274" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
     <text x="40" y="292" font-size="11" fill="#334155">name</text>
-    <text x="40" y="310" font-size="11" fill="#334155">defaultBrandKitId</text><text x="230" y="310" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
+    <text x="40" y="310" font-size="11" fill="#334155">defaultBrandKitId</text><text x="230" y="310" text-anchor="end" font-size="9" fill="#64748b">FK ?</text>
     <text x="40" y="328" font-size="11" fill="#334155">defaultTone</text><text x="230" y="328" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
     <text x="40" y="346" font-size="11" fill="#334155">isDeleted · deletedAt</text>
   </g>
@@ -95,7 +116,7 @@
     <text x="310" y="249" font-size="12" font-weight="700" fill="#fff">Campaign</text>
     <text x="310" y="274" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="500" y="274" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
     <text x="310" y="292" font-size="11" fill="#334155">name</text>
-    <text x="310" y="310" font-size="11" fill="#334155">brandKitId</text><text x="500" y="310" text-anchor="end" font-size="9" fill="#94a3b8">? override</text>
+    <text x="310" y="310" font-size="11" fill="#334155">brandKitId</text><text x="500" y="310" text-anchor="end" font-size="9" fill="#64748b">FK ? override</text>
     <text x="310" y="328" font-size="11" fill="#334155">defaultTone</text><text x="500" y="328" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
     <text x="310" y="346" font-size="11" fill="#334155">isDeleted · deletedAt</text>
   </g>
@@ -162,49 +183,83 @@
     <text x="570" y="512" font-size="11" fill="#334155">draftId</text><text x="750" y="512" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">PK · FK</text>
   </g>
 
-  <!-- BRANDSYSTEMPROMPT (config) -->
+  <!-- ═══════════ BRAND KIT CLUSTER + CONFIG ═══════════ -->
+
+  <!-- BRANDKIT -->
   <g>
-    <rect x="30" y="600" width="210" height="108" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
-    <path d="M30,608 Q30,600 38,600 L232,600 Q240,600 240,608 L240,626 L30,626 Z" fill="#0891b2"/>
-    <text x="40" y="619" font-size="12" font-weight="700" fill="#fff">BrandSystemPrompt</text>
-    <text x="40" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="230" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
-    <text x="40" y="662" font-size="11" fill="#334155">content</text>
-    <text x="40" y="680" font-size="11" fill="#334155">version</text><text x="230" y="680" text-anchor="end" font-size="9" fill="#94a3b8">rollback</text>
-    <text x="40" y="698" font-size="11" fill="#334155">isActive · createdBy</text>
+    <rect x="30" y="600" width="230" height="162" rx="8" fill="#fff" stroke="#0891b2" stroke-width="1.4"/>
+    <path d="M30,608 Q30,600 38,600 L252,600 Q260,600 260,608 L260,626 L30,626 Z" fill="#0891b2"/>
+    <text x="40" y="619" font-size="12" font-weight="700" fill="#fff">BrandKit</text>
+    <text x="40" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="250" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="40" y="662" font-size="11" fill="#334155">name</text>
+    <text x="40" y="680" font-size="11" fill="#334155">source</text><text x="250" y="680" text-anchor="end" font-size="9" fill="#94a3b8">CANVA|BACKEND|HYBRID</text>
+    <text x="40" y="698" font-size="11" fill="#334155">canvaBrandKitId</text><text x="250" y="698" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
+    <text x="40" y="716" font-size="11" fill="#334155">artifactFolder</text><text x="250" y="716" text-anchor="end" font-size="9" fill="#94a3b8">? MinIO</text>
+    <text x="40" y="734" font-size="11" fill="#334155">isDefault</text><text x="250" y="734" text-anchor="end" font-size="9" fill="#94a3b8">system default</text>
+    <text x="40" y="752" font-size="11" fill="#334155">isDeleted · deletedAt</text>
+  </g>
+
+  <!-- BRANDKITPROMPT -->
+  <g>
+    <rect x="300" y="600" width="220" height="144" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M300,608 Q300,600 308,600 L512,600 Q520,600 520,608 L520,626 L300,626 Z" fill="#0891b2"/>
+    <text x="310" y="619" font-size="12" font-weight="700" fill="#fff">BrandKitPrompt</text>
+    <text x="310" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="510" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="310" y="662" font-size="11" fill="#334155">brandKitId</text><text x="510" y="662" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="310" y="680" font-size="11" fill="#334155">content</text><text x="510" y="680" text-anchor="end" font-size="9" fill="#94a3b8">brand voice</text>
+    <text x="310" y="698" font-size="11" fill="#334155">version</text><text x="510" y="698" text-anchor="end" font-size="9" fill="#94a3b8">rollback EC-13</text>
+    <text x="310" y="716" font-size="11" fill="#334155">isActive</text>
+    <text x="310" y="734" font-size="11" fill="#334155">createdBy</text>
+  </g>
+
+  <!-- BRANDKITARTIFACT -->
+  <g>
+    <rect x="300" y="770" width="220" height="144" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M300,778 Q300,770 308,770 L512,770 Q520,770 520,778 L520,796 L300,796 Z" fill="#0891b2"/>
+    <text x="310" y="789" font-size="12" font-weight="700" fill="#fff">BrandKitArtifact</text>
+    <text x="310" y="814" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="510" y="814" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="310" y="832" font-size="11" fill="#334155">brandKitId</text><text x="510" y="832" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="310" y="850" font-size="11" fill="#334155">type</text><text x="510" y="850" text-anchor="end" font-size="9" fill="#94a3b8">LOGO|IMG|FONT…</text>
+    <text x="310" y="868" font-size="11" fill="#334155">name · url</text><text x="510" y="868" text-anchor="end" font-size="9" fill="#94a3b8">MinIO</text>
+    <text x="310" y="886" font-size="11" fill="#334155">feedToAI</text><text x="510" y="886" text-anchor="end" font-size="9" fill="#94a3b8">brand context</text>
   </g>
 
   <!-- AVAILABLEPROVIDER (config) -->
   <g>
-    <rect x="300" y="600" width="210" height="126" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
-    <path d="M300,608 Q300,600 308,600 L502,600 Q510,600 510,608 L510,626 L300,626 Z" fill="#0891b2"/>
-    <text x="310" y="619" font-size="12" font-weight="700" fill="#fff">AvailableProvider</text>
-    <text x="310" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="500" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
-    <text x="310" y="662" font-size="11" fill="#334155">slot</text><text x="500" y="662" text-anchor="end" font-size="9" fill="#94a3b8">COPY | IMAGE</text>
-    <text x="310" y="680" font-size="11" fill="#334155">providerKey · label</text>
-    <text x="310" y="698" font-size="11" fill="#334155">isEnabled</text>
-    <text x="310" y="716" font-size="11" fill="#334155">isDefault</text><text x="500" y="716" text-anchor="end" font-size="9" fill="#94a3b8">1 per slot</text>
+    <rect x="560" y="600" width="215" height="126" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M560,608 Q560,600 568,600 L767,600 Q775,600 775,608 L775,626 L560,626 Z" fill="#475569"/>
+    <text x="570" y="619" font-size="12" font-weight="700" fill="#fff">AvailableProvider</text>
+    <text x="570" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="765" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="570" y="662" font-size="11" fill="#334155">slot</text><text x="765" y="662" text-anchor="end" font-size="9" fill="#94a3b8">COPY | IMAGE</text>
+    <text x="570" y="680" font-size="11" fill="#334155">providerKey · label</text>
+    <text x="570" y="698" font-size="11" fill="#334155">isEnabled</text>
+    <text x="570" y="716" font-size="11" fill="#334155">isDefault</text><text x="765" y="716" text-anchor="end" font-size="9" fill="#94a3b8">1 per slot</text>
   </g>
 
   <!-- ═══════════ LEGEND ═══════════ -->
   <g>
-    <rect x="560" y="600" width="480" height="126" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
-    <text x="576" y="622" font-size="11" font-weight="700" fill="#0f172a">Legend</text>
+    <rect x="560" y="752" width="510" height="162" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="576" y="774" font-size="11" font-weight="700" fill="#0f172a">Legend</text>
 
-    <rect x="576" y="634" width="22" height="14" rx="3" fill="#0284c7"/>
-    <text x="606" y="645" font-size="10.5" fill="#334155">Core content entity</text>
+    <rect x="576" y="786" width="22" height="14" rx="3" fill="#0284c7"/>
+    <text x="606" y="797" font-size="10.5" fill="#334155">Core content entity</text>
 
-    <rect x="576" y="656" width="22" height="14" rx="3" fill="#fff" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,2"/>
-    <text x="606" y="667" font-size="10.5" fill="#334155">M:N join table (composite key)</text>
+    <rect x="576" y="808" width="22" height="14" rx="3" fill="#fff" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,2"/>
+    <text x="606" y="819" font-size="10.5" fill="#334155">M:N join table (composite key)</text>
 
-    <rect x="576" y="678" width="22" height="14" rx="3" fill="#0891b2"/>
-    <text x="606" y="689" font-size="10.5" fill="#334155">Standalone config table</text>
+    <rect x="576" y="830" width="22" height="14" rx="3" fill="#0891b2"/>
+    <text x="606" y="841" font-size="10.5" fill="#334155">BrandKit + owned tables</text>
 
-    <text x="576" y="711" font-size="10.5" fill="#475569"><tspan font-weight="700">PK</tspan> primary key · <tspan font-weight="700">FK</tspan> foreign key · <tspan font-weight="700">?</tspan> nullable</text>
+    <rect x="576" y="852" width="22" height="14" rx="3" fill="#475569"/>
+    <text x="606" y="863" font-size="10.5" fill="#334155">Standalone config table</text>
 
-    <text x="820" y="645" font-size="10.5" fill="#475569"><tspan font-weight="700">1 —— ∞</tspan>  one-to-many</text>
-    <text x="820" y="667" font-size="10.5" fill="#475569">Project ⇄ Campaign : M:N</text>
-    <text x="820" y="689" font-size="10.5" fill="#475569">Campaign ⇄ Draft : M:N (shared asset)</text>
-    <text x="820" y="711" font-size="10.5" fill="#475569">Brief.campaignId null → Uncategorized</text>
+    <text x="576" y="887" font-size="10.5" fill="#475569"><tspan font-weight="700">PK</tspan> primary key · <tspan font-weight="700">FK</tspan> foreign key · <tspan font-weight="700">?</tspan> nullable</text>
+    <text x="576" y="904" font-size="10.5" fill="#475569"><tspan font-weight="700">1 —— ∞</tspan> one-to-many · Project/Campaign ⇄ BrandKit precedence: Campaign → Project → default</text>
+
+    <text x="830" y="797" font-size="10.5" fill="#475569">Project ⇄ Campaign : M:N</text>
+    <text x="830" y="819" font-size="10.5" fill="#475569">Campaign ⇄ Draft : M:N (shared)</text>
+    <text x="830" y="841" font-size="10.5" fill="#475569">Brief.campaignId null → Uncat.</text>
+    <text x="830" y="863" font-size="10.5" fill="#475569">BrandKit: hybrid Canva + MinIO</text>
   </g>
 
 </svg>

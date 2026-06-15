@@ -46,7 +46,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   design — see Open Questions.)
 
 **Projects**
-- **FR-P1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Project. A Project has a name, an optional default brand kit (Canva brand kit ID), and a default tone.
+- **FR-P1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Project. A Project has a name, an optional default brand kit (reference to an admin-managed BrandKit — see FR-25b), and a default tone.
 - **FR-P2** Soft-deleted projects are hidden from active views but recoverable by any authenticated user within a defined recovery window. All campaigns and posts under a soft-deleted project are preserved.
 - **FR-P3** A project's default brand kit and tone are automatically inherited by campaigns created within it, but can be overridden at the campaign level.
 
@@ -105,8 +105,9 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 **Design Path B — AI-Generated New Design (OpenAI orchestrates Canva MCP)**
 - **FR-18b** When the user selects "generate new design" in the brief, the backend
   invokes OpenAI (Chat Completions with function calling) as an **AI orchestrator**,
-  passing it: the user's brief, the admin-defined brand system prompt (see FR-26b),
-  the Bistec brand kit ID, and the Canva MCP tool schemas as available
+  passing it: the user's brief, the resolved brand kit's active system prompt and
+  feed-to-AI artifacts (see FR-25b–FR-27b), the brand kit's Canva brand kit ID,
+  and the Canva MCP tool schemas as available
   functions. OpenAI plans and directs the full design assembly by calling Canva MCP
   tools — this replicates the ChatGPT + Canva plugin pattern (canva.com/integrations/
   chatgpt) in bistec-studio's own backend, without depending on ChatGPT's UI.
@@ -121,13 +122,26 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **FR-21b** Once assembled, the new design enters the same in-app refinement and
   export flow as Path A (FR-15, FR-16, FR-17).
 
-**Admin: Brand System Prompt Configuration**
-- **FR-26b** Admins can configure the brand system prompt — encoding Bistec's brand
-  voice and visual style guidelines — through a
-  **settings page in bistec-studio** (no developer/deploy cycle required to update).
-- **FR-27b** The brand system prompt is prepended to every Path B OpenAI
-  orchestration call. It is stored server-side only and never exposed to editors or
-  the browser.
+**Admin: Brand Kits**
+- **FR-25b** A **brand kit** is a first-class, admin-managed entity. It owns: a
+  name, a brand voice (versioned system prompt), a folder of brand artifacts
+  (logos, fonts, colors, reference images, example posts), and an optional link to
+  a Canva brand kit. A brand kit may be **Canva-linked, backend-folder-based, or
+  both** (hybrid).
+- **FR-26b** Admins manage brand kits through a **settings page in bistec-studio**
+  (no developer/deploy cycle): create/edit/soft-delete kits, set the system default
+  kit, link a Canva brand kit, edit the brand voice prompt, and upload/remove
+  artifacts. Editors select brand kits (via projects/campaigns) but cannot edit them.
+- **FR-27b** The brand kit's active system prompt is prepended to every Path B
+  OpenAI orchestration call. Artifacts flagged "feed to AI" (e.g. reference images)
+  are passed as additional brand context to Path B orchestration and image
+  generation. The prompt and artifacts are stored server-side; the prompt is never
+  exposed to editors or the browser.
+- **FR-28b** The brand voice prompt is **versioned**. An admin can roll back to any
+  prior version from the settings UI (EC-13).
+- **FR-29b** Projects and campaigns reference a brand kit. Brand kit precedence at
+  generation time: Campaign brand kit → Project default brand kit → system default
+  brand kit (see FR-5b).
 
 **User-selectable AI models (copy + image)**
 - **FR-28** At brief creation time, the user can select which AI model to use for
@@ -219,9 +233,14 @@ Each criterion must pass for the change to be considered complete.
 - **AC-5b** A design produced via Path B ("generate new design") is visibly
   brand-consistent (brand kit applied, brand voice reflected) without the user
   manually configuring any brand styling.
-- **AC-5c** An admin can update the brand system prompt in the bistec-studio
+- **AC-5c** An admin can update a brand kit's system prompt in the bistec-studio
   settings UI; a Path B design generated after the update reflects the new prompt
   without a redeploy.
+- **AC-5d** An admin uploads a reference-image artifact to a brand kit with "feed
+  to AI" enabled; a subsequent Path B generation using that kit reflects the
+  artifact as brand context.
+- **AC-5e** An admin can roll a brand kit's prompt back to a prior version; Path B
+  generations afterward use the reverted prompt (EC-13).
 - **AC-13** The brief UI shows only admin-enabled models for copy and image slots;
   a user selects Gemini for image generation and the post image is generated by
   Gemini (not the system default).
@@ -284,9 +303,10 @@ Each criterion must pass for the change to be considered complete.
 - **EC-12** OpenAI orchestrator enters an unexpected loop or exceeds a maximum
   tool-call depth → the backend enforces a hard limit on orchestration steps and
   surfaces a clear error rather than running indefinitely.
-- **EC-13** Admin saves a brand system prompt that causes all Path B generations to
-  fail moderation or produce off-brand output → an admin can revert to the previous
-  prompt via the settings UI (prompt history / last-known-good retained).
+- **EC-13** Admin saves a brand kit prompt version that causes all Path B
+  generations to fail moderation or produce off-brand output → an admin can revert
+  to a previous version via the settings UI (per-brand-kit prompt version history /
+  last-known-good retained).
 - **EC-10** User selects both channels but content only suits one → each channel receives channel-appropriate copy (per FR-8); publishing to one channel failing does not block the other.
 - **EC-14** A campaign is soft-deleted while a post under it is in SCHEDULED state → the scheduled post still fires; deletion does not cancel scheduled posts.
 - **EC-15** A project's default brand kit is removed from Canva → campaigns that inherited it fall back to the system global default; existing exports are unaffected (stored in MinIO).
