@@ -2,8 +2,9 @@
 
 **Date:** 2026-06-15
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
-**Branch:** `main` — clean, all work pushed (latest commit `3a903e6`)
+**Branch:** `main` — clean, all work pushed (latest commit `119875b`)
 **Specclaw change:** `marketing-post-studio-v1`
+**Prototype:** `bistec-studio-prototype/` (Next.js 15, static export, runs on `npm run dev`)
 
 ---
 
@@ -95,22 +96,27 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 - `T25` scaffolds the theme config + base components (Button, GlassPanel, GlassInput, SegmentedToggle, StatusChip, AppShell, ThemeProvider/Toggle) before any screen task; all UI tasks depend on it
 - Diffusion-tool features stripped from the source template (seed, credits, step slider, fine-tuning/billing nav)
 
+> ⚠️ **Build instruction:** When implementing any UI screen, the design context file at `docs/ui-reference/DESIGN_SYSTEM.md` **must be explicitly read and followed** before writing any component. Do not rely on memory or generic Tailwind conventions — the token names, surface levels, glass utility classes, and color ramps are project-specific and must be applied exactly as documented. This applies to every task in every wave.
+
 ## The two design paths
 
 ### Path A — Preset brand template
 1. User writes a brief (topic, goal, tone, channels, design mode = "Use a template"), optionally assigns to a campaign/project
 2. Brand kit and tone auto-populate from campaign/project defaults
 3. User selects copy model + image model from admin-curated dropdowns
-4. GPT generates channel-appropriate caption/copy
-5. gpt-image-1 generates post image
-6. Image uploaded to Canva via `upload-asset-from-url` → Canva asset ID
-7. `create-design-from-brand-template` instantiates a brand template (BTM* ID)
-8. Editing transaction: `start` → `perform-editing-operations` (`replace_text` for copy, `update_fill` for image) → `commit`
-9. `export-design` → PNG/JPG → MinIO (`exported-designs` bucket)
-10. Publish now or schedule to Instagram / LinkedIn
+4. User may optionally upload an **Additional Image** (e.g. speaker photo, product shot, event graphic) — placed into a dedicated image slot in the template alongside the AI-generated background
+5. GPT generates channel-appropriate caption/copy using the topic + description as prompt context
+6. gpt-image-1 generates the post background image (the AI-generated layer)
+7. Both the AI background and the user-uploaded additional image are uploaded to Canva via `upload-asset-from-url` → Canva asset IDs
+8. `create-design-from-brand-template` instantiates a brand template (BTM* ID)
+9. Editing transaction: `start` → `perform-editing-operations` (`replace_text` for copy, `update_fill` for each image slot) → `commit`
+10. `export-design` → PNG/JPG → MinIO (`exported-designs` bucket)
+11. Publish now or schedule to Instagram / LinkedIn
+
+**Brief fields (Path A):** topic · description (AI prompt context — speaker bios, event details, key messages) · goal/CTA · tone · channels · template selection · additional image (optional upload)
 
 ### Path B — AI-generated new design
-1. User writes a brief (design mode = "Generate new design")
+1. User writes a brief (design mode = "Generate new design") — same topic + description fields as Path A; no additional image upload (AI controls all layers)
 2. Backend calls **OpenAI Chat Completions with function calling**, passing:
    - The brief
    - The resolved BrandKit's active system prompt + feed-to-AI artifacts (campaign → project → default)
@@ -170,7 +176,7 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt
 - `ProjectCampaign` — M2M join (project ↔ campaign)
 - `CampaignDraft` — M2M join (campaign ↔ draft, shared asset linking)
-- `Brief` — topic, goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, imageProviderKey
+- `Brief` — topic, **description** (AI prompt context — speaker bios, event details, key messages), goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, imageProviderKey, **additionalImageUrl** (nullable — MinIO URL of user-uploaded image placed into template slot, Path A only)
 - `Draft` — copyText, imageUrl (MinIO), canvaDesignId, templateId, exportUrl (MinIO), status
 - `Post` — channel (INSTAGRAM | LINKEDIN), status, scheduledAt, publishedAt, platformId, errorReason
 - `BrandKit` — name, source (CANVA | BACKEND | HYBRID), canvaBrandKitId, artifactFolder, isDefault, isDeleted — first-class, admin-managed; referenced by Project.defaultBrandKitId and Campaign.brandKitId
@@ -229,6 +235,29 @@ Start the Meta Business app registration **before** Wave 1 code begins — it bl
 - Full content calendar UI
 - External/client self-serve access
 - Healthcare compliance constraints
+
+---
+
+## Prototype (`bistec-studio-prototype/`)
+
+A fully interactive Next.js 15 static-export prototype lives at `bistec-studio-prototype/` in this repo. It covers all 7 screens with mock data and simulated AI calls — use it to validate UX flows before building the real system.
+
+| Screen | Route |
+|---|---|
+| Dashboard | `/` |
+| New Post (brief wizard) | `/brief` |
+| Draft refinement | `/draft/[id]` |
+| Library | `/library` |
+| Projects | `/projects` |
+| Campaigns | `/campaigns` |
+| Settings (brand kits + AI providers) | `/settings` |
+
+**Run:** `cd bistec-studio-prototype && npm install && npm run dev`
+
+**Key prototype decisions reflected:**
+- Brief has: topic · description (AI context) · goal · tone · channels · design mode · additional image upload (Path A only) · copy model · image model
+- Path A vs Path B selection is preserved through to the draft page via `?designMode=` query param
+- Additional Image upload slot is generic — not speaker-specific; any image the user wants placed into a template slot
 
 ---
 
