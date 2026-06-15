@@ -23,19 +23,19 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `package.json`, `tsconfig.json`, `next.config.ts`, `.env.example`, `Dockerfile`
   - Estimate: small
   - Depends: —
-  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (OpenAI key, Canva MCP creds, Clerk keys, DB URL, blob storage, social API tokens).
+  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (OpenAI key, Canva MCP creds, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
 
-- [ ] `T02` — Azure infrastructure setup (Bicep)
-  - Files: `infra/main.bicep`, `infra/modules/` (container-app, postgres, blob, keyvault)
+- [ ] `T02` — VPS infrastructure setup (Docker Compose)
+  - Files: `docker-compose.yml`, `.env.example`, `.gitignore`
   - Estimate: medium
   - Depends: T01
-  - Notes: Azure Container Apps (main app + scheduler job), Azure Database for PostgreSQL Flexible Server, Azure Blob Storage (two containers: `generated-images`, `exported-designs`), Azure Key Vault. Managed identity wired for Key Vault access.
+  - Notes: `docker-compose.yml` defines four services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only). All services use `env_file: .env` — no secrets in compose file. `.env.example` documents every variable. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
 
 - [ ] `T03` — Prisma schema + initial migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
   - Estimate: small
   - Depends: T02
-  - Notes: Full schema as defined in design.md: User, Brief, Draft, Post, BrandSystemPrompt enums. Run `prisma migrate dev` to generate migration files.
+  - Notes: Full schema as defined in design.md: User, Brief, Draft, Post, BrandSystemPrompt, AvailableProvider enums. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
 
 - [ ] `T04` — Clerk auth integration + role middleware
   - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
@@ -81,11 +81,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: T01
   - Notes: Typed wrapper over all Canva MCP tool calls used in the system: `listBrandKits`, `createFromTemplate`, `uploadAsset`, `getDesignContent`, `getAssets`, `withEditingTransaction` (the `try/finally` guard — see design.md), `exportDesign`. The `withEditingTransaction` method is the only way callers can open an editing session — raw start/commit/cancel are not exported.
 
-- [ ] `T10` — Azure Blob Storage client
-  - Files: `src/lib/storage/blob.ts`
+- [ ] `T10` — MinIO storage client
+  - Files: `src/lib/storage/minio.ts`
   - Estimate: small
   - Depends: T02
-  - Notes: Wraps `@azure/storage-blob`. Two methods: `uploadImage(buffer, container): Promise<string>` (returns permanent blob URL) and `getUrl(blobName, container): string`. Used by image generation and design export routes.
+  - Notes: Wraps `@aws-sdk/client-s3` (MinIO is S3-compatible; only the endpoint differs). Two methods: `uploadObject(buffer, bucket, key): Promise<string>` (returns a pre-signed GET URL, 7-day expiry for `generated-images`, no-expiry for `exported-designs`) and `getPresignedUrl(bucket, key): Promise<string>`. Endpoint, access key, and secret key from env vars (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`). Bucket names from env vars (`MINIO_BUCKET_IMAGES`, `MINIO_BUCKET_EXPORTS`). Creates buckets on startup if they do not exist. Used by image generation and design export routes.
 
 ---
 
@@ -101,7 +101,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
   - Estimate: small
   - Depends: T08, T10, T11
-  - Notes: Both routes are POST, auth-required, create/update a Draft record. Image route uploads gpt-image-1 output to blob storage and stores the URL. Both support regeneration (POST again on existing draftId). FR-7–FR-11, AC-4.
+  - Notes: Both routes are POST, auth-required, create/update a Draft record. Image route uploads gpt-image-1 output to MinIO `generated-images` bucket and stores the pre-signed URL. Both support regeneration (POST again on existing draftId). FR-7–FR-11, AC-4.
 
 - [ ] `T13` — Path A: design assembly API route (preset template)
   - Files: `src/app/api/design/assemble/route.ts` (mode=template branch)
@@ -119,7 +119,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/api/design/export/route.ts`
   - Estimate: small
   - Depends: T09, T10, T13
-  - Notes: `POST /api/design/export`. Calls `exportDesign(canvaDesignId)` → uploads to `exported-designs` blob container → stores `exportUrl` on Draft, sets status to EXPORTED. FR-17.
+  - Notes: `POST /api/design/export`. Calls `exportDesign(canvaDesignId)` → uploads to MinIO `exported-designs` bucket → stores `exportUrl` (pre-signed URL) on Draft, sets status to EXPORTED. FR-17.
 
 ---
 
@@ -137,11 +137,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: T15, T16, T04
   - Notes: Publish route: role-check (admin only), calls publisher, writes Post records with outcome. Schedule route: role-check, sets `scheduledAt`, status=SCHEDULED. DELETE `/api/posts/[id]`: cancel (status=CANCELLED) only if status=SCHEDULED. FR-18–FR-21, AC-2, AC-3, AC-9, AC-10.
 
-- [ ] `T18` — Scheduler worker (Azure Container Apps Job)
-  - Files: `src/scheduler/worker.ts`, `infra/modules/scheduler-job.bicep`
+- [ ] `T18` — Scheduler worker (Docker container)
+  - Files: `src/scheduler/worker.ts`
   - Estimate: medium
   - Depends: T17
-  - Notes: Runs every minute. Queries `Post WHERE status=SCHEDULED AND scheduledAt <= now()`. Sets IN_FLIGHT before publish (idempotency). Calls `instagram.publish` or `linkedin.publish`. Updates to PUBLISHED or FAILED. Catch-up on restart handles EC-7. AC-8.
+  - Notes: Runs as the `scheduler` service in `docker-compose.yml` (same Docker image as `app`, different entrypoint). Polls every 60 seconds via `setInterval`. Queries `Post WHERE status=SCHEDULED AND scheduledAt <= now()`. Sets IN_FLIGHT before publish (idempotency). Calls `instagram.publish` or `linkedin.publish`. Updates to PUBLISHED or FAILED. Docker Compose `restart: unless-stopped` ensures catch-up after VPS reboot (EC-7). AC-8.
 
 - [ ] `T19` — Asset library + publish history API + UI
   - Files: `src/app/api/library/route.ts`, `src/app/(app)/library/page.tsx`

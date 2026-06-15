@@ -5,7 +5,7 @@
 
 ## Technical Approach
 
-A Next.js 14 (App Router) + TypeScript monolith deployed to Azure Container Apps.
+A Next.js 14 (App Router) + TypeScript monolith deployed to a VPS via Docker Compose.
 Server-side logic runs in Next.js API routes (Route Handlers). The Canva MCP server
 is consumed via a server-side MCP client. All AI provider calls are server-side only.
 
@@ -71,15 +71,15 @@ admin config. No frontend changes, no API contract changes.
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│  Scheduler  (Azure Container Apps Job — cron worker)        │
+│  Scheduler  (Docker container — cron worker, every minute)  │
 │  Polls DB for due scheduled posts → calls publish layer     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │  Persistence                                                │
-│  Azure Database for PostgreSQL  (via Prisma ORM)            │
-│  Azure Blob Storage             (generated images, exports) │
-│  Azure Key Vault                (secrets)                   │
+│  PostgreSQL (Docker container, Prisma ORM)                  │
+│  MinIO      (Docker container, S3-compatible object store)  │
+│  Secrets    (.env file on VPS, chmod 600, never in git)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,7 +141,7 @@ implementing a new auth adapter if Entra becomes a requirement.
 
 ### Database (Prisma + PostgreSQL)
 
-**Azure Database for PostgreSQL Flexible Server** (cheapest managed PG on Azure).
+**PostgreSQL running as a Docker container** on the VPS (data persisted via a named Docker volume).
 ORM: **Prisma** (type-safe, migrations built-in, works with Next.js edge runtime).
 
 Schema:
@@ -237,17 +237,25 @@ enum ProviderSlot { COPY IMAGE }
 
 ### Asset storage
 
-**Azure Blob Storage** — two containers:
-- `generated-images` — raw gpt-image-1 output (temp, 7-day TTL)
+**MinIO** (S3-compatible object storage, Docker container on VPS) — two buckets:
+- `generated-images` — raw gpt-image-1 output (temp, 7-day lifecycle rule)
 - `exported-designs` — final exported PNG/JPG assets (permanent, linked in Draft.exportUrl)
 
-Images are uploaded server-side; only blob URLs are stored in the DB. No binary
-blobs in the database.
+Images are uploaded server-side via the AWS S3 SDK (MinIO is S3-compatible); only
+object URLs are stored in the DB. No binary blobs in the database.
+
+MinIO is accessed via its internal Docker network hostname (`minio:9000`) from the
+app container. A separate MinIO Console port (9001) is exposed for admin use only,
+bound to `127.0.0.1` on the VPS (not publicly accessible).
+
+Pre-signed URLs are used for serving assets to the browser — the MinIO port is
+never directly exposed to the public internet.
 
 ### Scheduler
 
-**Azure Container Apps Job** (cron-triggered, runs every minute) — a standalone
-Node.js script (`src/scheduler/worker.ts`) that:
+**Dedicated Docker container** (defined in `docker-compose.yml` as the `scheduler`
+service, runs `src/scheduler/worker.ts` on a 60-second polling loop) — a standalone
+Node.js script that:
 1. Queries DB for `Post WHERE status=SCHEDULED AND scheduledAt <= now()`
 2. For each, calls the publish layer
 3. Updates status to PUBLISHED or FAILED with reason
@@ -274,9 +282,22 @@ async withEditingTransaction<T>(
 
 ### Secrets management
 
-All third-party credentials stored in **Azure Key Vault**, injected as environment
-variables at runtime via Container Apps managed identity. Never in code or `.env`
-committed to git.
+All third-party credentials are provided as environment variables via a `.env` file
+on the VPS. Security protocols:
+
+- `.env` is **never committed to git** — enforced by `.gitignore` (`.env*` pattern,
+  with `.env.example` the only exception)
+- File permissions: `chmod 600 .env`, owned by the user running Docker Compose
+- No secrets appear in `docker-compose.yml` — the compose file references
+  `env_file: .env` and never hard-codes values
+- Secret rotation: update `.env` → `docker compose up -d` to restart affected
+  containers (no full redeploy needed)
+- `.env.example` documents every required variable with placeholder values and
+  inline comments explaining the source of each secret — committed to git as the
+  canonical setup reference
+- Social API tokens (Instagram, LinkedIn) are stored in the database **encrypted
+  at rest** using a `TOKEN_ENCRYPTION_KEY` env var (AES-256-GCM) — the raw token
+  never sits in plaintext in the DB
 
 ## File Changes Map
 
@@ -300,7 +321,7 @@ committed to git.
 | `src/lib/canva/client.ts` | create | Typed Canva MCP client with tx guard |
 | `src/lib/social/instagram.ts` | create | Instagram Graph API publisher |
 | `src/lib/social/linkedin.ts` | create | LinkedIn API publisher |
-| `src/lib/storage/blob.ts` | create | Azure Blob Storage upload/read |
+| `src/lib/storage/minio.ts` | create | MinIO (S3-compatible) upload / pre-signed URL |
 | `src/scheduler/worker.ts` | create | Scheduled post worker |
 | `prisma/schema.prisma` | create | Full data model |
 | `prisma/migrations/` | create | Auto-generated migrations |
@@ -311,8 +332,10 @@ committed to git.
 | `src/app/(app)/library/` | create | Asset library + history |
 | `src/app/(app)/admin/settings/` | create | Admin: brand system prompt editor |
 | `.env.example` | create | Required env vars documented |
-| `Dockerfile` | create | Container image for Azure Container Apps |
-| `infra/` | create | Azure Bicep or Terraform for Container Apps + PG + Blob + Key Vault |
+| `Dockerfile` | create | Container image (shared by app + scheduler services) |
+| `docker-compose.yml` | create | Orchestrates app, scheduler, postgres, minio containers |
+| `.env.example` | create | All required env vars documented with placeholder values |
+| `.gitignore` | modify | Ensure `.env*` (except `.env.example`) is ignored |
 
 ## Data Model Changes
 
@@ -360,11 +383,17 @@ role metadata (`admin` / `editor`) is sufficient for v1. Migrating to Entra late
 only requires replacing the auth adapter — the role-check pattern in route handlers
 stays identical.
 
-**3. Prisma + PostgreSQL (over Azure SQL)**
+**3. Prisma + PostgreSQL in Docker (over a managed cloud DB)**
 Prisma's type-safe query builder and built-in migration tooling fit a greenfield
-Next.js project better than the MSSQL driver ecosystem. PostgreSQL array columns
-handle `channels: String[]` naturally. Azure Database for PostgreSQL Flexible
-Server is cost-comparable to Azure SQL Basic.
+Next.js project. PostgreSQL array columns handle `channels: String[]` naturally.
+Running PostgreSQL in Docker Compose alongside the app keeps the stack self-contained
+on the VPS with zero managed-service cost. Data is persisted via a named Docker volume.
+
+**3b. MinIO for object storage (over Azure Blob / S3)**
+MinIO is S3-compatible and self-hosted on the same VPS, eliminating all cloud
+provider dependencies. The `@aws-sdk/client-s3` package works against MinIO
+without changes — the only difference is the endpoint URL (env var). If the
+project ever migrates to AWS S3, only the env vars change.
 
 **4. `withEditingTransaction` guard in Canva client**
 Orphaned Canva editing transactions leave designs in a draft-only state and may
@@ -372,11 +401,11 @@ block future edits on the same design. The `try/finally` wrapper in `client.ts`
 enforces NFR-11 at the library level so no calling code can accidentally skip
 `cancel` on failure. This is enforced structurally, not by convention.
 
-**5. Container Apps Job for scheduler (over Azure Functions timer)**
-Container Apps Jobs run the exact same Docker image as the main app, so the
-scheduler shares the Prisma client and business logic with zero duplication. Azure
-Functions timer triggers require a separate deployment artifact and a different
-Node.js entrypoint pattern. For this scale, the job approach is simpler.
+**5. Scheduler as a dedicated Docker container (polling loop)**
+The scheduler service in `docker-compose.yml` uses the same Docker image as the
+main app, runs `src/scheduler/worker.ts`, and polls every 60 seconds. This shares
+the Prisma client and business logic with zero code duplication. Docker Compose
+restarts the container automatically on failure (`restart: unless-stopped`).
 
 **6. Brand system prompt versioning with rollback (BrandSystemPrompt table)**
 EC-13 requires that a bad prompt can be reverted without a developer. Storing all
@@ -392,4 +421,5 @@ from the settings UI.
 | Canva MCP server not available in Azure prod | Medium | High (blocks entire design flow) | Confirm production MCP server hosting in design Q5 before build starts; have a fallback plan (Canva REST API adapter implementing same interface) |
 | Path B orchestrator runaway / high token cost | Medium | Medium | Hard limit of 20 tool calls per orchestration (EC-12); per-user generation budget enforced by NFR-7 |
 | gpt-image-1 output incompatible with template dimensions | Low | Medium | Canva `update_fill` crops/scales to element bounds; validate output dimensions in EC-4 handler; offer template swap |
-| Azure Blob Storage URL expiry before scheduled publish | Low | Low | Use permanent blob URLs (no SAS expiry) for `exported-designs` container; only temp images use TTL |
+| MinIO disk fills up on VPS | Low | Medium | Monitor VPS disk usage; 7-day lifecycle rule on `generated-images` bucket auto-deletes temp images; alert if disk > 80% |
+| `.env` file leaked via git | Low | High | `.gitignore` enforced; pre-commit hook blocks accidental commit of `.env`; rotate all secrets immediately if leak occurs |

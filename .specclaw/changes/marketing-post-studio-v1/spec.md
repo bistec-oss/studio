@@ -140,7 +140,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 **Export (via MCP)**
 - **FR-17** The system exports the finished design as a publish-ready image
   (PNG/JPG) via the MCP `export-design` tool, which returns a download URL. The
-  export is stored in the asset library (Azure Blob Storage) before publishing.
+  export is stored in the asset library (MinIO object storage) before publishing.
 
 **Publishing & Scheduling**
 - **FR-18** A user with publish rights can publish an exported post immediately to
@@ -163,7 +163,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   generate → refine → publish) must be completable by a team member with no brand
   or channel-publishing expertise. This is the primary design constraint.
 - **NFR-2 (Platform/stack)** Next.js + TypeScript web application.
-- **NFR-3 (Hosting)** Deployed to Azure.
+- **NFR-3 (Hosting)** Deployed to a VPS using Docker Compose (Next.js app, PostgreSQL, MinIO, scheduler worker as separate containers).
 - **NFR-4 (Brand consistency)** Output is brand-consistent by construction — brand
   styling comes from the Canva brand kit/templates, not from user choices.
 - **NFR-5 (Security)** Third-party credentials (OpenAI, Canva, Instagram, LinkedIn)
@@ -299,12 +299,12 @@ Each criterion must pass for the change to be considered complete.
 - **LinkedIn API** — publishing to a LinkedIn company page. Requires a LinkedIn app
   with the appropriate posting permissions.
 
-**Infrastructure (Azure)**
-- Compute for the Next.js app (e.g. App Service / Container Apps).
-- A managed database for persistence (Postgres or SQL — chosen in design).
-- Blob storage for generated images and exported designs (e.g. Azure Blob Storage).
-- A durable background scheduler/queue + worker for scheduled publishing.
-- Secret management for third-party credentials (e.g. Azure Key Vault).
+**Infrastructure (VPS)**
+- A VPS running Docker Compose (Ubuntu). Containers: Next.js app, PostgreSQL, MinIO, scheduler worker.
+- PostgreSQL for persistence (Docker container, data volume on VPS).
+- MinIO (S3-compatible) for generated images and exported designs (Docker container, data volume on VPS).
+- A dedicated Docker container (scheduler worker) for scheduled publishing, polling every minute.
+- Secrets managed via `.env` file on the VPS (never committed to git, permissions `600`, owned by root).
 
 **Internal prerequisites**
 - An existing Bistec **Canva brand kit** and at least one **brand template**.
@@ -321,9 +321,8 @@ Each criterion must pass for the change to be considered complete.
 1. **Auth provider** — custom auth vs. a managed provider vs. Microsoft Entra ID
    SSO (team is on a Microsoft stack; Entra is a natural fit but not a hard v1
    requirement). Also: exact role→permission matrix for publishing.
-2. **Database & ORM** — Azure Database for PostgreSQL vs Azure SQL; ORM (e.g.
-   Prisma) and the concrete data model.
-3. **Asset storage** — confirm Azure Blob Storage for images/exports.
+2. **Database & ORM** — PostgreSQL in Docker Compose; ORM: Prisma (confirmed).
+3. **Asset storage** — MinIO (S3-compatible, Docker container on VPS) for images/exports (confirmed).
 4. **Social API ownership/timeline** — who obtains the Meta Business app + Instagram
    Graph API review and the LinkedIn app/permissions, and by when. This is the
    highest-risk dependency for the publishing acceptance criteria.
@@ -333,8 +332,7 @@ Each criterion must pass for the change to be considered complete.
    the Next.js backend; (c) the Bistec brand kit ID and the BTM* template IDs
    accessible via `list-brand-kits`; (d) **how many brand templates** v1 supports.
    The `generate-design-structured` tool (presentations only) is NOT in scope.
-6. **Scheduler infrastructure** — Azure-native choice (Container Apps job, Functions
-   timer, or queue + worker) and the acceptable scheduling window (NFR-6).
+6. **Scheduler infrastructure** — Dedicated Docker container (cron worker, polls every minute). Acceptable scheduling window: ±2 minutes (confirmed).
 7. **Cost/rate controls** — concrete per-user/per-period generation limits (NFR-7).
 
 **Deferred to later phases (explicitly not v1):** video generation/publishing,
