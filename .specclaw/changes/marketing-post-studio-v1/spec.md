@@ -45,10 +45,26 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   admins can publish; editors can create/draft. Final gating matrix confirmed in
   design — see Open Questions.)
 
+**Projects**
+- **FR-P1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Project. A Project has a name, an optional default brand kit (Canva brand kit ID), and a default tone.
+- **FR-P2** Soft-deleted projects are hidden from active views but recoverable by any authenticated user within a defined recovery window. All campaigns and posts under a soft-deleted project are preserved.
+- **FR-P3** A project's default brand kit and tone are automatically inherited by campaigns created within it, but can be overridden at the campaign level.
+
+**Campaigns**
+- **FR-C1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Campaign. A Campaign has a name, an optional brand kit override, and an optional default tone override.
+- **FR-C2** A campaign can be assigned to one or more projects, or exist as a standalone campaign with no project.
+- **FR-C3** Reassigning a campaign to a different project (or removing it from a project) is **admin-only**.
+- **FR-C4** Soft-deleted campaigns are recoverable. Posts linked to a soft-deleted campaign are not deleted.
+- **FR-C5** A post (draft/export) can be linked to multiple campaigns (shared asset — the same Canva design and export URL is reused, not duplicated).
+
 **Brief Input**
 - **FR-5** A user can create a brief specifying at minimum: topic/subject, goal/
   call-to-action, target channel(s) (Instagram and/or LinkedIn), desired tone, and
   **design mode**: "preset template" (Path A) or "generate new design" (Path B).
+  The brief optionally assigns the post to a campaign (and through it, a project).
+  Leaving campaign blank marks the post as **Uncategorized**.
+- **FR-5a** When a campaign is selected in the brief UI, the brand kit and tone are pre-populated from the campaign (which may itself have inherited from a project). The user is not prompted to pick a brand kit again unless they choose to override.
+- **FR-5b** Brand kit precedence at generation time: Campaign brand kit → Project default brand kit → system global default.
 - **FR-6** The brief UI guides the user with prompts/defaults so that no prior
   brand or marketing expertise is required to produce a usable brief.
 
@@ -152,10 +168,9 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **FR-21** A user can view and cancel a scheduled (not-yet-published) post.
 
 **Persistence: Library & History**
-- **FR-22** The system persists users, briefs, generated drafts, finished assets
-  (an asset library), scheduled posts, and a publish-history log.
-- **FR-23** A user can browse the asset library of previously generated/published
-  posts and the publish history.
+- **FR-22** The system persists users, projects, campaigns, briefs, generated drafts, finished assets (an asset library), scheduled posts, and a publish-history log.
+- **FR-23** A user can browse the asset library and publish history. The library supports drill-down filtering: filter by Project → then by Campaign within that project. Uncategorized posts (no campaign) are accessible via an "Uncategorized" filter.
+- **FR-24** A standalone post (no campaign assigned) can be promoted into a campaign after creation. A campaign can be reassigned to a different project by an admin.
 
 ### Non-Functional Requirements
 
@@ -226,10 +241,14 @@ Each criterion must pass for the change to be considered complete.
 - **AC-10** Every publish attempt (immediate or scheduled) writes a history record
   with outcome, timestamp, channel, and user; failures are recorded as failures
   with a reason, not as successes.
-- **AC-11** A user can browse the asset library and publish history and see their
-  previously generated and published posts.
-- **AC-12** No third-party API key or secret is present in any client-side bundle or
-  network response to the browser.
+- **AC-11** A user can browse the asset library and publish history and see their previously generated and published posts.
+- **AC-11a** The library drill-down works: filtering by a project shows only campaigns/posts under that project; filtering by a campaign within it shows only that campaign's posts; "Uncategorized" shows posts with no campaign.
+- **AC-11b** A standalone post can be assigned to a campaign after creation; it then appears under that campaign in the library.
+- **AC-11c** A campaign can be reassigned to a different project by an admin; it disappears from the original project and appears under the new one.
+- **AC-16** Creating a brief with a campaign pre-selected populates the brand kit and tone fields automatically; the user is not prompted to select a brand kit.
+- **AC-17** Brand kit precedence is correct: a campaign-level kit overrides the project default; the project default overrides the system global default.
+- **AC-18** Soft-deleting a project hides it from the active project list but a recovery option restores it with all campaigns and posts intact.
+- **AC-12** No third-party API key or secret is present in any client-side bundle or network response to the browser.
 
 ## Edge Cases
 
@@ -268,9 +287,10 @@ Each criterion must pass for the change to be considered complete.
 - **EC-13** Admin saves a brand system prompt that causes all Path B generations to
   fail moderation or produce off-brand output → an admin can revert to the previous
   prompt via the settings UI (prompt history / last-known-good retained).
-- **EC-10** User selects both channels but content only suits one → each channel
-  receives channel-appropriate copy (per FR-8); publishing to one channel failing
-  does not block the other.
+- **EC-10** User selects both channels but content only suits one → each channel receives channel-appropriate copy (per FR-8); publishing to one channel failing does not block the other.
+- **EC-14** A campaign is soft-deleted while a post under it is in SCHEDULED state → the scheduled post still fires; deletion does not cancel scheduled posts.
+- **EC-15** A project's default brand kit is removed from Canva → campaigns that inherited it fall back to the system global default; existing exports are unaffected (stored in MinIO).
+- **EC-16** A post is linked to two campaigns and one campaign is soft-deleted → the post remains accessible through the other campaign and in "Uncategorized" if no other campaign remains.
 
 ## Dependencies
 

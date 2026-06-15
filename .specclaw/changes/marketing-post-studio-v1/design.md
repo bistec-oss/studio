@@ -148,45 +148,92 @@ Schema:
 
 ```prisma
 model User {
-  id        String   @id @default(cuid())
-  clerkId   String   @unique
-  role      Role     @default(EDITOR)
+  id        String    @id @default(cuid())
+  clerkId   String    @unique
+  role      Role      @default(EDITOR)
   briefs    Brief[]
   posts     Post[]
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 }
 
 enum Role { ADMIN EDITOR }
 
+model Project {
+  id               String            @id @default(cuid())
+  name             String
+  defaultBrandKitId String?          // Canva brand kit ID (optional)
+  defaultTone      String?
+  isDeleted        Boolean           @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime          @default(now())
+  campaigns        ProjectCampaign[]
+}
+
+model Campaign {
+  id           String            @id @default(cuid())
+  name         String
+  brandKitId   String?           // overrides project default if set
+  defaultTone  String?           // overrides project default if set
+  isDeleted    Boolean           @default(false)
+  deletedAt    DateTime?
+  createdAt    DateTime          @default(now())
+  projects     ProjectCampaign[]
+  briefs       Brief[]
+  drafts       CampaignDraft[]
+}
+
+// M2M: Campaign ↔ Project
+model ProjectCampaign {
+  projectId  String
+  campaignId String
+  project    Project  @relation(fields: [projectId], references: [id])
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+
+  @@id([projectId, campaignId])
+}
+
+// M2M: Campaign ↔ Draft (shared asset — same export linked to many campaigns)
+model CampaignDraft {
+  campaignId String
+  draftId    String
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  draft      Draft    @relation(fields: [draftId], references: [id])
+
+  @@id([campaignId, draftId])
+}
+
 model Brief {
-  id              String     @id @default(cuid())
-  userId          String
-  user            User       @relation(fields: [userId], references: [id])
-  topic           String
-  goal            String
-  tone            String
-  channels        String[]   // ["instagram", "linkedin"]
-  designMode      DesignMode
-  copyProviderKey String     // e.g. "openai" — user's choice at brief time
-  imageProviderKey String    // e.g. "gemini" — user's choice at brief time
-  createdAt       DateTime   @default(now())
-  drafts          Draft[]
+  id               String     @id @default(cuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id])
+  campaignId       String?    // null = Uncategorized
+  campaign         Campaign?  @relation(fields: [campaignId], references: [id])
+  topic            String
+  goal             String
+  tone             String
+  channels         String[]   // ["instagram", "linkedin"]
+  designMode       DesignMode
+  copyProviderKey  String     // e.g. "openai" — user's choice at brief time
+  imageProviderKey String     // e.g. "gemini" — user's choice at brief time
+  createdAt        DateTime   @default(now())
+  drafts           Draft[]
 }
 
 enum DesignMode { TEMPLATE GENERATE }
 
 model Draft {
-  id           String   @id @default(cuid())
-  briefId      String
-  brief        Brief    @relation(fields: [briefId], references: [id])
-  copyText     String
-  imageUrl     String   // blob storage URL
+  id            String          @id @default(cuid())
+  briefId       String
+  brief         Brief           @relation(fields: [briefId], references: [id])
+  copyText      String
+  imageUrl      String          // MinIO URL
   canvaDesignId String?
-  templateId   String?
-  exportUrl    String?  // blob storage URL of exported PNG/JPG
-  status       DraftStatus @default(IN_PROGRESS)
-  createdAt    DateTime @default(now())
-  posts        Post[]
+  templateId    String?
+  exportUrl     String?         // MinIO URL of exported PNG/JPG
+  status        DraftStatus     @default(IN_PROGRESS)
+  createdAt     DateTime        @default(now())
+  posts         Post[]
+  campaigns     CampaignDraft[] // shared asset links
 }
 
 enum DraftStatus { IN_PROGRESS EXPORTED PUBLISHED FAILED }
@@ -311,8 +358,19 @@ on the VPS. Security protocols:
 | `src/app/api/publish/route.ts` | create | Immediate publish |
 | `src/app/api/schedule/route.ts` | create | Schedule a post |
 | `src/app/api/posts/route.ts` | create | List/cancel scheduled posts |
-| `src/app/api/library/route.ts` | create | Asset library + publish history |
+| `src/app/api/projects/route.ts` | create | Project CRUD |
+| `src/app/api/projects/[id]/route.ts` | create | Project update / soft-delete / recover |
+| `src/app/api/campaigns/route.ts` | create | Campaign CRUD |
+| `src/app/api/campaigns/[id]/route.ts` | create | Campaign update / soft-delete / recover |
+| `src/app/api/campaigns/[id]/projects/route.ts` | create | Campaign → project reassignment (admin) |
+| `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts` | create | Link draft to campaign (shared asset) |
+| `src/app/api/campaigns/[id]/brandkit/route.ts` | create | Resolved brand kit for a campaign |
+| `src/app/api/library/route.ts` | create | Asset library + publish history (filterable by project/campaign) |
 | `src/app/api/admin/prompt/route.ts` | create | Brand system prompt CRUD (admin) |
+| `src/app/(app)/projects/page.tsx` | create | Projects list UI |
+| `src/app/(app)/projects/[id]/page.tsx` | create | Project detail — campaigns + posts |
+| `src/app/(app)/campaigns/page.tsx` | create | Campaigns list UI (standalone + project-assigned) |
+| `src/app/(app)/campaigns/[id]/page.tsx` | create | Campaign detail — posts |
 | `src/providers/interfaces/` | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces |
 | `src/providers/implementations/copy/openai.ts` | create | GPT copy provider |
 | `src/providers/implementations/image/openai.ts` | create | gpt-image-1 provider |
@@ -366,6 +424,25 @@ POST /api/admin/providers                 (admin) body: { slot, providerKey, lab
 PATCH /api/admin/providers/[id]           (admin) body: { isEnabled?, isDefault? } → { provider }
 GET  /api/providers/available             (authed) → { copy: Provider[], image: Provider[] }
   // returns only isEnabled=true providers per slot — used to populate brief UI dropdowns
+
+// Projects
+GET    /api/projects                      → { projects[] }  // excludes soft-deleted
+POST   /api/projects                      body: { name, defaultBrandKitId?, defaultTone? } → { project }
+PATCH  /api/projects/[id]                 body: { name?, defaultBrandKitId?, defaultTone? } → { project }
+DELETE /api/projects/[id]                 (soft-delete) → 204
+POST   /api/projects/[id]/recover         → { project }
+
+// Campaigns
+GET    /api/campaigns                     → { campaigns[] }  // excludes soft-deleted; ?projectId= to filter
+POST   /api/campaigns                     body: { name, brandKitId?, defaultTone?, projectIds? } → { campaign }
+PATCH  /api/campaigns/[id]                body: { name?, brandKitId?, defaultTone? } → { campaign }
+DELETE /api/campaigns/[id]                (soft-delete) → 204
+POST   /api/campaigns/[id]/recover        → { campaign }
+PATCH  /api/campaigns/[id]/projects       (admin) body: { projectIds } → { campaign }  // reassign
+POST   /api/campaigns/[id]/drafts/[draftId]  → 204  // link a draft to a campaign (shared asset)
+
+// Brand kit resolution (used by brief UI on campaign select)
+GET    /api/campaigns/[id]/brandkit       → { brandKitId, source: "campaign"|"project"|"default" }
 ```
 
 ## Key Decisions

@@ -2,13 +2,14 @@
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
-**Total Tasks:** 22
+**Total Tasks:** 24
 
 ## Summary
 
-22 tasks across 6 waves. Waves 1–3 establish the foundation (project scaffold,
-data layer, provider abstraction). Waves 4–5 build the two design paths and
-publishing. Wave 6 covers the admin settings and end-to-end verification.
+24 tasks across 6 waves (plus Wave 5b). Waves 1–3 establish the foundation
+(project scaffold, data layer, provider abstraction). Waves 4–5 build the two
+design paths and publishing. Wave 5b adds the Projects & Campaigns layer.
+Wave 6 covers admin settings and end-to-end verification.
 
 Each wave can begin only when all tasks in the prior wave are complete.
 Within a wave, tasks without inter-dependencies can run in parallel.
@@ -35,7 +36,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
   - Estimate: small
   - Depends: T02
-  - Notes: Full schema as defined in design.md: User, Brief, Draft, Post, BrandSystemPrompt, AvailableProvider enums. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
+  - Notes: Full schema as defined in design.md: User, Project, Campaign, ProjectCampaign (M2M), CampaignDraft (M2M), Brief (campaignId nullable), Draft, Post, BrandSystemPrompt, AvailableProvider enums. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
 
 - [ ] `T04` — Clerk auth integration + role middleware
   - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
@@ -94,8 +95,8 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T11` — Brief creation (DB + API route)
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
-  - Depends: T03, T04, T08
-  - Notes: `POST /api/briefs` creates a Brief record including `copyProviderKey` and `imageProviderKey` from the user's selection. `GET /api/providers/available` returns only admin-enabled providers per slot (copy + image) — used to populate the model dropdowns in the brief UI. Dropdowns pre-select the system default (`isDefault=true`). Design mode radio (Path A / Path B). FR-5, FR-6, FR-28–FR-30, AC-13.
+  - Depends: T03, T04, T08, T23
+  - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Model dropdowns populate from `GET /api/providers/available`. Design mode radio (Path A / Path B). FR-5, FR-5a, FR-5b, FR-6, FR-28–FR-30, AC-13, AC-16, AC-17.
 
 - [ ] `T12` — Copy + image generation API routes
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
@@ -146,8 +147,24 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T19` — Asset library + publish history API + UI
   - Files: `src/app/api/library/route.ts`, `src/app/(app)/library/page.tsx`
   - Estimate: medium
-  - Depends: T17
-  - Notes: `GET /api/library` returns user's Drafts (with exportUrl) and Posts (with status, channel, publishedAt). UI: grid of exported post thumbnails + publish history table. FR-22, FR-23, AC-11.
+  - Depends: T17, T23
+  - Notes: `GET /api/library` supports `?projectId=` and `?campaignId=` query params for drill-down filtering; omitting both returns all (including Uncategorized). UI: left-side project/campaign filter panel → post grid + publish history table. "Uncategorized" is a fixed filter option for posts with no campaign. FR-22, FR-23, FR-24, AC-11, AC-11a.
+
+---
+
+### Wave 5b — Projects & Campaigns
+
+- [ ] `T23` — Project & Campaign API routes
+  - Files: `src/app/api/projects/route.ts`, `src/app/api/projects/[id]/route.ts`, `src/app/api/campaigns/route.ts`, `src/app/api/campaigns/[id]/route.ts`, `src/app/api/campaigns/[id]/projects/route.ts`, `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts`, `src/app/api/campaigns/[id]/brandkit/route.ts`
+  - Estimate: medium
+  - Depends: T03, T04
+  - Notes: Full CRUD for Projects and Campaigns. Soft-delete sets `isDeleted=true` + `deletedAt`. Recovery clears both. Campaign → project reassignment is admin-gated (`requireRole('admin')`). `GET /api/campaigns/[id]/brandkit` resolves brand kit using precedence chain (campaign → project default → system global) and returns the resolved ID + source label. `POST /api/campaigns/[id]/drafts/[draftId]` creates a `CampaignDraft` row (shared asset link). FR-P1–FR-P3, FR-C1–FR-C5, AC-11b, AC-11c, AC-17, AC-18.
+
+- [ ] `T24` — Projects & Campaigns UI
+  - Files: `src/app/(app)/projects/page.tsx`, `src/app/(app)/projects/[id]/page.tsx`, `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/campaigns/[id]/page.tsx`
+  - Estimate: medium
+  - Depends: T23
+  - Notes: Projects list: name, default brand kit, campaign count, soft-delete + recover actions. Project detail: list of assigned campaigns + their posts. Campaigns list: shows standalone campaigns and project-assigned campaigns (with project badge). Campaign detail: posts grid. Admin-only UI for reassigning a campaign to a different project. Soft-deleted items shown in a "Deleted" tab with recover button. AC-11c, AC-18.
 
 ---
 
