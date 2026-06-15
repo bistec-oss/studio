@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bistec-studio",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "D:\\Bistec\\designer\\bistec-studio-prototype", "run", "dev"],
+      "port": 3001
+    }
+  ]
+}
