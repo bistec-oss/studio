@@ -252,7 +252,14 @@ A fully interactive Next.js 15 static-export prototype lives at `bistec-studio-p
 | Campaigns | `/campaigns` |
 | Settings (brand kits + AI providers) | `/settings` |
 
-**Run:** `cd bistec-studio-prototype && npm install && npm run dev`
+**Run from a fresh clone:**
+```bash
+cd bistec-studio-prototype
+npm install        # generates node_modules/ — not in git, must be run once
+npm run dev        # starts dev server; generates .next/ build cache automatically
+```
+
+> `node_modules/` and `.next/` are excluded from git (large generated artefacts). They are always recreated locally — `npm install` restores packages from `package.json`, and Next.js rebuilds `.next/` on first `dev` or `build` run. Never commit either folder.
 
 **Key prototype decisions reflected:**
 - Brief has: topic · description (AI context) · goal · tone · channels · design mode · additional image upload (Path A only) · copy model · image model
