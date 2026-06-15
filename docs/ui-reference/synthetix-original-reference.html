@@ -1,0 +1,373 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Synthetix AI - Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            // Light Theme - Refined with higher contrast from design system
+            light: {
+              background: '#f1f5f9', // Slightly cooler slate
+              surface: '#ffffff',
+              'surface-hover': '#f8fafc',
+              border: '#cbd5e1', // Higher contrast border
+              text: '#0f172a', // deep slate
+              'text-muted': '#475569', // Higher contrast muted text
+            },
+            // Dark Theme
+            dark: {
+              background: '#020617',
+              surface: '#0f172a',
+              'surface-hover': '#1e293b',
+              border: '#1e293b',
+              text: '#f8fafc',
+              'text-muted': '#94a3b8',
+            },
+            // Glacier Primary Accent - Deepened for better visibility in light mode
+            primary: '#0284c7', // Deeper sky blue (sky-600) for light mode visibility
+            'primary-light': '#7dd3fc', // Original ice-blue
+            'primary-hover': '#0369a1',
+            'primary-active': '#075985',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          borderRadius: {
+            'xl': '0.75rem',
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Glassmorphism Classes */
+    .glass {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(15, 23, 42, 0.1);
+    }
+
+    .dark .glass {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+    }
+
+    .dark .glass-panel {
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .glass-input {
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      transition: all 0.2s ease;
+    }
+    .glass-input:focus {
+        background: #ffffff;
+        border-color: #0284c7;
+        box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+    }
+
+    .dark .glass-input {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .dark .glass-input:focus {
+        background: rgba(30, 41, 59, 0.8);
+        border-color: #7dd3fc;
+        box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.2);
+    }
+
+    .textarea-focus:focus {
+        box-shadow: 0 0 0 1px #0284c7;
+        border-color: #0284c7;
+        outline: none;
+    }
+    .dark .textarea-focus:focus {
+        box-shadow: 0 0 0 1px #7dd3fc;
+        border-color: #7dd3fc;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(71, 85, 105, 0.2);
+        border-radius: 4px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.2);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: rgba(71, 85, 105, 0.4);
+    }
+  </style>
+<script>
+    function toggleTheme() {
+      document.documentElement.classList.toggle('dark');
+    }
+  </script>
+</head>
+<body class="bg-light-background dark:bg-dark-background text-light-text dark:text-dark-text min-h-screen flex flex-col overflow-hidden transition-colors duration-300">
+<!-- Background decorative elements for "Frozen Light" effect -->
+<div class="fixed inset-0 overflow-hidden pointer-events-none z-[-1]">
+<div class="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-primary/10 blur-[100px] dark:bg-primary-light/5"></div>
+<div class="absolute top-[60%] -right-[10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] dark:bg-primary-light/5"></div>
+</div>
+<!-- TopAppBar Component -->
+<header class="glass fixed top-0 w-full z-50 border-b border-light-border dark:border-dark-border">
+<div class="flex justify-between items-center px-6 h-16 w-full max-w-[1440px] mx-auto">
+<!-- Brand -->
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold text-light-text dark:text-dark-text tracking-tight flex items-center gap-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-light">ac_unit</span>
+            Synthetix AI
+        </span>
+<!-- Navigation Links (Web) -->
+<nav class="hidden md:flex items-center gap-6 mt-1">
+<a class="text-light-text-muted dark:text-dark-text-muted text-sm font-semibold hover:text-primary dark:hover:text-primary-light transition-colors duration-150" href="#">Dashboard</a>
+<a class="text-light-text-muted dark:text-dark-text-muted text-sm font-semibold hover:text-primary dark:hover:text-primary-light transition-colors duration-150" href="#">Gallery</a>
+<a class="text-light-text-muted dark:text-dark-text-muted text-sm font-semibold hover:text-primary dark:hover:text-primary-light transition-colors duration-150" href="#">Models</a>
+<a class="text-light-text-muted dark:text-dark-text-muted text-sm font-semibold hover:text-primary dark:hover:text-primary-light transition-colors duration-150" href="#">Docs</a>
+</nav>
+</div>
+<!-- Actions -->
+<div class="flex items-center gap-4">
+<button class="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 dark:bg-primary-light/10 dark:text-primary-light dark:border-primary-light/20 text-sm font-bold px-5 py-2 rounded-xl transition-colors duration-150 flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">magic_button</span>
+                    Generate
+                </button>
+<div class="flex items-center gap-2 border-l border-light-border dark:border-dark-border pl-4">
+<button class="text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light transition-colors duration-150 p-2" onclick="toggleTheme()" title="Toggle Theme">
+<span class="material-symbols-outlined dark:hidden">dark_mode</span>
+<span class="material-symbols-outlined hidden dark:block">light_mode</span>
+</button>
+<button class="text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light transition-colors duration-150 p-2">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light transition-colors duration-150 p-2">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-light-surface-hover dark:bg-dark-surface-hover overflow-hidden ml-2 border border-light-border dark:border-dark-border">
+<img alt="User profile avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0YmlPtAHNwknQOLLUbUpx6iTNDlnB6JbCxG6imxmY58K-Sxoi3ZOljfXcr1DDANFAE-vMiD7rlZUIV4FfAouLRYiB25LN1VZhdos8IIhXg96zswfPgRZD0rmlOoovODQJttlCgImeAho27QHiqJwthHv-_Pxgvu9bnLq34mS5Xd31A7-KRet9Tw1GMa7BEcYKcGrCJilABwyHKnn0tR8kmIIvEaoi9y0I6LEUNwQsQzH6EYxWUCK9VLN_PGqQpBRVJMb8vBeRPntr">
+</div>
+</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 pt-16 h-screen">
+<!-- SideNavBar Component -->
+<aside class="hidden md:flex flex-col py-6 px-4 gap-2 glass fixed left-0 top-16 h-[calc(100vh-64px)] w-64 border-r border-light-border dark:border-dark-border z-40">
+<!-- Header -->
+<div class="flex items-center gap-3 px-2 mb-6">
+<div class="w-10 h-10 rounded-xl bg-primary/10 dark:bg-primary-light/10 flex items-center justify-center border border-primary/20 dark:border-primary-light/20">
+<span class="material-symbols-outlined text-primary dark:text-primary-light">workspace_premium</span>
+</div>
+<div>
+<h3 class="font-bold text-sm text-light-text dark:text-dark-text">Pro Workstation</h3>
+<p class="text-xs text-light-text-muted dark:text-dark-text-muted font-medium">v2.4 Stable</p>
+</div>
+</div>
+<!-- Main Nav -->
+<nav class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary dark:bg-primary-light/10 dark:text-primary-light rounded-xl text-sm font-bold transition-all duration-150 border border-primary/20 dark:border-primary-light/20" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">shutter_speed</span>
+                    Workspace
+                </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-primary dark:hover:text-primary-light rounded-xl text-sm font-bold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+                    My Assets
+                </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-primary dark:hover:text-primary-light rounded-xl text-sm font-bold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">psychology</span>
+                    Fine-tuning
+                </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-primary dark:hover:text-primary-light rounded-xl text-sm font-bold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">code</span>
+                    API Access
+                </a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-primary dark:hover:text-primary-light rounded-xl text-sm font-bold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">payments</span>
+                    Billing
+                </a>
+</nav>
+<!-- Footer Nav -->
+<div class="mt-auto flex flex-col gap-1 border-t border-light-border dark:border-dark-border pt-4">
+<button class="w-full mb-4 bg-transparent border border-light-border dark:border-dark-border text-light-text dark:text-dark-text hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover text-sm font-bold py-2 rounded-xl transition-colors duration-150">
+                    Upgrade Plan
+                </button>
+<a class="flex items-center gap-3 px-3 py-2 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-primary dark:hover:text-primary-light rounded-xl text-sm font-semibold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">help</span>
+                    Support
+                </a>
+<a class="flex items-center gap-3 px-3 py-2 text-light-text-muted dark:text-dark-text-muted hover:bg-light-surface-hover dark:hover:bg-dark-surface-hover hover:text-error rounded-xl text-sm font-semibold transition-all duration-150" href="#">
+<span class="material-symbols-outlined">logout</span>
+                    Sign Out
+                </a>
+</div>
+</aside>
+<!-- Main Workspace Canvas -->
+<main class="flex-1 ml-0 md:ml-64 p-4 md:p-8 overflow-y-auto w-full max-w-[1440px] mx-auto relative flex flex-col gap-6">
+<!-- Page Header -->
+<div class="flex justify-between items-end mb-2">
+<div>
+<h1 class="text-3xl font-extrabold text-light-text dark:text-dark-text mb-2 tracking-tight">New Render</h1>
+<p class="text-light-text-muted dark:text-dark-text-muted font-medium">Describe your vision to generate high-fidelity imagery.</p>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-[600px]">
+<!-- Left Column: Prompt & Preview (8 cols) -->
+<div class="lg:col-span-8 flex flex-col gap-6">
+<!-- Prompt Input Area -->
+<div class="glass-panel rounded-xl p-1 flex flex-col relative group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent dark:from-primary-light/5 rounded-xl pointer-events-none opacity-50 group-focus-within:opacity-100 transition-opacity duration-300"></div>
+<textarea class="w-full h-40 bg-transparent text-light-text dark:text-dark-text text-base p-6 border-0 resize-none textarea-focus placeholder:text-light-text-muted/50 dark:placeholder:text-dark-text-muted/60 relative z-10 font-medium" placeholder="Enter a detailed prompt... (e.g., A cinematic wide shot of a cyberpunk metropolis at dusk, neon reflections in puddles, towering holographic advertisements, atmospheric mist, high contrast lighting, shot on 35mm lens, photorealistic.)"></textarea>
+<!-- Prompt Actions -->
+<div class="flex justify-between items-center px-4 py-3 bg-light-surface/40 dark:bg-dark-surface/30 rounded-b-xl border-t border-light-border/40 dark:border-dark-border/50 mt-1 relative z-10 backdrop-blur-sm">
+<div class="flex gap-2">
+<button class="p-1.5 text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light hover:bg-white dark:hover:bg-dark-surface-hover rounded-lg transition-colors group relative" title="Enhance Prompt">
+<span class="material-symbols-outlined text-[20px]">auto_fix_high</span>
+</button>
+<button class="p-1.5 text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light hover:bg-white dark:hover:bg-dark-surface-hover rounded-lg transition-colors group relative" title="Negative Prompt">
+<span class="material-symbols-outlined text-[20px]">do_not_disturb_on</span>
+</button>
+<button class="p-1.5 text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light hover:bg-white dark:hover:bg-dark-surface-hover rounded-lg transition-colors group relative" title="Image Reference">
+<span class="material-symbols-outlined text-[20px]">image</span>
+</button>
+</div>
+<span class="text-xs text-light-text-muted dark:text-dark-text-muted font-bold">0 / 1000 tokens</span>
+</div>
+</div>
+<!-- Placeholder/Preview Area -->
+<div class="flex-1 glass-panel rounded-xl flex items-center justify-center relative overflow-hidden min-h-[300px]">
+<!-- Subtle background pattern -->
+<div class="absolute inset-0 opacity-[0.1] dark:opacity-[0.02]" style="background-image: radial-gradient(#0284c7 1px, transparent 1px); background-size: 24px 24px;"></div>
+<div class="text-center z-10 flex flex-col items-center gap-4 text-light-text-muted dark:text-dark-text-muted">
+<span class="material-symbols-outlined text-4xl opacity-40">wallpaper</span>
+<p class="text-sm font-bold">Your generated image will appear here.</p>
+</div>
+</div>
+</div>
+<!-- Right Column: Settings Panel (4 cols) -->
+<div class="lg:col-span-4 flex flex-col">
+<div class="glass-panel rounded-xl p-6 flex flex-col gap-6 h-full sticky top-[88px]">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary dark:text-primary-light">tune</span>
+<h2 class="text-lg font-extrabold text-light-text dark:text-dark-text tracking-tight">Rendering Settings</h2>
+</div>
+<!-- Settings Form -->
+<div class="flex flex-col gap-6 flex-1">
+<!-- Model Selection -->
+<div class="flex flex-col gap-2">
+<label class="text-sm font-bold text-light-text-muted dark:text-dark-text-muted flex justify-between items-center">
+                                    AI Model
+                                    <span class="material-symbols-outlined text-[14px] opacity-60 cursor-help" title="Select the base diffusion model">info</span>
+</label>
+<div class="relative">
+<select class="w-full glass-input text-light-text dark:text-dark-text text-sm font-semibold rounded-xl p-3 appearance-none cursor-pointer outline-none border-light-border/60">
+<option value="vision2">Vision v2.0 (Stable)</option>
+<option value="artisan15">Artisan 1.5</option>
+<option value="hyperfast">HyperFast XL</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-light-text-muted dark:text-dark-text-muted pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Aspect Ratio -->
+<div class="flex flex-col gap-2">
+<label class="text-sm font-bold text-light-text-muted dark:text-dark-text-muted">Aspect Ratio</label>
+<div class="grid grid-cols-3 gap-2">
+<button class="bg-primary text-white dark:bg-primary-light/10 dark:border-primary-light dark:text-primary-light border border-primary text-sm font-bold py-2 rounded-xl flex flex-col items-center gap-1 transition-colors">
+<div class="w-6 h-3 border border-current rounded-sm"></div>
+                                        16:9
+                                    </button>
+<button class="glass-input text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light hover:border-primary dark:hover:border-primary-light text-sm font-bold py-2 rounded-xl flex flex-col items-center gap-1 transition-colors">
+<div class="w-4 h-4 border border-current rounded-sm"></div>
+                                        1:1
+                                    </button>
+<button class="glass-input text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light hover:border-primary dark:hover:border-primary-light text-sm font-bold py-2 rounded-xl flex flex-col items-center gap-1 transition-colors">
+<div class="w-4 h-5 border border-current rounded-sm"></div>
+                                        4:5
+                                    </button>
+</div>
+</div>
+<!-- Rendering Style -->
+<div class="flex flex-col gap-2">
+<label class="text-sm font-bold text-light-text-muted dark:text-dark-text-muted">Style preset</label>
+<div class="relative">
+<select class="w-full glass-input text-light-text dark:text-dark-text text-sm font-semibold rounded-xl p-3 appearance-none cursor-pointer outline-none border-light-border/60">
+<option value="photo">Photorealistic</option>
+<option value="digital">Digital Art</option>
+<option value="anime">Anime / Manga</option>
+<option value="cinematic">Cinematic</option>
+<option value="3d">3D Render</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-light-text-muted dark:text-dark-text-muted pointer-events-none">expand_more</span>
+</div>
+</div>
+<!-- Quality -->
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<label class="text-sm font-bold text-light-text-muted dark:text-dark-text-muted">Output Quality</label>
+<span class="text-xs font-extrabold text-primary dark:text-primary-light bg-primary/10 dark:bg-primary-light/10 px-2 py-0.5 rounded-md border border-primary/20 dark:border-primary-light/20">High (20 steps)</span>
+</div>
+<input class="w-full h-1.5 bg-slate-300 dark:bg-dark-border rounded-lg appearance-none cursor-pointer accent-primary dark:accent-primary-light mt-2" max="3" min="1" type="range" value="2">
+<div class="flex justify-between text-xs text-light-text-muted dark:text-dark-text-muted mt-1 font-bold">
+<span>Draft</span>
+<span>High</span>
+<span>Extreme</span>
+</div>
+</div>
+<!-- Seed (Advanced) -->
+<div class="flex flex-col gap-2 mt-2 pt-4 border-t border-light-border dark:border-dark-border">
+<label class="text-sm font-bold text-light-text-muted dark:text-dark-text-muted flex justify-between items-center">
+                                    Seed
+                                    <button class="text-primary dark:text-primary-light hover:bg-primary/5 p-1 rounded-lg transition-colors" title="Randomize">
+<span class="material-symbols-outlined text-[16px]">shuffle</span>
+</button>
+</label>
+<input class="w-full glass-input text-light-text dark:text-dark-text text-sm font-semibold rounded-xl p-3 outline-none border-light-border/60" placeholder="Random (-1)" type="text" value="-1">
+</div>
+</div>
+<!-- Generate Button -->
+<div class="mt-6 pt-4">
+<button class="w-full bg-primary hover:bg-primary-hover text-white dark:bg-primary-light/20 dark:hover:bg-primary-light/30 dark:text-primary-light border border-primary/30 dark:border-primary-light/30 text-base font-extrabold py-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_4px_15px_rgba(2,132,199,0.2)] hover:shadow-[0_6px_25px_rgba(2,132,199,0.3)] dark:shadow-[0_0_15px_rgba(125,211,252,0.15)] dark:hover:shadow-[0_0_25px_rgba(125,211,252,0.25)] backdrop-blur-sm">
+<span class="material-symbols-outlined">flare</span>
+                                Generate Render
+                            </button>
+<p class="text-center text-xs text-light-text-muted dark:text-dark-text-muted mt-3 font-bold">Cost: 1.5 credits</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
