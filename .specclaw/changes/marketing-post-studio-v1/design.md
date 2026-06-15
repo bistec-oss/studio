@@ -163,6 +163,12 @@ implementing a new auth adapter if Entra becomes a requirement.
 **PostgreSQL running as a Docker container** on the VPS (data persisted via a named Docker volume).
 ORM: **Prisma** (type-safe, migrations built-in, works with Next.js edge runtime).
 
+**Entity relationship diagram:** [`docs/erd.svg`](../../../docs/erd.svg) — visual
+overview of all entities, the two M:N join tables (ProjectCampaign,
+CampaignDraft), and the content pipeline Project → Campaign → Brief → Draft → Post.
+
+![bistec-studio ERD](../../../docs/erd.svg)
+
 Schema:
 
 ```prisma

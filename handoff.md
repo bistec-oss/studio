@@ -158,6 +158,9 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 
 ## Database schema (Prisma) — key models
 
+> Visual ERD: [`docs/erd.svg`](docs/erd.svg)
+
+
 - `User` — clerkId, role (ADMIN | EDITOR)
 - `Project` — name, defaultBrandKitId, defaultTone, isDeleted, deletedAt
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt

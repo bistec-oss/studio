@@ -1,0 +1,210 @@
+<svg viewBox="0 0 1060 920" xmlns="http://www.w3.org/2000/svg" role="img" font-family="Inter, system-ui, -apple-system, sans-serif">
+  <title>bistec-studio Entity Relationship Diagram</title>
+  <desc>ERD for the Prisma data model: User, Project, Campaign, Brief, Draft, Post, two M:N join tables (ProjectCampaign, CampaignDraft), and two config tables (BrandSystemPrompt, AvailableProvider).</desc>
+
+  <defs>
+    <marker id="dot" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5">
+      <circle cx="3.5" cy="3.5" r="2.5" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1060" height="920" fill="#f8fafc"/>
+
+  <!-- Title -->
+  <text x="530" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">bistec-studio — Entity Relationship Diagram</text>
+  <text x="530" y="52" text-anchor="middle" font-size="11" fill="#64748b">Prisma schema · Project → Campaign → Brief → Draft → Post, with M:N joins</text>
+
+  <!-- ═══════════ RELATIONSHIP LINES (drawn first, under boxes) ═══════════ -->
+  <g stroke="#94a3b8" stroke-width="1.4" fill="none">
+    <!-- User → Brief -->
+    <path d="M560,112 L640,112 L640,190" marker-end="url(#dot)"/>
+    <!-- User → Post (routed right) -->
+    <path d="M620,86 L1045,86 L1045,470 L1040,470" marker-end="url(#dot)"/>
+    <!-- Project → ProjectCampaign -->
+    <path d="M135,356 L135,400 L200,400 L200,430" marker-end="url(#dot)"/>
+    <!-- Campaign → ProjectCampaign -->
+    <path d="M340,356 L340,400 L240,400 L240,430" marker-end="url(#dot)"/>
+    <!-- Campaign → Brief -->
+    <path d="M510,300 L560,300" marker-end="url(#dot)"/>
+    <!-- Brief → Draft -->
+    <path d="M780,272 L830,272" marker-end="url(#dot)"/>
+    <!-- Draft → Post -->
+    <path d="M935,352 L935,400" marker-end="url(#dot)"/>
+    <!-- Campaign → CampaignDraft -->
+    <path d="M405,356 L405,470 L560,470" marker-end="url(#dot)"/>
+    <!-- Draft → CampaignDraft -->
+    <path d="M850,352 L850,486 L760,486" marker-end="url(#dot)"/>
+  </g>
+
+  <!-- Cardinality labels (white bg chips) -->
+  <g font-size="10" font-weight="700" fill="#475569" text-anchor="middle">
+    <rect x="551" y="104" width="14" height="14" rx="3" fill="#f8fafc"/><text x="558" y="115">1</text>
+    <rect x="633" y="178" width="14" height="14" rx="3" fill="#f8fafc"/><text x="640" y="189">∞</text>
+
+    <rect x="613" y="79" width="14" height="14" rx="3" fill="#f8fafc"/><text x="620" y="90">1</text>
+    <rect x="1033" y="463" width="14" height="14" rx="3" fill="#f8fafc"/><text x="1040" y="474">∞</text>
+
+    <rect x="128" y="370" width="14" height="14" rx="3" fill="#f8fafc"/><text x="135" y="381">1</text>
+    <rect x="333" y="370" width="14" height="14" rx="3" fill="#f8fafc"/><text x="340" y="381">1</text>
+    <rect x="193" y="416" width="14" height="14" rx="3" fill="#f8fafc"/><text x="200" y="427">∞</text>
+    <rect x="247" y="416" width="14" height="14" rx="3" fill="#f8fafc"/><text x="254" y="427">∞</text>
+
+    <rect x="514" y="285" width="14" height="14" rx="3" fill="#f8fafc"/><text x="521" y="296">1</text>
+    <rect x="540" y="285" width="16" height="14" rx="3" fill="#f8fafc"/><text x="548" y="296">∞</text>
+
+    <rect x="784" y="257" width="14" height="14" rx="3" fill="#f8fafc"/><text x="791" y="268">1</text>
+    <rect x="810" y="257" width="16" height="14" rx="3" fill="#f8fafc"/><text x="818" y="268">∞</text>
+
+    <rect x="918" y="362" width="14" height="14" rx="3" fill="#f8fafc"/><text x="925" y="373">1</text>
+    <rect x="942" y="384" width="16" height="14" rx="3" fill="#f8fafc"/><text x="950" y="395">∞</text>
+
+    <rect x="411" y="372" width="14" height="14" rx="3" fill="#f8fafc"/><text x="418" y="383">1</text>
+    <rect x="540" y="463" width="16" height="14" rx="3" fill="#f8fafc"/><text x="548" y="474">∞</text>
+    <rect x="857" y="362" width="14" height="14" rx="3" fill="#f8fafc"/><text x="864" y="373">1</text>
+    <rect x="764" y="479" width="16" height="14" rx="3" fill="#f8fafc"/><text x="772" y="490">∞</text>
+  </g>
+
+  <!-- ═══════════ ENTITIES ═══════════ -->
+
+  <!-- USER -->
+  <g>
+    <rect x="420" y="60" width="200" height="78" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M420,68 Q420,60 428,60 L612,60 Q620,60 620,68 L620,86 L420,86 Z" fill="#475569"/>
+    <text x="430" y="79" font-size="12" font-weight="700" fill="#fff">User</text>
+    <text x="430" y="104" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="610" y="104" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="430" y="121" font-size="11" fill="#334155">clerkId</text><text x="610" y="121" text-anchor="end" font-size="9" fill="#94a3b8">unique</text>
+    <text x="430" y="135" font-size="11" fill="#334155">role</text><text x="610" y="135" text-anchor="end" font-size="9" fill="#94a3b8">ADMIN | EDITOR</text>
+  </g>
+
+  <!-- PROJECT -->
+  <g>
+    <rect x="30" y="230" width="210" height="126" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M30,238 Q30,230 38,230 L232,230 Q240,230 240,238 L240,256 L30,256 Z" fill="#0284c7"/>
+    <text x="40" y="249" font-size="12" font-weight="700" fill="#fff">Project</text>
+    <text x="40" y="274" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="230" y="274" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="40" y="292" font-size="11" fill="#334155">name</text>
+    <text x="40" y="310" font-size="11" fill="#334155">defaultBrandKitId</text><text x="230" y="310" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
+    <text x="40" y="328" font-size="11" fill="#334155">defaultTone</text><text x="230" y="328" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
+    <text x="40" y="346" font-size="11" fill="#334155">isDeleted · deletedAt</text>
+  </g>
+
+  <!-- CAMPAIGN -->
+  <g>
+    <rect x="300" y="230" width="210" height="126" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M300,238 Q300,230 308,230 L502,230 Q510,230 510,238 L510,256 L300,256 Z" fill="#0284c7"/>
+    <text x="310" y="249" font-size="12" font-weight="700" fill="#fff">Campaign</text>
+    <text x="310" y="274" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="500" y="274" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="310" y="292" font-size="11" fill="#334155">name</text>
+    <text x="310" y="310" font-size="11" fill="#334155">brandKitId</text><text x="500" y="310" text-anchor="end" font-size="9" fill="#94a3b8">? override</text>
+    <text x="310" y="328" font-size="11" fill="#334155">defaultTone</text><text x="500" y="328" text-anchor="end" font-size="9" fill="#94a3b8">?</text>
+    <text x="310" y="346" font-size="11" fill="#334155">isDeleted · deletedAt</text>
+  </g>
+
+  <!-- BRIEF -->
+  <g>
+    <rect x="560" y="190" width="220" height="198" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M560,198 Q560,190 568,190 L772,190 Q780,190 780,198 L780,216 L560,216 Z" fill="#0284c7"/>
+    <text x="570" y="209" font-size="12" font-weight="700" fill="#fff">Brief</text>
+    <text x="570" y="234" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="770" y="234" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="570" y="252" font-size="11" fill="#334155">userId</text><text x="770" y="252" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="570" y="270" font-size="11" fill="#334155">campaignId</text><text x="770" y="270" text-anchor="end" font-size="9" fill="#64748b">FK ? (null=Uncat.)</text>
+    <text x="570" y="288" font-size="11" fill="#334155">topic · goal · tone</text>
+    <text x="570" y="306" font-size="11" fill="#334155">channels[]</text>
+    <text x="570" y="324" font-size="11" fill="#334155">designMode</text><text x="770" y="324" text-anchor="end" font-size="9" fill="#94a3b8">TEMPLATE|GENERATE</text>
+    <text x="570" y="342" font-size="11" fill="#334155">copyProviderKey</text>
+    <text x="570" y="360" font-size="11" fill="#334155">imageProviderKey</text>
+    <text x="570" y="378" font-size="11" fill="#334155">createdAt</text>
+  </g>
+
+  <!-- DRAFT -->
+  <g>
+    <rect x="830" y="190" width="210" height="162" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M830,198 Q830,190 838,190 L1032,190 Q1040,190 1040,198 L1040,216 L830,216 Z" fill="#0284c7"/>
+    <text x="840" y="209" font-size="12" font-weight="700" fill="#fff">Draft</text>
+    <text x="840" y="234" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="1030" y="234" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="840" y="252" font-size="11" fill="#334155">briefId</text><text x="1030" y="252" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="840" y="270" font-size="11" fill="#334155">copyText</text>
+    <text x="840" y="288" font-size="11" fill="#334155">imageUrl</text><text x="1030" y="288" text-anchor="end" font-size="9" fill="#94a3b8">MinIO</text>
+    <text x="840" y="306" font-size="11" fill="#334155">canvaDesignId · templateId</text>
+    <text x="840" y="324" font-size="11" fill="#334155">exportUrl</text><text x="1030" y="324" text-anchor="end" font-size="9" fill="#94a3b8">MinIO</text>
+    <text x="840" y="342" font-size="11" fill="#334155">status</text><text x="1030" y="342" text-anchor="end" font-size="9" fill="#94a3b8">DraftStatus</text>
+  </g>
+
+  <!-- POST -->
+  <g>
+    <rect x="830" y="400" width="210" height="162" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M830,408 Q830,400 838,400 L1032,400 Q1040,400 1040,408 L1040,426 L830,426 Z" fill="#0284c7"/>
+    <text x="840" y="419" font-size="12" font-weight="700" fill="#fff">Post</text>
+    <text x="840" y="444" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="1030" y="444" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="840" y="462" font-size="11" fill="#334155">draftId</text><text x="1030" y="462" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="840" y="480" font-size="11" fill="#334155">userId</text><text x="1030" y="480" text-anchor="end" font-size="9" fill="#64748b">FK</text>
+    <text x="840" y="498" font-size="11" fill="#334155">channel</text><text x="1030" y="498" text-anchor="end" font-size="9" fill="#94a3b8">IG | LINKEDIN</text>
+    <text x="840" y="516" font-size="11" fill="#334155">status</text><text x="1030" y="516" text-anchor="end" font-size="9" fill="#94a3b8">PostStatus</text>
+    <text x="840" y="534" font-size="11" fill="#334155">scheduledAt · publishedAt</text>
+    <text x="840" y="552" font-size="11" fill="#334155">platformId · errorReason</text>
+  </g>
+
+  <!-- PROJECTCAMPAIGN (join) -->
+  <g>
+    <rect x="120" y="430" width="200" height="72" rx="8" fill="#fff" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <path d="M120,438 Q120,430 128,430 L312,430 Q320,430 320,438 L320,456 L120,456 Z" fill="#94a3b8"/>
+    <text x="130" y="449" font-size="12" font-weight="700" fill="#fff">ProjectCampaign</text>
+    <text x="130" y="474" font-size="11" fill="#334155">projectId</text><text x="310" y="474" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">PK · FK</text>
+    <text x="130" y="492" font-size="11" fill="#334155">campaignId</text><text x="310" y="492" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">PK · FK</text>
+  </g>
+
+  <!-- CAMPAIGNDRAFT (join) -->
+  <g>
+    <rect x="560" y="450" width="200" height="72" rx="8" fill="#fff" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="5,3"/>
+    <path d="M560,458 Q560,450 568,450 L752,450 Q760,450 760,458 L760,476 L560,476 Z" fill="#94a3b8"/>
+    <text x="570" y="469" font-size="12" font-weight="700" fill="#fff">CampaignDraft</text>
+    <text x="570" y="494" font-size="11" fill="#334155">campaignId</text><text x="750" y="494" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">PK · FK</text>
+    <text x="570" y="512" font-size="11" fill="#334155">draftId</text><text x="750" y="512" text-anchor="end" font-size="9" font-weight="700" fill="#64748b">PK · FK</text>
+  </g>
+
+  <!-- BRANDSYSTEMPROMPT (config) -->
+  <g>
+    <rect x="30" y="600" width="210" height="108" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M30,608 Q30,600 38,600 L232,600 Q240,600 240,608 L240,626 L30,626 Z" fill="#0891b2"/>
+    <text x="40" y="619" font-size="12" font-weight="700" fill="#fff">BrandSystemPrompt</text>
+    <text x="40" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="230" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="40" y="662" font-size="11" fill="#334155">content</text>
+    <text x="40" y="680" font-size="11" fill="#334155">version</text><text x="230" y="680" text-anchor="end" font-size="9" fill="#94a3b8">rollback</text>
+    <text x="40" y="698" font-size="11" fill="#334155">isActive · createdBy</text>
+  </g>
+
+  <!-- AVAILABLEPROVIDER (config) -->
+  <g>
+    <rect x="300" y="600" width="210" height="126" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1.2"/>
+    <path d="M300,608 Q300,600 308,600 L502,600 Q510,600 510,608 L510,626 L300,626 Z" fill="#0891b2"/>
+    <text x="310" y="619" font-size="12" font-weight="700" fill="#fff">AvailableProvider</text>
+    <text x="310" y="644" font-size="11" font-weight="700" fill="#0f172a">id</text><text x="500" y="644" text-anchor="end" font-size="9" font-weight="700" fill="#0284c7">PK</text>
+    <text x="310" y="662" font-size="11" fill="#334155">slot</text><text x="500" y="662" text-anchor="end" font-size="9" fill="#94a3b8">COPY | IMAGE</text>
+    <text x="310" y="680" font-size="11" fill="#334155">providerKey · label</text>
+    <text x="310" y="698" font-size="11" fill="#334155">isEnabled</text>
+    <text x="310" y="716" font-size="11" fill="#334155">isDefault</text><text x="500" y="716" text-anchor="end" font-size="9" fill="#94a3b8">1 per slot</text>
+  </g>
+
+  <!-- ═══════════ LEGEND ═══════════ -->
+  <g>
+    <rect x="560" y="600" width="480" height="126" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="576" y="622" font-size="11" font-weight="700" fill="#0f172a">Legend</text>
+
+    <rect x="576" y="634" width="22" height="14" rx="3" fill="#0284c7"/>
+    <text x="606" y="645" font-size="10.5" fill="#334155">Core content entity</text>
+
+    <rect x="576" y="656" width="22" height="14" rx="3" fill="#fff" stroke="#94a3b8" stroke-width="1.2" stroke-dasharray="4,2"/>
+    <text x="606" y="667" font-size="10.5" fill="#334155">M:N join table (composite key)</text>
+
+    <rect x="576" y="678" width="22" height="14" rx="3" fill="#0891b2"/>
+    <text x="606" y="689" font-size="10.5" fill="#334155">Standalone config table</text>
+
+    <text x="576" y="711" font-size="10.5" fill="#475569"><tspan font-weight="700">PK</tspan> primary key · <tspan font-weight="700">FK</tspan> foreign key · <tspan font-weight="700">?</tspan> nullable</text>
+
+    <text x="820" y="645" font-size="10.5" fill="#475569"><tspan font-weight="700">1 —— ∞</tspan>  one-to-many</text>
+    <text x="820" y="667" font-size="10.5" fill="#475569">Project ⇄ Campaign : M:N</text>
+    <text x="820" y="689" font-size="10.5" fill="#475569">Campaign ⇄ Draft : M:N (shared asset)</text>
+    <text x="820" y="711" font-size="10.5" fill="#475569">Brief.campaignId null → Uncategorized</text>
+  </g>
+
+</svg>
