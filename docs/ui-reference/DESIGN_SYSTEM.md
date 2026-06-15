@@ -19,6 +19,28 @@
 
 ---
 
+## 0. Build Decisions (confirmed with user)
+
+- **Theme default & persistence:** Follow OS preference (`prefers-color-scheme`)
+  on first visit, then **remember the user's manual toggle** via `localStorage`.
+  Apply the class before first paint (inline script in `<head>`) to avoid a
+  flash of wrong theme (FOUC). Not stored in the DB for v1.
+- **Fonts & icons — self-host everything, no external CDN.** This keeps the VPS
+  deployment self-contained (consistent with the no-Azure / no-external-runtime
+  posture). Load **Inter** and **JetBrains Mono** via `next/font/local` (or
+  `next/font/google` with build-time download/self-hosting). Icons self-hosted
+  too — Material Symbols subset bundled locally, or swap to `lucide-react`.
+  No `fonts.googleapis.com` / `cdn.tailwindcss.com` calls at runtime.
+- **Design fidelity:** Use Frozen Light as the **starting point**, not a rigid
+  spec. Keep the tokens, dark/light system, and glass aesthetic as the default,
+  but deviate where a bistec-studio screen needs it (e.g. denser library grids,
+  data tables for publish history).
+- **Shared foundation first:** A dedicated early task (T25) scaffolds the
+  Tailwind theme config, glass utilities, theme provider/toggle, and base
+  components before screen-level work begins. All UI tasks depend on it.
+
+---
+
 ## 1. Brand & Aesthetic
 
 A refined mix of **Glassmorphism** and **Minimalism**. Translucent layers, subtle

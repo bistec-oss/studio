@@ -127,6 +127,25 @@ POST /api/design/assemble?mode=generate
 POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → blob storage
 ```
 
+### Frontend design system
+
+The UI follows the **Frozen Light** design system, fully documented in
+`docs/ui-reference/DESIGN_SYSTEM.md` (with a working HTML reference and
+dark/light screenshots in `docs/ui-reference/`). Glassmorphic aesthetic,
+ice-blue accents, Inter + JetBrains Mono.
+
+- **Dark + light themes are mandatory.** Tailwind `darkMode: "class"`; the
+  `ThemeProvider` follows OS `prefers-color-scheme` on first visit and persists
+  the user's manual toggle to `localStorage`. An inline pre-paint script sets
+  the class before first paint to avoid FOUC.
+- **Self-hosted fonts/icons** — no external CDN at runtime (consistent with the
+  self-contained VPS posture). Inter + JetBrains Mono via `next/font`; icons via
+  a local Material Symbols subset or `lucide-react`.
+- The design is a **starting point** — tokens and glass aesthetic are the default,
+  with room to deviate where a screen needs it (denser library grids, data tables).
+- T25 scaffolds the theme config + base components before any screen task; all
+  UI tasks depend on it.
+
 ### Auth
 
 **Clerk** for authentication (managed provider — fastest path, supports social + email,
@@ -383,6 +402,11 @@ on the VPS. Security protocols:
 | `src/scheduler/worker.ts` | create | Scheduled post worker |
 | `prisma/schema.prisma` | create | Full data model |
 | `prisma/migrations/` | create | Auto-generated migrations |
+| `tailwind.config.ts` | create | Frozen Light theme tokens (light + dark), `darkMode: "class"` |
+| `src/app/globals.css` | create | Glass utility classes, custom scrollbars, self-hosted font faces |
+| `src/components/theme/` | create | ThemeProvider (system + localStorage), ThemeToggle, pre-paint FOUC script |
+| `src/components/layout/AppShell.tsx` | create | Top app bar + sidebar + fluid canvas layout |
+| `src/components/ui/` | create | Base components: Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip |
 | `src/middleware.ts` | create | Clerk auth middleware |
 | `src/app/(auth)/` | create | Login/signup pages (Clerk components) |
 | `src/app/(app)/brief/` | create | Brief creation UI (Path A / B mode select) |

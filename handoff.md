@@ -80,6 +80,17 @@ Campaign brand kit → Project default brand kit → System global default
 
 ---
 
+## Frontend design system — "Frozen Light"
+
+Documented in `docs/ui-reference/` (DESIGN_SYSTEM.md + working HTML reference +
+dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
+
+- **Dark + light themes mandatory** — follows OS preference first visit, persists manual toggle to localStorage (Tailwind `darkMode: "class"`)
+- **Self-hosted fonts/icons** — Inter + JetBrains Mono via `next/font`, no external CDN (consistent with self-contained VPS)
+- Fidelity: starting point, not rigid — deviate where screens need it
+- `T25` scaffolds the theme config + base components (Button, GlassPanel, GlassInput, SegmentedToggle, StatusChip, AppShell, ThemeProvider/Toggle) before any screen task; all UI tasks depend on it
+- Diffusion-tool features stripped from the source template (seed, credits, step slider, fine-tuning/billing nav)
+
 ## The two design paths
 
 ### Path A — Preset brand template
@@ -173,11 +184,11 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 
 ---
 
-## Task breakdown (24 tasks, 6 waves + Wave 5b)
+## Task breakdown (25 tasks, 6 waves + Wave 5b)
 
 | Wave | Focus | Tasks |
 |---|---|---|
-| 1 | Project scaffold + Docker Compose infra | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth |
+| 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
 | 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | Canva MCP client + MinIO storage | T09 Canva client (tx guard), T10 MinIO client |
 | 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy/image routes, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |

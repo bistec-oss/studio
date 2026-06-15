@@ -2,14 +2,18 @@
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
-**Total Tasks:** 24
+**Total Tasks:** 25
 
 ## Summary
 
-24 tasks across 6 waves (plus Wave 5b). Waves 1–3 establish the foundation
-(project scaffold, data layer, provider abstraction). Waves 4–5 build the two
-design paths and publishing. Wave 5b adds the Projects & Campaigns layer.
-Wave 6 covers admin settings and end-to-end verification.
+25 tasks across 6 waves (plus Wave 5b). Waves 1–3 establish the foundation
+(project scaffold, design system, data layer, provider abstraction). Waves 4–5
+build the two design paths and publishing. Wave 5b adds the Projects & Campaigns
+layer. Wave 6 covers admin settings and end-to-end verification.
+
+The frontend follows the **Frozen Light** design system
+(`docs/ui-reference/DESIGN_SYSTEM.md`) — glassmorphic, dark + light themes
+mandatory, self-hosted fonts/icons. T25 scaffolds it before any screen task.
 
 Each wave can begin only when all tasks in the prior wave are complete.
 Within a wave, tasks without inter-dependencies can run in parallel.
@@ -43,6 +47,12 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Estimate: small
   - Depends: T01
   - Notes: Clerk middleware protects all `/(app)/**` and `/api/**` routes. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` helper used in route handlers. Roles stored as Clerk public metadata.
+
+- [ ] `T25` — Design system foundation (Frozen Light theme + base components)
+  - Files: `tailwind.config.ts`, `src/app/globals.css`, `src/components/theme/ThemeProvider.tsx`, `src/components/theme/ThemeToggle.tsx`, `src/components/layout/AppShell.tsx`, `src/components/ui/` (Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip), `src/app/layout.tsx`
+  - Estimate: medium
+  - Depends: T01
+  - Notes: Implements the design system per `docs/ui-reference/DESIGN_SYSTEM.md`. Tailwind config with light/dark color tokens + `darkMode: "class"`. Glass utility classes (`.glass`, `.glass-panel`, `.glass-input`) in globals.css. **Dark + light themes mandatory** — `ThemeProvider` follows `prefers-color-scheme` on first visit and persists manual toggle to `localStorage`; inline pre-paint script prevents FOUC. **Self-host all fonts/icons** (Inter + JetBrains Mono via `next/font`, icons via local Material Symbols subset or `lucide-react`) — no external CDN. `AppShell` provides the 64px top app bar + 256px sidebar + fluid canvas layout. Base components reused across all screen tasks. Use Frozen Light as a starting point, not a rigid spec.
 
 ---
 
@@ -95,7 +105,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T11` — Brief creation (DB + API route)
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
-  - Depends: T03, T04, T08, T23
+  - Depends: T03, T04, T08, T23, T25
   - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Model dropdowns populate from `GET /api/providers/available`. Design mode radio (Path A / Path B). FR-5, FR-5a, FR-5b, FR-6, FR-28–FR-30, AC-13, AC-16, AC-17.
 
 - [ ] `T12` — Copy + image generation API routes
@@ -147,7 +157,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T19` — Asset library + publish history API + UI
   - Files: `src/app/api/library/route.ts`, `src/app/(app)/library/page.tsx`
   - Estimate: medium
-  - Depends: T17, T23
+  - Depends: T17, T23, T25
   - Notes: `GET /api/library` supports `?projectId=` and `?campaignId=` query params for drill-down filtering; omitting both returns all (including Uncategorized). UI: left-side project/campaign filter panel → post grid + publish history table. "Uncategorized" is a fixed filter option for posts with no campaign. FR-22, FR-23, FR-24, AC-11, AC-11a.
 
 ---
@@ -163,7 +173,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T24` — Projects & Campaigns UI
   - Files: `src/app/(app)/projects/page.tsx`, `src/app/(app)/projects/[id]/page.tsx`, `src/app/(app)/campaigns/page.tsx`, `src/app/(app)/campaigns/[id]/page.tsx`
   - Estimate: medium
-  - Depends: T23
+  - Depends: T23, T25
   - Notes: Projects list: name, default brand kit, campaign count, soft-delete + recover actions. Project detail: list of assigned campaigns + their posts. Campaigns list: shows standalone campaigns and project-assigned campaigns (with project badge). Campaign detail: posts grid. Admin-only UI for reassigning a campaign to a different project. Soft-deleted items shown in a "Deleted" tab with recover button. AC-11c, AC-18.
 
 ---
@@ -173,13 +183,13 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - [ ] `T20` — Admin: settings UI (brand prompt + provider management)
   - Files: `src/app/api/admin/prompt/route.ts`, `src/app/api/admin/providers/route.ts`, `src/app/api/admin/providers/[id]/route.ts`, `src/app/(app)/admin/settings/page.tsx`
   - Estimate: medium
-  - Depends: T14, T04, T08
+  - Depends: T14, T04, T08, T25
   - Notes: Two sections in the admin settings page. (1) Brand system prompt: GET active prompt + version history, POST new version, POST `/activate` for rollback (EC-13). (2) Provider management: GET all registered providers per slot, PATCH to enable/disable or set as default, immediately reflected in `GET /api/providers/available` for all users' brief UIs. Admin-role-gated throughout. FR-26b, FR-27b, FR-31, AC-5c, AC-14, AC-15.
 
 - [ ] `T21` — Draft refinement UI
   - Files: `src/app/(app)/draft/[id]/page.tsx`
   - Estimate: medium
-  - Depends: T13, T14, T15
+  - Depends: T13, T14, T15, T25
   - Notes: Shows generated copy (editable textarea), generated image (with "Regenerate" button), template selector (Path A: dropdown of brand templates; Path B: N/A), preview of assembled Canva design (thumbnail via `get-design-thumbnail`), "Export" button. No Canva editor embed — FR-16 confirmed. AC-6, AC-7.
 
 - [ ] `T22` — End-to-end test pass + acceptance criteria sign-off
