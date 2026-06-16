@@ -1,4 +1,4 @@
-# bistec-studio — Product Requirements Document
+﻿# bistec-studio — Product Requirements Document
 
 **Version:** 1.0
 **Date:** 2026-06-15
@@ -162,7 +162,7 @@ No redeploy is required for any brand kit change.
 
 | ID | Requirement |
 |---|---|
-| FR-10 | The system generates a post image from the brief using OpenAI gpt-image-1. |
+| FR-10 | The system generates a post image from the brief using OpenAI gpt-image-2. |
 | FR-11 | The user can regenerate the image without changing the copy. |
 
 ### Design — Path A (preset brand template)
@@ -179,7 +179,7 @@ No redeploy is required for any brand kit change.
 | ID | Requirement |
 |---|---|
 | FR-18b | When "generate new design" is selected, the backend invokes OpenAI with function calling as an AI orchestrator. It receives the brief, the resolved brand kit's active system prompt and feed-to-AI artifacts, and the Canva MCP tool schemas as callable functions. OpenAI directs the full design assembly by calling Canva MCP tools. |
-| FR-19b | OpenAI may generate new imagery (gpt-image-1) or use an existing brand asset from Canva (`get-assets`) — it decides based on what best serves the brief. |
+| FR-19b | OpenAI may generate new imagery (gpt-image-2) or use an existing brand asset from Canva (`get-assets`) — it decides based on what best serves the brief. |
 | FR-20b | The assembled design is built via a Canva editing transaction with the brand kit ID applied. |
 | FR-21b | The Path B design enters the same in-app refinement and export flow as Path A. |
 
@@ -244,7 +244,7 @@ No redeploy is required for any brand kit change.
 | NFR-4 | **Brand consistency:** output is brand-consistent by construction. Brand styling comes from Canva brand kit/templates, not from user choices. |
 | NFR-5 | **Security:** all third-party credentials (OpenAI, Canva, Instagram, LinkedIn) are stored server-side. Social tokens are encrypted at rest (AES-256-GCM). No secret is ever exposed to the browser. |
 | NFR-6 | **Scheduling reliability:** a scheduled post fires within ±2 minutes of its target time and survives an app restart (persisted queue, not in-memory timers). |
-| NFR-7 | **Cost control:** generation calls (GPT, gpt-image-1) have per-user or per-period limits to control OpenAI spend. Exact thresholds to be confirmed. |
+| NFR-7 | **Cost control:** generation calls (GPT, gpt-image-2) have per-user or per-period limits to control OpenAI spend. Exact thresholds to be confirmed. |
 | NFR-8 | **Third-party resilience:** failures from OpenAI, Canva MCP, or social APIs are surfaced as clear, actionable errors and never silently drop a post. |
 | NFR-9 | **Auditability:** publish history is retained and attributable to the user who published or scheduled. |
 | NFR-11 | **MCP transaction integrity:** every `start-editing-transaction` must always resolve with either `commit-editing-transaction` (success) or `cancel-editing-transaction` (error/abort). No orphaned open transactions. |
@@ -337,3 +337,4 @@ All of the following must pass before v1 ships:
 | 3 | What are the Bistec Canva brand kit ID and BTM* template IDs accessible via `list-brand-kits`? How many brand templates does v1 support? | Required for Wave 4 (Path A) |
 | 4 | What are the concrete per-user or per-period generation limits for OpenAI calls (NFR-7)? | Cost/rate guardrail design |
 | 5 | Exact role → permission matrix for publishing: can editors publish, or is publishing admin-only by default? | Auth middleware + UI gating |
+

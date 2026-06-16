@@ -1,4 +1,4 @@
-# Spec: Marketing Post Studio (v1)
+﻿# Spec: Marketing Post Studio (v1)
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-08
@@ -77,7 +77,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 
 **AI Image Generation**
 - **FR-10** From the brief (and/or copy context), the system generates a post image
-  using OpenAI gpt-image-1.
+  using OpenAI gpt-image-2.
 - **FR-11** The user can regenerate the image (producing a new variation) without
   changing the copy.
 
@@ -87,17 +87,30 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   from Bistec's brand kit), then opening an editing transaction
   (`start-editing-transaction`) and injecting the generated copy and image in a
   single bulk `perform-editing-operations` call: `replace_text` on the template's
-  copy element(s) and `update_fill` on the image element using the Canva asset ID
-  obtained via `upload-asset-from-url` (which bridges the gpt-image-1 output URL
-  into Canva). The transaction is then saved with `commit-editing-transaction`.
-- **FR-12a** Before the editing transaction, the system uploads the gpt-image-1
-  generated image into Canva using `upload-asset-from-url`, obtaining a Canva asset
-  ID to use in the `update_fill` operation.
-- **FR-13** The user can choose among / swap between the available brand templates.
-  Swapping discards the current Canva design and creates a new one from the chosen
-  template ID via `create-design-from-brand-template`, then re-applies the current
-  copy and image via a fresh editing transaction. (Number of templates supported in
-  v1 confirmed in design — see Open Questions.)
+  copy element(s) and `update_fill` on the image element(s) using the Canva asset
+  IDs obtained via `upload-asset-from-url`. The transaction is then saved with
+  `commit-editing-transaction`.
+- **FR-12a** Before the editing transaction, the system calls `get-design-content`
+  to retrieve the template's element tree, then passes that tree together with the
+  edit intent (which slots need what) to a **Claude-powered element resolver**
+  (`src/lib/canva/elementResolver.ts`). Claude identifies the correct element IDs
+  by reading layer names and types — no element IDs are pre-mapped or hardcoded per
+  template. The resolver returns the fully-formed `replace_text` and `update_fill`
+  operations ready to pass to `perform-editing-operations`.
+- **FR-12b** Before the editing transaction, the system uploads all images into
+  Canva using `upload-asset-from-url` to obtain Canva asset IDs — the AI-generated
+  background (gpt-image-2 output) and the user-uploaded additional image (Path A
+  only — placed into a specific template slot), if provided. These asset IDs are
+  passed to the element resolver as part of the edit intent. Path B reference images
+  are handled separately by the orchestrator (see FR-18c) and are not routed through
+  the element resolver.
+- **FR-13** The user can choose among / swap between the brand templates linked to
+  their resolved brand kit. Available templates are those an admin registered against
+  the kit via the settings UI (see FR-26b). Swapping discards the current Canva
+  design and creates a new one from the chosen template ID via
+  `create-design-from-brand-template`, then re-runs the element resolver against the
+  new template's element tree and re-applies the current copy and image via a fresh
+  editing transaction.
 - **FR-14** The brand kit (colors, fonts, logo) is applied automatically by the
   brand template; the user does not configure brand styling manually. Available
   brand kits are discovered at runtime via `list-brand-kits`.
@@ -107,11 +120,20 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   invokes OpenAI (Chat Completions with function calling) as an **AI orchestrator**,
   passing it: the user's brief, the resolved brand kit's active system prompt and
   feed-to-AI artifacts (see FR-25b–FR-27b), the brand kit's Canva brand kit ID,
-  and the Canva MCP tool schemas as available
-  functions. OpenAI plans and directs the full design assembly by calling Canva MCP
-  tools — this replicates the ChatGPT + Canva plugin pattern (canva.com/integrations/
-  chatgpt) in bistec-studio's own backend, without depending on ChatGPT's UI.
-- **FR-19b** OpenAI may call `gpt-image-1` to generate imagery (uploaded via
+  any user-supplied reference images (see FR-18c), and the Canva MCP tool schemas
+  as available functions. OpenAI plans and directs the full design assembly by
+  calling Canva MCP tools — this replicates the ChatGPT + Canva plugin pattern
+  (canva.com/integrations/chatgpt) in bistec-studio's own backend, without
+  depending on ChatGPT's UI.
+- **FR-18c** The brief UI for Path B includes an optional **reference image upload**
+  (one or more images — e.g. a speaker photo, product shot, or event graphic).
+  Uploaded images are stored in MinIO and their URLs are passed to the OpenAI
+  orchestration call. The orchestrator decides how to use them: it may place them
+  directly into the design via `upload-asset-from-url`, use them as compositional
+  reference when prompting gpt-image-2, or ignore them if they don't fit the design.
+  The user hands the images over; OpenAI decides their role. This is distinct from
+  Path A's additional image upload, which is always placed into a specific template slot.
+- **FR-19b** OpenAI may call `gpt-image-2` to generate imagery (uploaded via
   `upload-asset-from-url` → Canva asset ID) or elect to use an existing brand asset
   already in the user's Canva account via `get-assets` — depending on what best
   serves the brief. The orchestrator decides; the user is not required to choose.
@@ -125,13 +147,38 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 **Admin: Brand Kits**
 - **FR-25b** A **brand kit** is a first-class, admin-managed entity. It owns: a
   name, a brand voice (versioned system prompt), a folder of brand artifacts
-  (logos, fonts, colors, reference images, example posts), and an optional link to
-  a Canva brand kit. A brand kit may be **Canva-linked, backend-folder-based, or
-  both** (hybrid).
+  (logos, fonts, colors, reference images, example posts), an optional link to a
+  Canva brand kit, and a list of **linked brand templates** (BTM* IDs registered by
+  the admin, each with an optional fixed background image prompt). A brand kit may
+  be **Canva-linked, backend-folder-based, or both** (hybrid).
+- **FR-25c** Each linked brand template may have an optional **background image
+  prompt** set by the admin. When set, this prompt is used verbatim for gpt-image-2
+  background generation instead of deriving a prompt from the brief topic and
+  description. When not set, the system falls back to the brief-derived prompt.
+  This allows templates with a fixed visual style (e.g. "always dark abstract tech")
+  to produce consistent backgrounds regardless of post topic.
 - **FR-26b** Admins manage brand kits through a **settings page in bistec-studio**
-  (no developer/deploy cycle): create/edit/soft-delete kits, set the system default
-  kit, link a Canva brand kit, edit the brand voice prompt, and upload/remove
-  artifacts. Editors select brand kits (via projects/campaigns) but cannot edit them.
+  (no developer/deploy cycle): create, **edit**, and soft-delete kits, set the system
+  default kit, link a Canva brand kit, **link brand templates** (discovered via
+  `search-brand-templates` filtered to the linked Canva brand kit — no manual BTM*
+  ID entry), set a per-template background image prompt override (FR-25c), edit the
+  brand voice prompt (with AI-assisted generation and improvement — FR-26c), and
+  upload/remove artifacts. Editors select brand kits (via projects/campaigns) but
+  cannot edit them.
+- **FR-26b-edit** An admin can edit any existing brand kit at any time — updating
+  its name, source (CANVA / BACKEND / HYBRID), linked Canva brand kit, and linked
+  brand templates (add or remove, update image prompts). This is a dedicated Edit
+  flow (separate from the create flow) accessible via an edit button on each brand
+  kit card in the settings UI. Prompt versioning and artifact management remain on
+  the card itself and are not part of the edit modal.
+- **FR-26c** The brand voice prompt editor provides **AI assistance** in two modes:
+  (a) **Generate** — shown when no prompt version exists; admin describes the brand
+  in plain text and AI drafts a full brand voice prompt, saved as v1; (b) **Improve**
+  — shown alongside the active prompt version; AI takes the current prompt and
+  returns a refined version, automatically saved as the next version so rollback
+  (FR-28b) still applies. Both modes use Claude (Anthropic SDK). The AI-generated
+  content is presented as a draft for admin review before saving — it is not saved
+  automatically.
 - **FR-27b** The brand kit's active system prompt is prepended to every Path B
   OpenAI orchestration call. Artifacts flagged "feed to AI" (e.g. reference images)
   are passed as additional brand context to Path B orchestration and image
@@ -156,13 +203,28 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   settings UI: enable, disable, and set the system default for each slot. Changes
   take effect immediately for new briefs without a redeploy.
 
+**Admin: AI provider registration**
+- **FR-32** An admin can register a new AI provider directly from the bistec-studio settings UI — no redeploy or env var change required. A registered provider becomes available to users immediately.
+- **FR-32a** When an admin enters an API key, the system inspects the key prefix and auto-identifies the provider where possible (e.g. `sk-ant-` → Anthropic, `sk-` → OpenAI). If identified, the provider name and label are auto-populated. If the key format is unrecognized, the admin manually specifies the provider name and label and proceeds — no block.
+- **FR-32b** The system validates the key against the provider's API before saving. If validation fails, the key is not saved and the admin is shown the error.
+- **FR-32c** After initial entry, the API key is never returned to the browser. The settings UI shows only the key prefix (e.g. `sk-ant-••••••••`) for identification. Keys are stored encrypted at rest (AES-256-GCM, same as social tokens).
+- **FR-32d** The model selector in the brief UI displays each provider's name and label as registered by the admin (e.g. "Claude 3.5 Sonnet (Anthropic)") so users know exactly which model and provider they are selecting.
+
+**AGUI — Chat-driven design refinement**
+- **FR-33** After a design is returned (Path A or Path B), the draft page exposes a **chat-driven refinement panel**. The user types natural language instructions (e.g. "reposition the topic to the bottom", "change the background to something darker"); the AI interprets each instruction and applies the corresponding Canva MCP editing operations. The user never directly manipulates design elements.
+- **FR-33a** Each refinement instruction that results in a committed Canva edit is recorded as a `DraftRevision` row. The user can revert to any prior revision via an explicit undo step, which re-applies the previous design state via a fresh editing transaction.
+- **FR-33b** Before committing any refinement edit, the AI checks whether the instruction conflicts with the resolved brand kit. If a conflict is detected, the AI explains the conflict in the chat panel before applying. If the user replies "override", the edit is applied without further gating.
+- **FR-33c** The existing regenerate buttons (copy and image) remain available on the draft page — the AGUI panel is additive, not a replacement.
+- **FR-33d** The AI driving refinements is the same provider the user selected for that brief — Path A uses the selected copy/image model; Path B uses the orchestrator model. No additional model selection is required.
+- **FR-33e** The refinement panel does not allow direct element dragging, asset uploads, or opening the Canva editor. All changes are applied server-side via Canva MCP editing transactions only.
+
 **In-App Refinement (no pixel editing)**
 - **FR-15** The user can refine a draft entirely within bistec-studio by any
-  combination of: editing copy text, regenerating the image, and swapping the brand
-  template — each triggering the appropriate MCP editing transaction (replace_text /
-  upload-asset-from-url + update_fill / create-design-from-brand-template) and a
-  fresh export. Element IDs needed for editing operations are obtained by reading the
-  design content after the initial template instantiation.
+  combination of: editing copy text, regenerating the image, swapping the brand
+  template, and issuing natural language instructions via the AGUI chat panel (FR-33) —
+  each triggering the appropriate MCP editing transaction and a fresh export. Element
+  IDs are resolved dynamically for each operation via the Claude element resolver
+  (FR-12a) — not cached from the initial instantiation.
 - **FR-16** The system does NOT provide pixel/canvas/layout editing and does NOT
   open the design in Canva for manual editing. The MCP editing operations are
   server-side only (text content, image fill) — no Canva editor UI is surfaced.
@@ -201,7 +263,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **NFR-6 (Reliability of scheduling)** A scheduled post fires within an acceptable
   window of its target time (target window confirmed in design, e.g. ±5 min) and
   survives an app restart (durable queue/store, not in-memory timers).
-- **NFR-7 (Cost control)** Generation calls (GPT, gpt-image-1) have guardrails to
+- **NFR-7 (Cost control)** Generation calls (GPT, gpt-image-2) have guardrails to
   control spend (e.g. per-user or per-period limits) — exact policy in design.
 - **NFR-8 (Resilience to third-party failure)** Failures from OpenAI/Canva MCP
   tools/social APIs are surfaced as clear, actionable errors and never silently
@@ -226,7 +288,7 @@ Each criterion must pass for the change to be considered complete.
   post published to Instagram, and (separately) to LinkedIn, and the published post
   appears on the respective channel.
 - **AC-4** Given a brief, the system returns generated copy from GPT and a generated
-  image from gpt-image-1, and both can be regenerated independently.
+  image from gpt-image-2, and both can be regenerated independently.
 - **AC-5** The composed design (Path A) visibly uses the Bistec brand kit
   (colors/fonts/logo) without the user configuring any brand styling, and the user
   can swap between at least the supported set of brand templates.
@@ -273,7 +335,7 @@ Each criterion must pass for the change to be considered complete.
 
 - **EC-1** OpenAI copy or image generation fails or times out → user sees a clear
   error and can retry; no partial/blank draft is silently saved as final.
-- **EC-2** gpt-image-1 returns content that fails moderation / is rejected → user is
+- **EC-2** gpt-image-2 returns content that fails moderation / is rejected → user is
   informed and prompted to adjust the brief or regenerate.
 - **EC-3** Canva MCP server is unavailable, or an MCP tool call fails (template
   instantiation, asset upload, editing transaction, or export) → user is informed
@@ -316,17 +378,18 @@ Each criterion must pass for the change to be considered complete.
 
 **External services / APIs**
 - **OpenAI API** — GPT (copy generation, Path A); GPT with function calling as AI
-  orchestrator (Path B); gpt-image-1 (image generation, both paths — mandatory on
+  orchestrator (Path B); gpt-image-2 (image generation, both paths — mandatory on
   Path A, AI-decided on Path B). Requires API key + spend controls.
 - **Canva MCP server** — The Next.js backend connects as an MCP client to the
   Canva MCP server, which exposes structured tool operations:
   - `list-brand-kits` — discover available brand kits
   - `create-design-from-brand-template` — instantiate a design from a BTM* template
-  - `upload-asset-from-url` — bridge gpt-image-1 image URLs into Canva assets
+  - `upload-asset-from-url` — bridge gpt-image-2 image URLs into Canva assets
   - `start-editing-transaction` / `perform-editing-operations` (replace_text,
     update_fill) / `commit-editing-transaction` / `cancel-editing-transaction` —
     programmatic content injection and refinement
-  - `get-design-content` — read element IDs required for editing operations
+  - `get-design-content` — read the full element tree; passed to the Claude element
+    resolver to identify target element IDs dynamically (no hardcoded ID mappings)
   - `get-assets` — retrieve existing brand assets (used by Path B orchestrator as
     an alternative to generating new imagery)
   - `export-design` — export as PNG/JPG, returns a download URL
@@ -379,3 +442,4 @@ Each criterion must pass for the change to be considered complete.
 a custom pixel/canvas editor, edit-in-Canva, additional channels (Facebook/X/
 TikTok/YouTube), a full content-calendar surface, and external/client self-serve
 access.
+

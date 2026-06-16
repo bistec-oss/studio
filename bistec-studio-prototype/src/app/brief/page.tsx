@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -97,6 +97,7 @@ export default function BriefPage() {
   const [copyProviderId, setCopyProviderId] = useState(defaultCopyProvider.id)
   const [imageProviderId, setImageProviderId] = useState(defaultImageProvider.id)
   const [speakerImage, setSpeakerImage] = useState<{ name: string; preview: string } | null>(null)
+  const [referenceImages, setReferenceImages] = useState<{ name: string; preview: string }[]>([])
 
   const [generating, setGenerating] = useState(false)
 
@@ -384,11 +385,52 @@ export default function BriefPage() {
                 )}
 
                 {designMode === 'GENERATE' && (
-                  <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-violet-400/[0.06] border border-violet-400/20">
-                    <Zap size={14} className="text-violet-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-[0.75rem] text-slate-400 leading-relaxed">
-                      AI will orchestrate Canva MCP tools to create a unique design using your brand kit
-                    </p>
+                  <div className="space-y-3 mt-1">
+                    <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-violet-400/[0.06] border border-violet-400/20">
+                      <Zap size={14} className="text-violet-400 flex-shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="text-[0.75rem] text-slate-400 leading-relaxed">
+                          OpenAI GPT orchestrates the full design — it calls Canva MCP tools to assemble every element using your brand kit.
+                        </p>
+                        <p className="text-[0.72rem] text-slate-500 leading-relaxed">
+                          The orchestrator decides whether to generate a background image (via gpt-image-2) or use an existing brand asset — no image model selection needed.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[0.75rem] font-medium text-slate-400 uppercase tracking-wide flex items-center gap-2">
+                        <Upload size={13} className="text-slate-500" />
+                        Reference Images
+                        <span className="normal-case tracking-normal font-normal text-slate-600">(optional)</span>
+                      </label>
+                      <p className="text-[0.68rem] text-slate-600">Speaker photos, product shots, event graphics — the AI decides how to use them in the design.</p>
+                      {referenceImages.length > 0 && (
+                        <div className="space-y-2">
+                          {referenceImages.map((img, i) => (
+                            <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.03] border border-violet-400/20">
+                              <img src={img.preview} alt={img.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[0.78rem] text-slate-200 truncate">{img.name}</div>
+                              </div>
+                              <button onClick={() => setReferenceImages(prev => prev.filter((_, j) => j !== i))} className="text-slate-600 hover:text-slate-400 transition-colors">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <label className="flex items-center gap-2.5 p-3 rounded-xl border border-dashed border-white/[0.10] hover:border-violet-400/30 hover:bg-violet-400/[0.02] transition-all cursor-pointer group">
+                        <Upload size={15} className="text-slate-600 group-hover:text-violet-400 transition-colors flex-shrink-0" />
+                        <span className="text-[0.78rem] text-slate-500 group-hover:text-slate-400 transition-colors">
+                          {referenceImages.length > 0 ? 'Add another image' : 'Click to upload reference images'}
+                        </span>
+                        <input type="file" accept="image/*" multiple className="hidden" onChange={e => {
+                          const files = Array.from(e.target.files ?? [])
+                          setReferenceImages(prev => [...prev, ...files.map(f => ({ name: f.name, preview: URL.createObjectURL(f) }))])
+                          e.target.value = ''
+                        }} />
+                      </label>
+                    </div>
                   </div>
                 )}
               </div>
@@ -408,20 +450,30 @@ export default function BriefPage() {
                     ))}
                   </select>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[0.75rem] font-medium text-slate-400 uppercase tracking-wide">Image model</label>
-                  <select
-                    value={imageProviderId}
-                    onChange={e => setImageProviderId(e.target.value)}
-                    className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[0.82rem] text-slate-200 outline-none focus:border-cyan-400/50 focus:bg-cyan-400/[0.03] transition-all appearance-none cursor-pointer"
-                  >
-                    {enabledImageProviders.map(p => (
-                      <option key={p.id} value={p.id} className="bg-[#111827]">
-                        {p.label}{p.isDefault ? ' (default)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {designMode === 'TEMPLATE' ? (
+                  <div className="space-y-1.5">
+                    <label className="text-[0.75rem] font-medium text-slate-400 uppercase tracking-wide">Image model</label>
+                    <select
+                      value={imageProviderId}
+                      onChange={e => setImageProviderId(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/[0.08] rounded-xl px-3 py-2.5 text-[0.82rem] text-slate-200 outline-none focus:border-cyan-400/50 focus:bg-cyan-400/[0.03] transition-all appearance-none cursor-pointer"
+                    >
+                      {enabledImageProviders.map(p => (
+                        <option key={p.id} value={p.id} className="bg-[#111827]">
+                          {p.label}{p.isDefault ? ' (default)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-[0.75rem] font-medium text-slate-400 uppercase tracking-wide">Image model</label>
+                    <div className="w-full bg-white/[0.02] border border-white/[0.04] rounded-xl px-3 py-2.5 text-[0.82rem] text-slate-600 flex items-center gap-2 cursor-not-allowed">
+                      <Zap size={13} className="text-violet-400/60 flex-shrink-0" />
+                      GPT orchestrator decides
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-1">
@@ -515,6 +567,23 @@ export default function BriefPage() {
                     )}
                   </div>
                 )}
+                {designMode === 'GENERATE' && (
+                  <div className="flex gap-3 py-2.5 border-b border-white/[0.05]">
+                    <span className="w-28 flex-shrink-0 text-[0.72rem] text-slate-600 font-medium uppercase tracking-wide pt-px">
+                      Ref. Images
+                    </span>
+                    {referenceImages.length > 0 ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {referenceImages.map((img, i) => (
+                          <img key={i} src={img.preview} alt={img.name} className="w-7 h-7 rounded object-cover" title={img.name} />
+                        ))}
+                        <span className="text-[0.72rem] text-slate-500 ml-1">{referenceImages.length} image{referenceImages.length > 1 ? 's' : ''} — AI decides how to use them</span>
+                      </div>
+                    ) : (
+                      <span className="text-[0.82rem] text-slate-600 italic">None — AI works from brief only</span>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-3 py-2.5 border-b border-white/[0.05]">
                   <span className="w-28 flex-shrink-0 text-[0.72rem] text-slate-600 font-medium uppercase tracking-wide pt-px">
@@ -527,7 +596,11 @@ export default function BriefPage() {
                   <span className="w-28 flex-shrink-0 text-[0.72rem] text-slate-600 font-medium uppercase tracking-wide pt-px">
                     Image AI
                   </span>
-                  <span className="text-[0.82rem] text-slate-200">{activeImageProvider?.label ?? '—'}</span>
+                  {designMode === 'TEMPLATE' ? (
+                    <span className="text-[0.82rem] text-slate-200">{activeImageProvider?.label ?? '—'}</span>
+                  ) : (
+                    <span className="text-[0.82rem] text-slate-500 italic">GPT orchestrator decides (gpt-image-2 or brand asset)</span>
+                  )}
                 </div>
               </div>
 
@@ -565,3 +638,4 @@ export default function BriefPage() {
     </>
   )
 }
+
