@@ -1,4 +1,4 @@
-# Wave 3 — Canva MCP Client + MinIO Storage
+# Wave 3 — HTML Renderer + Claude Design Agent + MinIO Storage
 
 **Change:** marketing-post-studio-v1
 **Wave:** 3 of 6
@@ -8,46 +8,73 @@
 
 ## Objective
 
-Build the two infrastructure clients that everything else depends on: the Canva MCP client (with transaction safety and Claude-powered element resolver) and the MinIO object storage client. These are pure library modules with no UI.
+Build the two infrastructure modules that everything else depends on: the HTML renderer + Claude design agent (which together power both generation paths) and the MinIO object storage client. These are pure library modules with no UI.
 
 ---
 
 ## Tasks
 
-### T09 — Canva MCP client with transaction guard + element resolver
+### T09 — HTML renderer + Claude design agent
 
-- **Files:** `src/lib/canva/client.ts`, `src/lib/canva/types.ts`, `src/lib/canva/elementResolver.ts`
+- **Files:** `src/lib/renderer/puppeteer.ts`, `src/lib/agent/designAgent.ts`, `src/lib/agent/tools.ts`, `src/lib/agent/types.ts`
 - **Estimate:** medium
-- **Depends:** T01
+- **Depends:** T01, T10
 - **Notes:** Two deliverables.
 
-  **1. `client.ts` — typed MCP wrapper**
+  **1. `puppeteer.ts` — headless Chromium renderer**
 
-  Wraps all Canva MCP tool calls behind a typed client. Exported methods:
+  Exports a single function:
   ```typescript
-  listBrandKits(): Promise<BrandKit[]>
-  createFromTemplate(templateId: string): Promise<{ designId: string }>
-  uploadAsset(url: string): Promise<{ assetId: string }>
-  getDesignContent(designId: string): Promise<ElementTree>
-  getAssets(brandKitId: string): Promise<Asset[]>
-  withEditingTransaction(designId: string, ops: EditingOperation[]): Promise<void>
-  exportDesign(designId: string): Promise<{ downloadUrl: string }>
-  searchBrandTemplates(brandKitId: string): Promise<CanvaTemplate[]>
+  renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer>
   ```
 
-  `withEditingTransaction` is the **only** way callers can open an editing session — raw `start-editing-transaction`, `commit-editing-transaction`, and `cancel-editing-transaction` are not exported. The method wraps in `try/finally`: always calls `cancel` if `commit` was never reached (NFR-11). This is enforced structurally, not by convention.
+  Implementation details:
+  - Uses `puppeteer-core` with a pinned Chromium version (locked in `package.json`)
+  - `deviceScaleFactor: 2` for retina-quality output (e.g. 1080×1080 logical → 2160×2160 physical pixels)
+  - `page.setContent(html, { waitUntil: 'networkidle0' })` — waits for all network activity to settle before screenshot so web fonts and remote images render correctly
+  - Viewport set to `{ width, height, deviceScaleFactor: 2 }`
+  - Returns PNG buffer; caller is responsible for uploading to MinIO
 
-  **2. `elementResolver.ts` — Claude-powered element targeting**
+  **2. `designAgent.ts` — Claude tool-use agent loop**
 
-  After `getDesignContent` returns the element tree, `resolveEditingOperations(elementTree, intent)` calls Claude (Anthropic SDK, `claude-sonnet-4-6`) with:
-  - The element tree as JSON
-  - The edit intent (text slots + image slots, each with a human-readable role: "headline", "background image", "person photo", etc.)
+  Exports:
+  ```typescript
+  runDesignAgent(options: DesignAgentOptions): Promise<DesignAgentResult>
+  ```
 
-  Claude reads the layer names and element types from the tree and returns matched element IDs for each role. The function assembles the final `replace_text` and `update_fill` operations ready to pass to `perform-editing-operations`.
+  Types in `types.ts`:
+  ```typescript
+  interface DesignAgentOptions {
+    systemPrompt: string        // caller sets mode: template-fill or freeform
+    userMessage: string         // instruction or initial design brief
+    briefId: string             // used by getBrandKitContext tool
+    tools: AgentTool[]          // subset of available tools for this mode
+    maxToolCalls?: number       // default 15 (EC-12)
+  }
 
-  Throws `ElementNotFoundError` if any requested slot cannot be confidently matched — surfaces the problem immediately rather than producing a silently broken design.
+  interface DesignAgentResult {
+    htmlContent: string         // final HTML produced by agent
+    exportUrl: string           // MinIO pre-signed URL from last renderHtml call
+    toolCallCount: number
+  }
+  ```
 
-  **No element IDs are hardcoded or pre-mapped per template.** Template designers just need to use descriptive layer names in Canva.
+  Loop logic (standard Anthropic SDK tool-use pattern):
+  1. Send messages to Claude (claude-sonnet-4-6) via Anthropic SDK
+  2. Inspect response — if no `tool_use` blocks, return final result
+  3. For each `tool_use` block: execute the matching tool function, collect result
+  4. Append `tool_result` blocks and loop
+  5. Hard limit: 15 total tool calls — if exceeded, halt and throw `AgentToolLimitError`
+
+  Tools implemented in `tools.ts`:
+
+  | Tool | Signature | Behaviour |
+  |---|---|---|
+  | `generateImage` | `(prompt: string, brandKitId: string) → { url: string }` | Calls active `ImageProvider` → uploads buffer to MinIO `generated-images` → returns pre-signed URL |
+  | `renderHtml` | `(html: string, width: number, height: number) → { url: string }` | Calls `renderHtmlToPng` → uploads PNG buffer to MinIO `exported-designs` → returns pre-signed URL |
+  | `getBrandKitContext` | `(briefId: string) → BrandKitContext` | Resolves brand kit via campaign → project → system default chain; returns `{ colors, fonts, logoUrl, voicePrompt, artifactUrls }` |
+
+  On any tool error: agent halted immediately, `DesignAgentResult` is not returned — caller receives the error with brief record preserved.
 
 ---
 
@@ -76,35 +103,25 @@ Build the two infrastructure clients that everything else depends on: the Canva 
 
 ## Parallelism within Wave 3
 
-T09 and T10 have no dependency on each other — they can run in parallel.
+T09 depends on T10 (the `renderHtml` and `generateImage` tools upload to MinIO). T10 has no dependency on T09 and can start immediately after T02.
 
 ```
-T01 ──┬── T09 (Canva MCP client)
-      └── T10 (MinIO client)  ← also needs T02
-T02 ───── T10
+T01 ──── T09 (HTML renderer + Claude agent)  ← also needs T10
+T02 ──── T10 (MinIO client)
+T10 ──── T09
 ```
-
----
-
-## Canva MCP tools used (reference)
-
-| Tool | Used by |
-|---|---|
-| `list-brand-kits` | settings UI (admin) |
-| `search-brand-templates` | settings UI — template picker (admin) |
-| `create-design-from-brand-template` | Path A assembly (T13) |
-| `upload-asset-from-url` | Path A + Path B assembly |
-| `get-design-content` | Path A (element resolver), Path B (orchestrator) |
-| `get-assets` | Path B orchestrator |
-| `start/perform/commit/cancel-editing-transaction` | wrapped by `withEditingTransaction` |
-| `export-design` | export route (T15) |
 
 ---
 
 ## Wave 3 Complete When
 
-- [ ] `withEditingTransaction` correctly calls `cancel` when an operation throws mid-transaction
-- [ ] `resolveEditingOperations` returns correct element IDs for a test design with known layer names
-- [ ] `ElementNotFoundError` is thrown when a slot has no matching element
+- [ ] `renderHtmlToPng` returns a valid PNG buffer for a simple HTML fixture at 1080×1080 logical (2160×2160 physical)
+- [ ] PNG dimensions and `deviceScaleFactor` verified with an image inspection assertion
+- [ ] `runDesignAgent` in template-fill mode returns `htmlContent` and `exportUrl` for a test brief with a fixture template
+- [ ] `runDesignAgent` in freeform mode returns `htmlContent` and `exportUrl` for a test brief with no template
+- [ ] Agent halts and throws `AgentToolLimitError` when 15-tool-call limit is reached
+- [ ] `getBrandKitContext` resolves correctly through campaign → project → system default chain
+- [ ] `renderHtml` tool uploads PNG to MinIO and returns a valid pre-signed URL
+- [ ] `generateImage` tool uploads generated image to MinIO and returns a valid pre-signed URL
 - [ ] `uploadObject` successfully uploads a buffer to MinIO and returns a valid pre-signed URL
 - [ ] MinIO buckets are auto-created on cold start

@@ -28,12 +28,12 @@ Define the stable AI provider interfaces and wire up the initial OpenAI implemen
   generateCopy(brief: Brief): Promise<string>
 
   // ImageProvider
-  generateImage(brief: Brief, imagePrompt?: string): Promise<{ url: string }>
-  // imagePrompt: if provided (from BrandKitTemplate.imagePrompt), used verbatim
-  // instead of deriving a prompt from brief topic + description
+  generateImage(brief: Brief, prompt?: string): Promise<{ url: string }>
+  // prompt: determined at runtime by the Claude agent (derived from the brief)
+  // not a mandatory pre-step — called on-demand by the agent only when raster imagery is needed
 
   // DesignOrchestrator
-  orchestrate(brief: Brief, brandKitId: string): Promise<{ canvaDesignId: string }>
+  orchestrate(brief: Brief, brandKitId: string): Promise<{ exportUrl: string, htmlContent: string }>
   ```
 
   The `DesignOrchestrator` is not user-selectable — it is env-configured only. Copy and image providers are user-selectable at brief time.
@@ -54,7 +54,7 @@ Define the stable AI provider interfaces and wire up the initial OpenAI implemen
 - **Files:** `src/providers/implementations/image/openai.ts`
 - **Estimate:** small
 - **Depends:** T05
-- **Notes:** Implements `ImageProvider`. Calls `gpt-image-2` via OpenAI Images API. Accepts optional `imagePrompt` parameter — if provided, uses it verbatim; otherwise derives prompt from `brief.topic + brief.description`. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`.
+- **Notes:** Implements `ImageProvider`. Calls `gpt-image-2` via OpenAI Images API. Accepts optional `prompt` parameter — if provided (passed by the agent at runtime), uses it; otherwise derives from `brief.topic + brief.description`. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`. This provider is called on-demand when the Claude design agent invokes the `generateImage` tool — not as a mandatory pipeline pre-step.
 
 ---
 
@@ -98,6 +98,6 @@ T06 and T07 run in parallel once T05 is done.
 
 - [ ] All three interfaces are defined and exported
 - [ ] `generateCopy` returns a non-empty string for a test brief
-- [ ] `generateImage` returns a valid URL for a test brief (with and without `imagePrompt`)
+- [ ] `generateImage` returns a valid URL for a test brief
 - [ ] Registry resolves the correct provider for COPY and IMAGE slots
 - [ ] `ModerationError` is thrown for a flagged image prompt

@@ -19,7 +19,7 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
 - **Files:** `package.json`, `tsconfig.json`, `next.config.ts`, `.env.example`, `Dockerfile`
 - **Estimate:** small
 - **Depends:** —
-- **Notes:** App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (OpenAI key, Canva MCP creds, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
+- **Notes:** App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
 
 ---
 
@@ -49,13 +49,13 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
   - `Campaign` — name, brandKitId (FK → BrandKit, override), defaultTone, isDeleted, deletedAt
   - `ProjectCampaign` — M2M join
   - `CampaignDraft` — M2M join (shared asset linking)
-  - `Brief` — topic, description, goal, tone, channels[], designMode, campaignId (nullable), copyProviderKey, imageProviderKey, additionalImageUrl (Path A), referenceImageUrls[] (Path B)
-  - `Draft` — copyText, imageUrl, canvaDesignId, templateId, exportUrl, status
+  - `Brief` — topic, description, goal, tone, channels[], designMode, campaignId (nullable), copyProviderKey, imageProviderKey? (optional — overrides system default if Claude calls generateImage), additionalImageUrl (Path A), referenceImageUrls[] (Path B)
+  - `Draft` — copyText, imageUrl? (null if Claude used CSS/SVG; set if agent called generateImage), htmlContent, pendingConflict, templateId, exportUrl, status
   - `Post` — channel, status, scheduledAt, publishedAt, platformId, errorReason
-  - `BrandKit` — name, source (CANVA | BACKEND | HYBRID), canvaBrandKitId, artifactFolder, isDefault, isDeleted
+  - `BrandKit` — name, colors, fonts, logoUrl, isDefault, isDeleted
   - `BrandKitPrompt` — brandKitId, content, version, isActive
   - `BrandKitArtifact` — brandKitId, type, name, url, feedToAI
-  - `BrandKitTemplate` — brandKitId, canvaTemplateId (BTM*), name, imagePrompt?
+  - `BrandKitTemplate` — brandKitId, htmlTemplate, name
   - `AvailableProvider` — slot (COPY | IMAGE), providerKey, label, isEnabled, isDefault
 
   `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.

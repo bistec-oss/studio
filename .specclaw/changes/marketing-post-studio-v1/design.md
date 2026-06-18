@@ -1,4 +1,4 @@
-﻿# Design: Marketing Post Studio (v1)
+# Design: Marketing Post Studio (v1)
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
@@ -6,14 +6,21 @@
 ## Technical Approach
 
 A Next.js 14 (App Router) + TypeScript monolith deployed to a VPS via Docker Compose.
-Server-side logic runs in Next.js API routes (Route Handlers). The Canva MCP server
-is consumed via a server-side MCP client. All AI provider calls are server-side only.
+Server-side logic runs in Next.js API routes (Route Handlers). All AI provider calls
+are server-side only. The browser never calls an AI API directly.
 
 The central architectural principle is the **AI Provider Abstraction Layer**: the
 frontend calls stable internal API routes and never references any specific AI model
 or third-party service. Adding or swapping an AI model over time = adding a new
 provider implementation in `src/providers/` and updating an environment variable or
 admin config. No frontend changes, no API contract changes.
+
+Design generation is handled by a **Claude design agent harness**: a standard
+Anthropic SDK tool-use loop running server-side in `src/lib/agent/designAgent.ts`.
+Claude generates HTML/CSS for social media posts and calls tools (`generateImage`,
+`renderHtml`, `getBrandKitContext`) as part of the loop. **Puppeteer** (headless
+Chromium, `puppeteer-core` + `chromium-min`) renders the final HTML to a PNG server-side.
+No external design services are required at runtime.
 
 ## Architecture
 
@@ -26,9 +33,9 @@ admin config. No frontend changes, no API contract changes.
                         │  stable internal API routes
 ┌───────────────────────▼─────────────────────────────────────┐
 │  Next.js API Route Handlers  (src/app/api/**)               │
-│  - /api/generate/copy         - /api/design/export          │
+│  - /api/generate/copy         - /api/design/assemble        │
 │  - /api/generate/image        - /api/publish                │
-│  - /api/design/assemble       - /api/schedule               │
+│  - /api/drafts/[id]/refine    - /api/schedule               │
 └───────────────────────┬─────────────────────────────────────┘
                         │  resolved by provider registry
 ┌───────────────────────▼─────────────────────────────────────┐
@@ -37,32 +44,34 @@ admin config. No frontend changes, no API contract changes.
 │  interfaces/                                                 │
 │    CopyProvider     { generateCopy(brief): Copy }           │
 │    ImageProvider    { generateImage(brief): ImageResult }   │
-│    DesignOrchestrator { orchestrate(brief, kit): DesignId } │
+│    DesignOrchestrator { orchestrate(brief, kit): Result }   │
 │                                                              │
 │  implementations/                                            │
-│    copy/openai.ts          ← GPT-4o mini (Path A default)   │
-│    image/openai.ts         ← gpt-image-2                    │
-│    orchestrator/openai-canva.ts  ← GPT-4o + Canva MCP       │
+│    copy/openai.ts            ← GPT-4o mini (Path A default) │
+│    image/openai.ts           ← gpt-image-2                  │
+│    orchestrator/claude-html.ts ← Claude agent + Puppeteer   │
 │    [future: copy/anthropic.ts, image/stability.ts, ...]     │
 │                                                              │
 │  registry.ts   ← resolves active provider from config       │
 └──────────┬────────────────┬────────────────────────────────┘
            │                │
 ┌──────────▼──────┐  ┌──────▼──────────────────────────────┐
-│  OpenAI API     │  │  Canva MCP Client (src/lib/canva/)  │
-│  (copy, image,  │  │  Wraps MCP tool calls:              │
-│   orchestrator) │  │  list-brand-kits                    │
-└─────────────────┘  │  create-design-from-brand-template  │
-                     │  upload-asset-from-url              │
-                     │  start/perform/commit-editing-tx    │
-                     │  get-design-content                 │
-                     │  get-assets                         │
-                     │  export-design                      │
-                     └──────────────────┬──────────────────┘
-                                        │
-                              ┌─────────▼────────┐
-                              │  Canva MCP Server │
-                              └──────────────────┘
+│  OpenAI API     │  │  Claude Design Agent Harness         │
+│  (copy, image)  │  │  src/lib/agent/designAgent.ts        │
+└─────────────────┘  │                                      │
+                     │  Tools:                              │
+                     │    generateImage(prompt, brandKitId) │
+                     │    renderHtml(html, w, h)            │
+                     │    getBrandKitContext(briefId)        │
+                     └──────────────┬──────────────────────┘
+                                    │
+                          ┌─────────▼──────────────┐
+                          │  Puppeteer Renderer     │
+                          │  src/lib/renderer/      │
+                          │  puppeteer.ts           │
+                          │  headless Chromium      │
+                          │  HTML → PNG buffer      │
+                          └─────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │  Publishing Layer  (src/lib/social/)                        │
@@ -86,7 +95,7 @@ admin config. No frontend changes, no API contract changes.
 ### AI Provider Abstraction — extensibility detail
 
 **Copy and image providers are user-selectable at brief time** from an
-admin-curated list. The Path B orchestrator remains env-configured (infrastructure
+admin-curated list. The design orchestrator remains env-configured (infrastructure
 choice, not user-facing).
 
 Provider resolution order for copy + image slots:
@@ -107,40 +116,90 @@ Only `AvailableProvider` rows change when models are added/removed.
 **Path A — Preset template:**
 ```
 POST /api/generate/copy   → CopyProvider.generateCopy(brief)
-POST /api/generate/image  → ImageProvider.generateImage(brief, imagePrompt?)
-  // imagePrompt resolution: BrandKitTemplate.imagePrompt ?? derive from brief topic + description
 POST /api/design/assemble?mode=template
-  → CanvaMcpClient.uploadAsset(bgImageUrl)          // AI-generated background
-  → CanvaMcpClient.uploadAsset(additionalImageUrl)  // user-uploaded photo (optional)
-  → CanvaMcpClient.createFromTemplate(templateId)
-  → CanvaMcpClient.getDesignContent(designId)       // fetch element tree
-  → ElementResolver.resolve(elementTree, intent)    // Claude identifies element IDs
-      // intent: { topic, copyText, bgAssetId, personAssetId? }
-      // returns: [{ type: replace_text, elementId, value }, { type: update_fill, elementId, assetId }, ...]
-  → CanvaMcpClient.withEditingTransaction([...resolvedOps]) → commit()
-POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → MinIO
+  → resolve BrandKit (campaign → project → system default)
+  → load BrandKitTemplate.htmlTemplate
+  → launch Claude design agent (designAgent.ts):
+      system prompt: "fill this HTML template with the provided content"
+      tools: generateImage, renderHtml, getBrandKitContext
+      context: htmlTemplate + brief + copyText + brand kit (colors, fonts, logoUrl)
+      Claude fills/adapts the template; calls generateImage tool if raster imagery is needed
+        → calls renderHtml → Puppeteer → PNG → MinIO
+  → returns { draftId, exportUrl, htmlContent }
 ```
 
-**Path B — AI-generated new design:**
+**Path B — Freeform AI-generated design:**
 ```
 POST /api/design/assemble?mode=generate
   → resolve BrandKit (campaign → project → system default)
-  → DesignOrchestrator.orchestrate(brief, brandKit)
-    // orchestrator receives:
-    //   - brief (topic, description, goal, tone, channels)
-    //   - brandKit.activePrompt (brand voice system prompt)
-    //   - brandKit.feedToAI artifacts (logos, reference images, etc.)
-    //   - brandKit.canvaBrandKitId
-    //   - brief.referenceImageUrls[] (user-uploaded images from MinIO — optional)
-    //     → orchestrator decides: place directly, use as gpt-image-2 context, or ignore
-    OpenAI Chat Completions (function calling, Canva MCP tools as functions)
-    orchestrator loop (max 20 tool calls — EC-12 hard limit):
-      may call: upload-asset-from-url, get-assets,
-                get-design-content (element tree → orchestrator resolves IDs itself),
-                start-editing-transaction, perform-editing-operations,
-                commit-editing-transaction (or cancel on error)
-POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → MinIO
+  → launch Claude design agent (designAgent.ts):
+      system prompt: "design a complete HTML/CSS social media post from scratch"
+      tools: generateImage, renderHtml, getBrandKitContext
+      context: brief (topic, description, goal, tone, channels, referenceImageUrls)
+               + brand kit (colors, fonts, logoUrl, voicePrompt)
+      Claude generates HTML/CSS → calls generateImage if imagery needed
+        → calls renderHtml → Puppeteer → PNG → MinIO
+  → returns { draftId, exportUrl, htmlContent }
 ```
+
+### Claude Design Agent Harness
+
+`src/lib/agent/designAgent.ts` — standard Anthropic SDK tool-use loop:
+
+```typescript
+async function runDesignAgent(options: DesignAgentOptions): Promise<DesignAgentResult>
+```
+
+Tools available to the agent:
+
+```typescript
+generateImage(prompt: string, brandKitId: string): Promise<{ imageUrl: string }>
+// calls resolved ImageProvider, uploads result to MinIO generated-images bucket
+
+renderHtml(html: string, width: number, height: number): Promise<{ exportUrl: string }>
+// calls Puppeteer renderer, uploads PNG to MinIO exported-designs bucket
+// returns pre-signed URL for preview
+
+getBrandKitContext(briefId: string): Promise<BrandKitContext>
+// resolves campaign → project → default brand kit
+// returns { colors, fonts, logoUrl, voicePrompt, feedToAIArtifactUrls }
+```
+
+Agent loop (standard Anthropic SDK tool-use pattern):
+1. Build messages: system prompt + user message (brief + template/mode context)
+2. POST to Anthropic API with tools array + max_tokens
+3. If response contains `tool_use` blocks: execute each tool, append `tool_result`
+4. Repeat until response contains no `tool_use` blocks
+5. Extract final HTML from last text response
+6. Hard limit: 15 tool calls per run (EC-12 equivalent)
+
+`src/lib/agent/tools.ts` — tool implementations for the agent loop.
+
+`src/lib/renderer/puppeteer.ts`:
+
+```typescript
+async function renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer>
+// Uses puppeteer-core + chromium-min
+// deviceScaleFactor: 2 → 2160×2160 → downsampled to 1080×1080 for Instagram
+// page.setContent(html, { waitUntil: 'networkidle0' })
+// Returns PNG buffer — caller uploads to MinIO
+```
+
+`src/providers/implementations/orchestrator/claude-html.ts` — `DesignOrchestrator`
+implementation that wraps `runDesignAgent`. Called by `POST /api/design/assemble`.
+
+### AGUI refinement
+
+`POST /api/drafts/[id]/refine` — Claude agent receives `draft.htmlContent` + the
+user's natural language instruction, updates the HTML, calls `renderHtml` to produce
+a new PNG, and creates a `DraftRevision` row with `htmlSnapshot` and `exportUrl` for
+the undo panel. The route checks brand kit compliance before applying edits; if the
+instruction conflicts, it returns a reply explaining the conflict without modifying
+the draft.
+
+`POST /api/drafts/[id]/revisions/[rev]/restore` — re-renders the stored `htmlSnapshot`
+via Puppeteer, stores the result as a new `exportUrl` on the draft, and creates a new
+`DraftRevision` row so the undo chain remains linear.
 
 ### Frontend design system
 
@@ -256,9 +315,9 @@ model Brief {
   channels         String[]   // ["instagram", "linkedin"]
   designMode            DesignMode
   copyProviderKey       String     // e.g. "openai" — user's choice at brief time
-  imageProviderKey      String     // e.g. "gemini" — user's choice at brief time
-  additionalImageUrl    String?    // Path A only — MinIO URL of user-uploaded image placed into a specific template slot
-  referenceImageUrls    String[]   // Path B only — MinIO URLs of user-supplied images passed to the GPT orchestrator
+  imageProviderKey      String?    // preferred image provider if Claude calls generateImage; null = system default
+  additionalImageUrl    String?    // Path A only — MinIO URL of user-uploaded image for a specific template slot
+  referenceImageUrls    String[]   // Path B only — MinIO URLs of user-supplied images passed to the Claude design agent
   createdAt             DateTime   @default(now())
   drafts                Draft[]
 }
@@ -266,18 +325,20 @@ model Brief {
 enum DesignMode { TEMPLATE GENERATE }
 
 model Draft {
-  id            String          @id @default(cuid())
-  briefId       String
-  brief         Brief           @relation(fields: [briefId], references: [id])
-  copyText      String
-  imageUrl      String          // MinIO URL
-  canvaDesignId String?
-  templateId    String?
-  exportUrl     String?         // MinIO URL of exported PNG/JPG
-  status        DraftStatus     @default(IN_PROGRESS)
-  createdAt     DateTime        @default(now())
-  posts         Post[]
-  campaigns     CampaignDraft[] // shared asset links
+  id          String          @id @default(cuid())
+  briefId     String
+  brief       Brief           @relation(fields: [briefId], references: [id])
+  copyText    String
+  imageUrl    String?         // MinIO URL from last generateImage tool call (null if Claude used CSS/SVG instead)
+  htmlContent      String?         @db.Text  // current HTML/CSS design state (updated on each refinement)
+  templateId       String?
+  exportUrl        String?         // MinIO URL of rendered PNG
+  pendingConflict  Json?           // { conflictId, instruction, explanation } — set when last refine returned a brand kit conflict; cleared on next instruction or cancel
+  status           DraftStatus     @default(IN_PROGRESS)
+  createdAt   DateTime        @default(now())
+  posts       Post[]
+  revisions   DraftRevision[]
+  campaigns   CampaignDraft[] // shared asset links
 }
 
 enum DraftStatus { IN_PROGRESS EXPORTED PUBLISHED FAILED }
@@ -301,44 +362,38 @@ enum Channel { INSTAGRAM LINKEDIN }
 enum PostStatus { PENDING SCHEDULED PUBLISHED FAILED CANCELLED }
 
 // A BrandKit is a first-class entity (admin-managed). It owns the brand voice
-// (versioned system prompt), brand assets (artifact folder in MinIO), an optional
-// link to a Canva brand kit, and a list of linked Canva brand templates (BTM* IDs).
-// Projects and Campaigns reference a BrandKit.
+// (versioned system prompt), structured brand data (colors, fonts, logo), and
+// a list of HTML/CSS templates. Projects and Campaigns reference a BrandKit.
 model BrandKit {
-  id              String                @id @default(cuid())
-  name            String
-  source          BrandKitSource        @default(HYBRID) // CANVA | BACKEND | HYBRID
-  canvaBrandKitId String?               // link to a Canva brand kit (Path A templates, Path B kit)
-  artifactFolder  String?               // MinIO prefix holding this kit's artifacts
-  isDefault       Boolean               @default(false)  // system global default (one per system)
-  isDeleted       Boolean               @default(false)
-  deletedAt       DateTime?
-  createdAt       DateTime              @default(now())
-  prompts         BrandKitPrompt[]
-  artifacts       BrandKitArtifact[]
-  templates       BrandKitTemplate[]    // linked Canva brand templates (BTM* IDs)
-  projects        Project[]             @relation("ProjectBrandKit")
-  campaigns       Campaign[]            @relation("CampaignBrandKit")
+  id        String              @id @default(cuid())
+  name      String
+  colors    Json?               // string[] — hex palette e.g. ["#0A1628","#1E3A5F","#00D4FF"]
+  fonts     Json?               // {name: string, url: string}[] — MinIO font URLs
+  logoUrl   String?             // MinIO URL of primary brand logo
+  isDefault Boolean             @default(false)  // system global default (one per system)
+  isDeleted Boolean             @default(false)
+  deletedAt DateTime?
+  createdAt DateTime            @default(now())
+  prompts   BrandKitPrompt[]
+  artifacts BrandKitArtifact[]
+  templates BrandKitTemplate[]
+  projects  Project[]           @relation("ProjectBrandKit")
+  campaigns Campaign[]          @relation("CampaignBrandKit")
 }
 
-// Canva brand template registered against a BrandKit by an admin.
-// Discovered via search-brand-templates (filtered by canvaBrandKitId) — no manual entry.
+// HTML/CSS brand template registered against a BrandKit by an admin.
+// Admins upload or paste a template string in the settings UI.
 // Users pick from these in the brief wizard (Path A only).
 model BrandKitTemplate {
-  id              String   @id @default(cuid())
-  brandKitId      String
-  brandKit        BrandKit @relation(fields: [brandKitId], references: [id])
-  canvaTemplateId String   // BTM* ID from Canva
-  name            String   // display name shown in brief picker
-  imagePrompt     String?  // optional fixed prompt for gpt-image-2 background generation
-                           // if set: used verbatim, overrides brief-derived prompt
-                           // if null: system derives prompt from brief topic + description
-  createdAt       DateTime @default(now())
+  id           String   @id @default(cuid())
+  brandKitId   String
+  brandKit     BrandKit @relation(fields: [brandKitId], references: [id])
+  name         String   // display name shown in brief picker
+  htmlTemplate String   @db.Text  // base HTML/CSS template with content slots
+  createdAt    DateTime @default(now())
 }
 
-enum BrandKitSource { CANVA BACKEND HYBRID }
-
-// Versioned brand voice / system prompt — prepended to Path B orchestration.
+// Versioned brand voice / system prompt — prepended to Path B design agent system prompt.
 // History retained so an admin can roll back to a prior version (EC-13).
 model BrandKitPrompt {
   id         String   @id @default(cuid())
@@ -354,7 +409,7 @@ model BrandKitPrompt {
 }
 
 // Brand assets stored in MinIO. Artifacts with feedToAI=true are passed to the
-// AI (Path B orchestration / image generation) as brand context.
+// Claude design agent (Path B) and image generation as brand context.
 model BrandKitArtifact {
   id         String       @id @default(cuid())
   brandKitId String
@@ -388,15 +443,16 @@ model AvailableProvider {
 
 enum ProviderSlot { COPY IMAGE }
 
-// Records each committed AGUI refinement instruction for undo support.
+// Records each committed AGUI refinement for undo support.
 model DraftRevision {
-  id                    String   @id @default(cuid())
-  draftId               String
-  draft                 Draft    @relation(fields: [draftId], references: [id])
-  revisionNumber        Int      // monotonically increasing per draft
-  instruction           String   // the user's natural language instruction that produced this revision
-  elementTreeSnapshot   String   // JSON snapshot of the element tree after this edit (for undo re-apply)
-  createdAt             DateTime @default(now())
+  id             String   @id @default(cuid())
+  draftId        String
+  draft          Draft    @relation(fields: [draftId], references: [id])
+  revisionNumber Int      // monotonically increasing per draft
+  instruction    String   // the user's natural language instruction that produced this revision
+  htmlSnapshot   String   @db.Text  // HTML/CSS snapshot after this edit (for undo re-render)
+  exportUrl      String?  // MinIO URL of PNG at this revision (for preview in undo panel)
+  createdAt      DateTime @default(now())
 
   @@unique([draftId, revisionNumber])
 }
@@ -405,8 +461,8 @@ model DraftRevision {
 ### Asset storage
 
 **MinIO** (S3-compatible object storage, Docker container on VPS) — two buckets:
-- `generated-images` — raw gpt-image-2 output (temp, 7-day lifecycle rule)
-- `exported-designs` — final exported PNG/JPG assets (permanent, linked in Draft.exportUrl)
+- `generated-images` — raster images from on-demand `generateImage` tool calls (temp, 7-day lifecycle rule)
+- `exported-designs` — Puppeteer-rendered PNG assets (permanent, linked in Draft.exportUrl)
 
 Images are uploaded server-side via the AWS S3 SDK (MinIO is S3-compatible); only
 object URLs are stored in the DB. No binary blobs in the database.
@@ -431,53 +487,6 @@ Node.js script that:
 
 Scheduling window: ±2 minutes of target time (job runs every minute, max one missed
 cycle before catch-up).
-
-### Canva MCP Client
-
-`src/lib/canva/client.ts` — a typed wrapper around the MCP tool calls. Enforces
-the NFR-11 transaction integrity rule: every `startEditingTransaction()` call is
-wrapped in a `try/finally` that calls `cancelTransaction()` if `commitTransaction()`
-was never reached. Callers cannot leave orphaned transactions.
-
-```typescript
-// Enforced pattern — callers use this, never raw MCP calls
-async withEditingTransaction<T>(
-  designId: string,
-  fn: (tx: EditingTransaction) => Promise<T>
-): Promise<T>
-```
-
-`src/lib/canva/elementResolver.ts` — Claude-powered element targeting. Called
-after `getDesignContent` returns the element tree; uses the Anthropic SDK to ask
-Claude which elements match each role in the edit intent (topic text box, background
-image slot, person photo slot, etc.). Returns fully-formed `perform-editing-operations`
-payloads. No element IDs are hardcoded or pre-mapped per template — Claude reads
-layer names, types, and structure to identify targets at runtime.
-
-```typescript
-interface EditIntent {
-  textSlots:  { role: string; value: string }[]   // e.g. { role: 'headline', value: 'New Topic' }
-  imageSlots: { role: string; assetId: string }[] // e.g. { role: 'background', assetId: '...' }
-}
-
-interface EditingOperation {
-  type: 'replace_text' | 'update_fill'
-  elementId: string
-  value?: string    // replace_text
-  assetId?: string  // update_fill
-}
-
-async function resolveEditingOperations(
-  elementTree: CanvaElement[],
-  intent: EditIntent
-): Promise<EditingOperation[]>
-```
-
-Claude receives the element tree as JSON and the intent as a structured prompt.
-It responds with the matching `elementId` per slot. The resolver validates that
-every requested slot was matched before returning — if Claude cannot confidently
-identify a slot, it throws a typed `ElementNotFoundError` rather than silently
-skipping the operation.
 
 ### Secrets management
 
@@ -505,8 +514,8 @@ on the VPS. Security protocols:
 | `src/app/` | create | Next.js App Router pages |
 | `src/app/api/generate/copy/route.ts` | create | Copy generation endpoint |
 | `src/app/api/generate/image/route.ts` | create | Image generation endpoint |
-| `src/app/api/design/assemble/route.ts` | create | Design assembly (Path A + B) |
-| `src/app/api/design/export/route.ts` | create | Export design to blob |
+| `src/app/api/design/assemble/route.ts` | create | Design assembly (Path A + B) — launches Claude design agent |
+| `src/app/api/design/export/route.ts` | create | Re-render export (thin wrapper; Puppeteer runs at assembly time) |
 | `src/app/api/publish/route.ts` | create | Immediate publish |
 | `src/app/api/schedule/route.ts` | create | Schedule a post |
 | `src/app/api/posts/route.ts` | create | List/cancel scheduled posts |
@@ -522,6 +531,7 @@ on the VPS. Security protocols:
 | `src/app/api/admin/brandkits/[id]/route.ts` | create | BrandKit update / soft-delete / set default (admin) |
 | `src/app/api/admin/brandkits/[id]/prompt/route.ts` | create | BrandKit prompt versions: list, add, activate (rollback) (admin) |
 | `src/app/api/admin/brandkits/[id]/artifacts/route.ts` | create | BrandKit artifact upload to MinIO / list / delete (admin) |
+| `src/app/api/admin/brandkits/[id]/templates/route.ts` | create | HTML template CRUD per brand kit (admin) |
 | `src/app/(app)/projects/page.tsx` | create | Projects list UI |
 | `src/app/(app)/projects/[id]/page.tsx` | create | Project detail — campaigns + posts |
 | `src/app/(app)/campaigns/page.tsx` | create | Campaigns list UI (standalone + project-assigned) |
@@ -529,10 +539,11 @@ on the VPS. Security protocols:
 | `src/providers/interfaces/` | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces |
 | `src/providers/implementations/copy/openai.ts` | create | GPT copy provider |
 | `src/providers/implementations/image/openai.ts` | create | gpt-image-2 provider |
-| `src/providers/implementations/orchestrator/openai-canva.ts` | create | Path B orchestrator |
+| `src/providers/implementations/orchestrator/claude-html.ts` | create | DesignOrchestrator impl wrapping designAgent |
 | `src/providers/registry.ts` | create | Provider resolution from env config |
-| `src/lib/canva/client.ts` | create | Typed Canva MCP client with tx guard |
-| `src/lib/canva/elementResolver.ts` | create | Claude-powered element targeting — resolves element IDs from the design's element tree at runtime; no hardcoded ID mappings |
+| `src/lib/agent/designAgent.ts` | create | Claude tool-use agent loop (Anthropic SDK) |
+| `src/lib/agent/tools.ts` | create | Tool implementations: generateImage, renderHtml, getBrandKitContext |
+| `src/lib/renderer/puppeteer.ts` | create | HTML → PNG renderer (puppeteer-core + chromium-min) |
 | `src/lib/social/instagram.ts` | create | Instagram Graph API publisher |
 | `src/lib/social/linkedin.ts` | create | LinkedIn API publisher |
 | `src/lib/storage/minio.ts` | create | MinIO (S3-compatible) upload / pre-signed URL |
@@ -550,14 +561,13 @@ on the VPS. Security protocols:
 | `src/app/(app)/draft/[id]/` | create | Draft refinement UI |
 | `src/app/(app)/library/` | create | Asset library + history |
 | `src/app/(app)/admin/settings/` | create | Admin: provider management (with API key registration + auto-detect) + brand kit manager |
-| `src/app/api/drafts/[id]/refine/route.ts` | create | AGUI refinement endpoint — interprets instruction, applies Canva MCP edits, brand kit compliance check |
+| `src/app/api/drafts/[id]/refine/route.ts` | create | AGUI refinement endpoint — Claude agent updates HTML, re-renders, checks brand kit compliance |
 | `src/app/api/drafts/[id]/revisions/route.ts` | create | List revisions for undo panel |
-| `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts` | create | Restore a prior revision via fresh editing transaction |
+| `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts` | create | Re-render stored htmlSnapshot via Puppeteer |
 | `src/components/draft/RefinementPanel.tsx` | create | AGUI chat panel — instruction input, AI reply stream, undo history list |
 | `.env.example` | create | Required env vars documented |
-| `Dockerfile` | create | Container image (shared by app + scheduler services) |
+| `Dockerfile` | create | Container image (includes chromium-min layer; shared by app + scheduler services) |
 | `docker-compose.yml` | create | Orchestrates app, scheduler, postgres, minio containers |
-| `.env.example` | create | All required env vars documented with placeholder values |
 | `.gitignore` | modify | Ensure `.env*` (except `.env.example`) is ignored |
 
 ## Data Model Changes
@@ -573,33 +583,33 @@ not in middleware, so they fail-closed if misconfigured.
 Internal API contract summary:
 
 ```
-POST /api/generate/copy         body: { briefId }      → { copy: string }
-POST /api/generate/image        body: { briefId }       → { imageUrl: string }
-POST /api/design/assemble       body: { draftId, mode, templateId? } → { canvaDesignId }
-POST /api/design/export         body: { draftId }       → { exportUrl: string }
-POST /api/publish               body: { draftId, channels } → { posts: Post[] }
+POST /api/generate/copy         body: { briefId }                   → { copy: string }
+POST /api/generate/image        body: { briefId, prompt? }          → { imageUrl: string }
+  // not a pipeline step — called internally by the generateImage agent tool
+POST /api/design/assemble       body: { draftId, mode, templateId? } → { draftId, exportUrl, htmlContent }
+POST /api/design/export         body: { draftId }                   → { exportUrl: string }
+  // re-renders draft.htmlContent via Puppeteer if exportUrl is absent or stale
+POST /api/publish               body: { draftId, channels }         → { posts: Post[] }
 POST /api/schedule              body: { draftId, channels, scheduledAt } → { posts: Post[] }
-DELETE /api/posts/[id]          (cancel scheduled)      → 204
+DELETE /api/posts/[id]          (cancel scheduled)                  → 204
 GET  /api/library               → { drafts[], posts[] }
+
 // Brand kits (admin only)
-GET    /api/admin/brandkits                       (admin) → { brandKits: BrandKit[] }  // excludes soft-deleted
-POST   /api/admin/brandkits                       (admin) body: { name, source, canvaBrandKitId?, templateIds?: string[] } → { brandKit }
-PATCH  /api/admin/brandkits/[id]                  (admin) body: { name?, source?, canvaBrandKitId?, isDefault?, templateIds?: string[] } → { brandKit }
-  // Edit is always available — admins can update name, source, Canva kit link, and linked templates at any time
-GET    /api/admin/brandkits/[id]/templates        (admin) → { templates: BrandKitTemplate[] }
-POST   /api/admin/brandkits/[id]/templates        (admin) body: { canvaTemplateId, name, imagePrompt? } → { template }
-PATCH  /api/admin/brandkits/[id]/templates/[tid]  (admin) body: { imagePrompt? } → { template }  // update prompt only
-DELETE /api/admin/brandkits/[id]/templates/[tid]  (admin) → 204
-GET    /api/canva/brand-templates?kitId=bk_xxx    (admin) → { templates } // proxies search-brand-templates MCP, returns list for picker UI
-  // UI renders results as a checkbox list — admin ticks templates to link; each selected template
-  // expands to reveal an optional imagePrompt textarea. Used in both Add and Edit brand kit modals.
-DELETE /api/admin/brandkits/[id]                  (admin) (soft-delete) → 204
-GET    /api/admin/brandkits/[id]/prompt           (admin) → { active, versions: BrandKitPrompt[] }
-POST   /api/admin/brandkits/[id]/prompt           (admin) body: { content } → { prompt }   // new version, becomes active
-POST   /api/admin/brandkits/[id]/prompt/[v]/activate (admin) → 204   // rollback (EC-13)
-GET    /api/admin/brandkits/[id]/artifacts        (admin) → { artifacts: BrandKitArtifact[] }
-POST   /api/admin/brandkits/[id]/artifacts        (admin) body: { type, name, file, feedToAI } → { artifact }  // uploads to MinIO
-DELETE /api/admin/brandkits/[id]/artifacts/[aid]  (admin) → 204
+GET    /api/admin/brandkits                             (admin) → { brandKits: BrandKit[] }  // excludes soft-deleted
+POST   /api/admin/brandkits                             (admin) body: { name, colors?, fonts?, logoUrl? } → { brandKit }
+PATCH  /api/admin/brandkits/[id]                        (admin) body: { name?, colors?, fonts?, logoUrl?, isDefault? } → { brandKit }
+DELETE /api/admin/brandkits/[id]                        (admin) (soft-delete) → 204
+GET    /api/admin/brandkits/[id]/templates              (admin) → { templates: BrandKitTemplate[] }
+POST   /api/admin/brandkits/[id]/templates              (admin) body: { name, htmlTemplate } → { template }
+PATCH  /api/admin/brandkits/[id]/templates/[tid]        (admin) body: { name?, htmlTemplate? } → { template }
+DELETE /api/admin/brandkits/[id]/templates/[tid]        (admin) → 204
+GET    /api/admin/brandkits/[id]/prompt                 (admin) → { active, versions: BrandKitPrompt[] }
+POST   /api/admin/brandkits/[id]/prompt                 (admin) body: { content } → { prompt }   // new version, becomes active
+POST   /api/admin/brandkits/[id]/prompt/[v]/activate    (admin) → 204   // rollback (EC-13)
+GET    /api/admin/brandkits/[id]/artifacts              (admin) → { artifacts: BrandKitArtifact[] }
+POST   /api/admin/brandkits/[id]/artifacts              (admin) body: { type, name, file, feedToAI } → { artifact }  // uploads to MinIO
+DELETE /api/admin/brandkits/[id]/artifacts/[aid]        (admin) → 204
+
 GET  /api/admin/providers                 (admin) → { providers: AvailableProvider[] }
 POST /api/admin/providers                 (admin) body: { slot, apiKey, providerName?, label } → { provider }
   // apiKey is inspected server-side for known prefixes; providerName/label auto-populated where detected.
@@ -612,13 +622,14 @@ GET  /api/providers/available             (authed) → { copy: Provider[], image
 
 // AGUI refinement
 POST /api/drafts/[id]/refine              (authed) body: { instruction: string } → { reply: string, revisionId?: string }
-  // AI interprets the instruction, checks brand kit compliance, returns a reply.
-  // If instruction is safe: applies Canva MCP edits, commits, creates DraftRevision row, returns revisionId.
-  // If instruction conflicts with brand kit: returns reply explaining conflict, no edit applied (revisionId absent).
-  // Client sends a follow-up { instruction: "override" } to force-apply after a conflict warning.
+  // Claude agent updates draft.htmlContent, re-renders via Puppeteer, creates DraftRevision row.
+  // If instruction conflicts with brand kit: returns { conflict: true, explanation, conflictId } — no edit applied, no revisionId.
+  // Client renders a conflict card with Override / Cancel buttons.
+  // Override: POST /api/drafts/[id]/refine { conflictId } — backend loads pendingConflict, skips compliance check, applies edit.
+  // Cancel: client dismisses card, no request sent. Backend clears pendingConflict on next non-conflict instruction.
 GET  /api/drafts/[id]/revisions           (authed) → { revisions: DraftRevision[] }
-POST /api/drafts/[id]/revisions/[rev]/restore (authed) → { canvaDesignId }
-  // Restores the element tree from the selected revision via a fresh Canva editing transaction.
+POST /api/drafts/[id]/revisions/[rev]/restore (authed) → { exportUrl: string }
+  // Re-renders stored htmlSnapshot via Puppeteer; updates draft.htmlContent + exportUrl; creates new revision.
 
 // Projects
 GET    /api/projects                      → { projects[] }  // excludes soft-deleted
@@ -638,7 +649,7 @@ POST   /api/campaigns/[id]/drafts/[draftId]  → 204  // link a draft to a campa
 
 // Brand kit resolution (used by brief UI on campaign select)
 GET    /api/campaigns/[id]/brandkit       → { brandKit: BrandKit, source: "campaign"|"project"|"default" }
-  // resolves the precedence chain and returns the full BrandKit (canvaBrandKitId,
+  // resolves the precedence chain and returns the full BrandKit (colors, fonts, logoUrl,
   // active prompt, feedToAI artifacts) so the brief UI can pre-fill brand context
 ```
 
@@ -669,40 +680,76 @@ provider dependencies. The `@aws-sdk/client-s3` package works against MinIO
 without changes — the only difference is the endpoint URL (env var). If the
 project ever migrates to AWS S3, only the env vars change.
 
-**4b. Claude-resolved element targeting (no hardcoded element ID maps)**
-Rather than maintaining a per-template mapping of element IDs to their roles
-(brittle — IDs can change when a Canva template is updated), the system calls
-`get-design-content` after each template instantiation, feeds the element tree to
-Claude via `src/lib/canva/elementResolver.ts`, and asks Claude to identify which
-element corresponds to each role in the edit intent (headline, background image,
-person photo, etc.). Claude reads the layer names and element types that template
-designers naturally use in Canva, so any well-named template works without any
-configuration. The resolver throws `ElementNotFoundError` if a slot cannot be
-confidently matched, surfacing the issue immediately rather than silently producing
-a broken design. This approach also means template swaps during draft refinement
-require no additional setup — the resolver re-runs against the new template's tree.
+**4. Puppeteer for HTML→PNG (over html2canvas / node-canvas)**
+Puppeteer (headless Chromium) produces browser-identical rendering: CSS gradients,
+shadows, clip-paths, custom fonts — all correct. `deviceScaleFactor: 2` gives
+retina-quality output at 2160×2160, downsampled to 1080×1080 for Instagram.
+html2canvas loses fidelity on modern CSS. node-canvas requires reimplementing a
+layout engine. Production screenshot services (Vercel OG, Bannerbear) all use
+headless Chrome. `chromium-min` keeps the Docker layer size manageable with
+layer caching in the Dockerfile.
+
+**4b. Claude as design agent (tool-use loop)**
+Claude runs the full design pipeline as an agent harness (not a single-turn call).
+This enables: iterative HTML generation, image generation as a tool call mid-design,
+brand kit enforcement via the system prompt, and AGUI refinement as a continuation
+of the same agent pattern. The frontend never knows about the agent loop — it just
+calls stable API routes. The hard limit of 15 tool calls per run prevents runaway
+cost (equivalent of EC-12).
+
+**4b-model. Haiku for Path A, Sonnet for Path B**
+The design agent uses different Claude models depending on the generation mode:
+- **Path A (template fill)** — `claude-haiku-4-5-20251001`. Template filling is a
+  constrained, lower-complexity task: inject copy, embed image URLs, apply brand
+  colors. Haiku handles this correctly at ~10× lower cost than Sonnet.
+- **Path B (freeform generation)** — `claude-sonnet-4-6`. Designing a complete
+  HTML/CSS layout from a brief requires more reasoning capacity — layout decisions,
+  brand interpretation, responsive sizing, visual hierarchy. Sonnet's stronger
+  instruction-following produces better design output here.
+- **AGUI refinement** — uses the same model as the originating path (Haiku for
+  template-based drafts, Sonnet for generated drafts), resolved from `brief.designMode`.
+- **Brand voice prompt assistance** (generate/improve) — `claude-sonnet-4-6` for
+  quality, since these are infrequent admin operations where cost is not a concern.
+
+The model is configured per-mode in `src/lib/agent/designAgent.ts` — no env var or
+admin setting needed. A future update can promote Path A to Sonnet if output quality
+requires it without any API contract changes.
 
 **4b-edit. Edit brand kit as a distinct, always-available flow**
 The settings UI separates brand kit *creation* from brand kit *editing*. An Edit
 button on each kit card opens a modal pre-populated with the kit's current name,
-source, linked Canva brand kit, and linked templates (with their imagePrompts).
-Prompt versioning and artifact management remain on the expanded card — they are
-not part of the edit modal, keeping each concern in one place. The `PATCH
+colors, fonts, logoUrl, and linked templates. Prompt
+versioning and artifact management remain on the expanded card — they are not part
+of the edit modal, keeping each concern in one place. The `PATCH
 /api/admin/brandkits/[id]` endpoint handles all editable fields. This separation
-means admins can add templates to an existing kit at any time without going through
+means admins can update templates or brand colors at any time without going through
 a create flow.
 
-**4c. Per-template background image prompt override**
-Each `BrandKitTemplate` row has an optional `imagePrompt` field. At Path A image
-generation time, the system checks for this field first. If set, it is passed
-verbatim to `ImageProvider.generateImage` instead of constructing a prompt from
-the brief topic and description. This gives admins control over visual consistency
-for templates that have a fixed aesthetic (e.g. "always dark abstract tech") without
-constraining templates that should reflect the post topic. Templates with no
-`imagePrompt` behave exactly as before. Admins set this per template in the brand
-kit Edit modal — no developer changes required.
+**4b-image. Image generation is on-demand (not a mandatory pipeline pre-step)**
+Claude can generate CSS gradients, SVG patterns, and geometric backgrounds natively
+in HTML/CSS without calling `generateImage`. The `generateImage` tool is reserved for
+designs that genuinely need raster/photographic imagery — Claude decides at runtime.
+This avoids unnecessary image generation cost on designs where CSS/SVG backgrounds
+produce equal or better visual results, and removes the pre-step latency from every
+Path A and Path B run. `Brief.imageProviderKey` becomes optional (`String?`); the
+system default image provider is used when Claude does call `generateImage`.
+`Draft.imageUrl` is nullable and only set when the agent made at least one
+`generateImage` call during that run.
 
-**4d. AI-assisted brand voice prompt authoring**
+**4c. HTML/CSS templates (over external design tool templates)**
+Brand templates are stored as HTML/CSS strings in `BrandKitTemplate.htmlTemplate`.
+Claude fills them with content from the brief. Admins upload or paste templates
+in the settings UI. No external design tool dependency. Templates are portable,
+versionable, and renderable without a third-party service.
+
+**4d. Brand kit structured data (colors, fonts, logoUrl)**
+BrandKit now stores `colors[]` (hex palette), `fonts[]` (with MinIO URLs), and
+`logoUrl` directly. Claude's system prompt receives these as CSS variables and
+asset URLs — Claude uses them to generate on-brand HTML/CSS. This eliminates any
+brand kit discovery step at runtime and keeps all brand data self-contained in the
+application database.
+
+**4e. AI-assisted brand voice prompt authoring**
 The brand voice prompt editor exposes two AI modes powered by Claude (Anthropic SDK):
 (a) **Generate** — available when no prompt version exists yet; admin describes the
 brand in plain text → Claude drafts a full brand voice prompt → presented for review
@@ -714,30 +761,23 @@ Implementation: `POST /api/admin/brandkits/[id]/prompt/generate` (generate) and
 `POST /api/admin/brandkits/[id]/prompt/improve` (improve), both admin-gated, both
 call Claude with appropriate system + user prompts.
 
-**4. `withEditingTransaction` guard in Canva client**
-Orphaned Canva editing transactions leave designs in a draft-only state and may
-block future edits on the same design. The `try/finally` wrapper in `client.ts`
-enforces NFR-11 at the library level so no calling code can accidentally skip
-`cancel` on failure. This is enforced structurally, not by convention.
-
 **5. Scheduler as a dedicated Docker container (polling loop)**
 The scheduler service in `docker-compose.yml` uses the same Docker image as the
 main app, runs `src/scheduler/worker.ts`, and polls every 60 seconds. This shares
 the Prisma client and business logic with zero code duplication. Docker Compose
 restarts the container automatically on failure (`restart: unless-stopped`).
 
-**6. BrandKit as a first-class entity (owns prompt + artifacts + Canva link)**
-Rather than a free-floating `BrandSystemPrompt` table and raw Canva ID strings on
+**6. BrandKit as a first-class entity (owns prompt + artifacts + structured brand data)**
+Rather than a free-floating `BrandSystemPrompt` table and raw brand data on
 Project/Campaign, a **BrandKit** is a proper entity that Projects and Campaigns
-reference by FK. It is **hybrid**: it can link to a Canva brand kit
-(`canvaBrandKitId`, for Path A templates and Path B), hold a backend artifact
-folder in MinIO (`BrandKitArtifact` rows), or both (`source = CANVA | BACKEND |
-HYBRID`). The brand voice lives in versioned `BrandKitPrompt` rows — history is
-retained with an `isActive` flag so an admin can roll back to any prior version
-(EC-13). Artifacts flagged `feedToAI` are passed to Path B orchestration and image
-generation as brand context. BrandKits are **admin-managed** (brand governance).
-Brand kit precedence at generation time stays: Campaign → Project default →
-system default (`BrandKit.isDefault = true`).
+reference by FK. It stores structured brand data (`colors`, `fonts`, `logoUrl`),
+a MinIO artifact store (`BrandKitArtifact` rows), and HTML/CSS templates
+(`BrandKitTemplate` rows). The brand voice lives in versioned `BrandKitPrompt`
+rows — history is retained with an `isActive` flag so an admin can roll back to
+any prior version (EC-13). Artifacts flagged `feedToAI` are passed to Path B
+design agent and image generation as brand context. BrandKits are **admin-managed**
+(brand governance). Brand kit precedence at generation time: Campaign →
+Project default → system default (`BrandKit.isDefault = true`).
 
 ## Risks & Mitigations
 
@@ -745,9 +785,9 @@ system default (`BrandKit.isDefault = true`).
 |---|---|---|---|
 | Instagram Graph API app review takes weeks | High | High (blocks AC-3) | Start Meta Business app registration immediately; build and test publish flow with a test account before review completes |
 | LinkedIn app publishing permissions gated | Medium | High (blocks AC-3) | Apply for LinkedIn app early; design the publish layer to degrade gracefully (one channel fails, other proceeds) |
-| Canva MCP server not available in Azure prod | Medium | High (blocks entire design flow) | Confirm production MCP server hosting in design Q5 before build starts; have a fallback plan (Canva REST API adapter implementing same interface) |
-| Path B orchestrator runaway / high token cost | Medium | Medium | Hard limit of 20 tool calls per orchestration (EC-12); per-user generation budget enforced by NFR-7 |
-| gpt-image-2 output incompatible with template dimensions | Low | Medium | Canva `update_fill` crops/scales to element bounds; validate output dimensions in EC-4 handler; offer template swap |
+| Puppeteer container size (Chromium ~200MB) | Medium | Low | Use `chromium-min` + Docker layer caching; Chromium layer is cached across deploys unless base image changes |
+| Claude-generated HTML has layout issues for certain post dimensions | Medium | Medium | `renderHtml` returns dimensions metadata; agent can call `renderHtml` multiple times to iterate; add a post-render dimension validation step |
+| Font loading failures in Puppeteer | Low | Medium | All brand fonts served from MinIO absolute URLs; `waitUntil: 'networkidle0'` ensures fonts are loaded before screenshot |
+| Path B agent runaway / high token cost | Medium | Medium | Hard limit of 15 tool calls per run; per-user generation budget enforced by NFR-7 |
 | MinIO disk fills up on VPS | Low | Medium | Monitor VPS disk usage; 7-day lifecycle rule on `generated-images` bucket auto-deletes temp images; alert if disk > 80% |
 | `.env` file leaked via git | Low | High | `.gitignore` enforced; pre-commit hook blocks accidental commit of `.env`; rotate all secrets immediately if leak occurs |
-

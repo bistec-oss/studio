@@ -1,4 +1,4 @@
-﻿# Spec: Marketing Post Studio (v1)
+# Spec: Marketing Post Studio (v1)
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-08
@@ -7,16 +7,17 @@
 ## Overview
 
 bistec-studio is an internal web tool for the Bistec marketing team that turns a
-short brief into a finished, on-brand, ready-to-publish social media post. AI drafts the copy and image; a Canva brand template enforces
-visual consistency; the tool exports the rendered design and publishes it (now or
+short brief into a finished, on-brand, ready-to-publish social media post. AI drafts the copy and image; an HTML/CSS brand template enforces
+visual consistency; the tool renders the design to a publish-ready PNG server-side and publishes it (now or
 scheduled) to Instagram and LinkedIn.
 
-**Canva integration model:** The Next.js backend connects to Canva as an **MCP
-client** (via the Canva MCP server), calling structured tool operations rather than
-building a raw REST integration. This eliminates the need to hand-roll Canva OAuth,
-HTTP wrappers, or response parsing — the MCP server owns that layer. The same Canva
-MCP server is already connected to the development environment (Claude Code session),
-meaning the integration can be developed and tested directly from the toolchain.
+**HTML canvas + Puppeteer rendering pipeline:** The Next.js backend runs Claude
+(Anthropic SDK tool-use loop) as a design agent. Claude receives the brand kit
+(colors, fonts, logoUrl), the HTML/CSS brand template, the generated copy, and the
+generated image URL, then fills the template and calls the `renderHtml` tool to
+produce the final PNG. Puppeteer (headless Chromium) executes the render server-side
+and returns the PNG byte stream, which is stored in MinIO. No Canva integration is
+used at any point.
 
 **Primary problem (the "why"):** today, producing a post depends on the one or two
 people who know the brand guidelines and the per-channel publishing process — a
@@ -29,8 +30,8 @@ published, on-brand post in a single guided flow. Brand consistency is enforced 
 the templates/brand kit rather than by tribal knowledge, and the publishing
 mechanics are owned by the tool rather than by a person.
 
-**v1 boundaries:** static image posts only (no video), no pixel/canvas editing, no
-manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team only.
+**v1 boundaries:** static image posts only (no video), no pixel/canvas editing,
+channels limited to Instagram + LinkedIn, internal team only.
 
 ## Requirements
 
@@ -55,7 +56,7 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **FR-C2** A campaign can be assigned to one or more projects, or exist as a standalone campaign with no project.
 - **FR-C3** Reassigning a campaign to a different project (or removing it from a project) is **admin-only**.
 - **FR-C4** Soft-deleted campaigns are recoverable. Posts linked to a soft-deleted campaign are not deleted.
-- **FR-C5** A post (draft/export) can be linked to multiple campaigns (shared asset — the same Canva design and export URL is reused, not duplicated).
+- **FR-C5** A post (draft/export) can be linked to multiple campaigns (shared asset — the same rendered PNG and export URL is reused, not duplicated).
 
 **Brief Input**
 - **FR-5** A user can create a brief specifying at minimum: topic/subject, goal/
@@ -75,102 +76,96 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **FR-9** The user can regenerate the copy and can manually edit the copy text
   before it is applied to a design.
 
-**AI Image Generation**
-- **FR-10** From the brief (and/or copy context), the system generates a post image
-  using OpenAI gpt-image-2.
-- **FR-11** The user can regenerate the image (producing a new variation) without
-  changing the copy.
+**AI Image Generation (on-demand)**
+- **FR-10** The Claude design agent may call the `generateImage` tool during design
+  generation when raster imagery is needed for the post. Image generation is
+  **on-demand** — Claude decides whether to invoke it based on the design
+  requirements. Claude can generate CSS gradients, SVG patterns, and geometric
+  backgrounds natively in HTML/CSS without calling `generateImage`; it only calls
+  the tool when authentic photographic or AI-generated raster imagery genuinely
+  benefits the design.
+- **FR-11** The user can request a change to the visual design — including replacing
+  or adding imagery — by issuing a natural language instruction via the AGUI
+  refinement panel (FR-33). The Claude design agent will update the HTML and call
+  `generateImage` if raster imagery is required for the change.
 
-**Design Path A — Preset Brand Template (via MCP)**
-- **FR-12** The system composes a design by instantiating a Canva **brand template**
-  via the MCP `create-design-from-brand-template` tool (using a BTM* template ID
-  from Bistec's brand kit), then opening an editing transaction
-  (`start-editing-transaction`) and injecting the generated copy and image in a
-  single bulk `perform-editing-operations` call: `replace_text` on the template's
-  copy element(s) and `update_fill` on the image element(s) using the Canva asset
-  IDs obtained via `upload-asset-from-url`. The transaction is then saved with
-  `commit-editing-transaction`.
-- **FR-12a** Before the editing transaction, the system calls `get-design-content`
-  to retrieve the template's element tree, then passes that tree together with the
-  edit intent (which slots need what) to a **Claude-powered element resolver**
-  (`src/lib/canva/elementResolver.ts`). Claude identifies the correct element IDs
-  by reading layer names and types — no element IDs are pre-mapped or hardcoded per
-  template. The resolver returns the fully-formed `replace_text` and `update_fill`
-  operations ready to pass to `perform-editing-operations`.
-- **FR-12b** Before the editing transaction, the system uploads all images into
-  Canva using `upload-asset-from-url` to obtain Canva asset IDs — the AI-generated
-  background (gpt-image-2 output) and the user-uploaded additional image (Path A
-  only — placed into a specific template slot), if provided. These asset IDs are
-  passed to the element resolver as part of the edit intent. Path B reference images
-  are handled separately by the orchestrator (see FR-18c) and are not routed through
-  the element resolver.
+**Design Path A — Preset Brand Template (Claude design agent)**
+- **FR-12** The system composes a design by instantiating the HTML/CSS template
+  string stored in `BrandKitTemplate.htmlTemplate`, then invoking the Claude design
+  agent. Claude receives: the template HTML, the resolved brand kit context (colors
+  as CSS variable values, fonts as @font-face declarations, logoUrl), the generated
+  copy text. Claude fills the content
+  slots in the template and calls the `renderHtml` tool to produce the PNG.
+  Puppeteer executes the render and returns the PNG, which is stored in MinIO.
+- **FR-12a** The Claude design agent receives the HTML template and brand kit as
+  context and fills content slots using its understanding of HTML/CSS structure.
+  No element ID mapping is needed — Claude interprets the template directly and
+  replaces placeholder content (text nodes, `src` attributes, CSS custom property
+  values) based on the template's semantic structure.
+- **FR-12b** If the template design requires raster imagery, Claude calls the
+  `generateImage` tool during the agent run; the resulting MinIO URL is embedded by
+  Claude in the HTML. Claude may instead use CSS gradients, SVG elements, or static
+  brand asset URLs if they better serve the template's visual style. No image is
+  pre-generated before the agent runs — Claude decides whether imagery is needed.
 - **FR-13** The user can choose among / swap between the brand templates linked to
   their resolved brand kit. Available templates are those an admin registered against
-  the kit via the settings UI (see FR-26b). Swapping discards the current Canva
-  design and creates a new one from the chosen template ID via
-  `create-design-from-brand-template`, then re-runs the element resolver against the
-  new template's element tree and re-applies the current copy and image via a fresh
-  editing transaction.
-- **FR-14** The brand kit (colors, fonts, logo) is applied automatically by the
-  brand template; the user does not configure brand styling manually. Available
-  brand kits are discovered at runtime via `list-brand-kits`.
+  the kit via the settings UI (see FR-26b). Swapping re-runs the Claude design agent
+  with the new template's HTML and the existing copy text — no design recreation step
+  is needed; Puppeteer re-renders from the newly filled template. Claude may call
+  `generateImage` again if the new template requires different imagery.
+- **FR-14** The brand kit (colors, fonts, logo) is applied automatically via the
+  Claude agent's system prompt. Claude generates HTML using the brand colors as CSS
+  custom properties and the brand fonts via @font-face declarations pointing to their
+  MinIO URLs. The user does not configure brand styling manually.
 
-**Design Path B — AI-Generated New Design (OpenAI orchestrates Canva MCP)**
+**Design Path B — AI-Generated New Design (Claude design agent, freeform)**
 - **FR-18b** When the user selects "generate new design" in the brief, the backend
-  invokes OpenAI (Chat Completions with function calling) as an **AI orchestrator**,
-  passing it: the user's brief, the resolved brand kit's active system prompt and
-  feed-to-AI artifacts (see FR-25b–FR-27b), the brand kit's Canva brand kit ID,
-  any user-supplied reference images (see FR-18c), and the Canva MCP tool schemas
-  as available functions. OpenAI plans and directs the full design assembly by
-  calling Canva MCP tools — this replicates the ChatGPT + Canva plugin pattern
-  (canva.com/integrations/chatgpt) in bistec-studio's own backend, without
-  depending on ChatGPT's UI.
+  runs the Claude design agent in freeform mode. Claude receives: the user's brief,
+  the resolved brand kit's active system prompt, structured brand data (colors,
+  fonts, logoUrl), feed-to-AI artifact URLs (see FR-25b), the generated copy text,
+  and any user-supplied reference image URLs (see FR-18c). Claude designs a complete
+  HTML/CSS post from scratch, calls the `generateImage` tool if additional imagery
+  is needed, then calls `renderHtml` to produce the PNG.
 - **FR-18c** The brief UI for Path B includes an optional **reference image upload**
   (one or more images — e.g. a speaker photo, product shot, or event graphic).
-  Uploaded images are stored in MinIO and their URLs are passed to the OpenAI
-  orchestration call. The orchestrator decides how to use them: it may place them
-  directly into the design via `upload-asset-from-url`, use them as compositional
-  reference when prompting gpt-image-2, or ignore them if they don't fit the design.
-  The user hands the images over; OpenAI decides their role. This is distinct from
-  Path A's additional image upload, which is always placed into a specific template slot.
-- **FR-19b** OpenAI may call `gpt-image-2` to generate imagery (uploaded via
-  `upload-asset-from-url` → Canva asset ID) or elect to use an existing brand asset
-  already in the user's Canva account via `get-assets` — depending on what best
-  serves the brief. The orchestrator decides; the user is not required to choose.
-- **FR-20b** The assembled design is produced via a Canva editing transaction
-  (`start-editing-transaction` → `perform-editing-operations` for all elements →
-  `commit-editing-transaction`), with the brand kit ID applied to enforce brand
-  consistency, regardless of whether OpenAI chose generated imagery or brand assets.
+  Uploaded images are stored in MinIO and their URLs are passed to the Claude design
+  agent. Claude decides how to use them: it may embed them directly in the HTML
+  design via `<img>` tags, use them as compositional reference when calling
+  `generateImage`, or ignore them if they don't fit the design. The user hands the
+  images over; Claude decides their role. This is distinct from Path A's image URL,
+  which is always embedded into a specific template slot.
+- **FR-19b** Claude may call the `generateImage` tool (which calls the resolved
+  ImageProvider, e.g. gpt-image-2) to produce imagery, or embed existing brand asset
+  URLs (from MinIO) directly in the HTML — depending on what best serves the brief.
+  Claude decides; the user is not required to choose.
+- **FR-20b** The assembled design is the HTML produced by Claude, rendered to PNG by
+  Puppeteer. Brand consistency is enforced via Claude's system prompt (brand colors,
+  fonts, logo). No editing transactions are used.
 - **FR-21b** Once assembled, the new design enters the same in-app refinement and
   export flow as Path A (FR-15, FR-16, FR-17).
 
 **Admin: Brand Kits**
 - **FR-25b** A **brand kit** is a first-class, admin-managed entity. It owns: a
   name, a brand voice (versioned system prompt), a folder of brand artifacts
-  (logos, fonts, colors, reference images, example posts), an optional link to a
-  Canva brand kit, and a list of **linked brand templates** (BTM* IDs registered by
-  the admin, each with an optional fixed background image prompt). A brand kit may
-  be **Canva-linked, backend-folder-based, or both** (hybrid).
-- **FR-25c** Each linked brand template may have an optional **background image
-  prompt** set by the admin. When set, this prompt is used verbatim for gpt-image-2
-  background generation instead of deriving a prompt from the brief topic and
-  description. When not set, the system falls back to the brief-derived prompt.
-  This allows templates with a fixed visual style (e.g. "always dark abstract tech")
-  to produce consistent backgrounds regardless of post topic.
+  (logos, fonts, colors, reference images, example posts), structured brand data —
+  `colors` (hex color palette), `fonts` (name + MinIO URL pairs), and `logoUrl`
+  (MinIO URL of the primary logo) — and a list of **linked brand templates**
+  (HTML/CSS template strings registered by the admin). These structured brand data fields are fed directly into
+  the Claude design agent's system prompt as CSS variable values and font definitions.
 - **FR-26b** Admins manage brand kits through a **settings page in bistec-studio**
   (no developer/deploy cycle): create, **edit**, and soft-delete kits, set the system
-  default kit, link a Canva brand kit, **link brand templates** (discovered via
-  `search-brand-templates` filtered to the linked Canva brand kit — no manual BTM*
-  ID entry), set a per-template background image prompt override (FR-25c), edit the
+  default kit, **link brand templates** (admins paste or upload HTML/CSS template
+  strings directly in the settings UI — no manual ID entry, no external template
+  picker), set a per-template background image prompt override (FR-25c), edit the
   brand voice prompt (with AI-assisted generation and improvement — FR-26c), and
   upload/remove artifacts. Editors select brand kits (via projects/campaigns) but
   cannot edit them.
 - **FR-26b-edit** An admin can edit any existing brand kit at any time — updating
-  its name, source (CANVA / BACKEND / HYBRID), linked Canva brand kit, and linked
-  brand templates (add or remove, update image prompts). This is a dedicated Edit
-  flow (separate from the create flow) accessible via an edit button on each brand
-  kit card in the settings UI. Prompt versioning and artifact management remain on
-  the card itself and are not part of the edit modal.
+  its name, linked brand templates (add or remove, update image prompts), colors,
+  fonts, and logoUrl. This is a dedicated Edit flow (separate from the create flow)
+  accessible via an edit button on each brand kit card in the settings UI. Prompt
+  versioning and artifact management remain on the card itself and are not part of
+  the edit modal.
 - **FR-26c** The brand voice prompt editor provides **AI assistance** in two modes:
   (a) **Generate** — shown when no prompt version exists; admin describes the brand
   in plain text and AI drafts a full brand voice prompt, saved as v1; (b) **Improve**
@@ -179,26 +174,28 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   (FR-28b) still applies. Both modes use Claude (Anthropic SDK). The AI-generated
   content is presented as a draft for admin review before saving — it is not saved
   automatically.
-- **FR-27b** The brand kit's active system prompt is prepended to every Path B
-  OpenAI orchestration call. Artifacts flagged "feed to AI" (e.g. reference images)
-  are passed as additional brand context to Path B orchestration and image
-  generation. The prompt and artifacts are stored server-side; the prompt is never
-  exposed to editors or the browser.
+- **FR-27b** The brand kit's active system prompt, together with the structured brand
+  data (colors, fonts, logoUrl), is passed to the Claude design agent for every
+  generation run (Path A and Path B). Artifacts flagged "feed to AI" (e.g. reference
+  images) are passed as additional brand context. The prompt and artifacts are stored
+  server-side; the prompt is never exposed to editors or the browser.
 - **FR-28b** The brand voice prompt is **versioned**. An admin can roll back to any
   prior version from the settings UI (EC-13).
 - **FR-29b** Projects and campaigns reference a brand kit. Brand kit precedence at
   generation time: Campaign brand kit → Project default brand kit → system default
   brand kit (see FR-5b).
 
-**User-selectable AI models (copy + image)**
+**User-selectable AI models (copy)**
 - **FR-28** At brief creation time, the user can select which AI model to use for
-  **copy generation** and which to use for **image generation**, independently.
-  The Path B design orchestrator is not user-selectable (infrastructure-level choice).
-- **FR-29** The model selectors in the brief UI only show models that an admin has
-  explicitly **enabled** for that slot. Disabled or unregistered models are not
+  **copy generation**. The image provider (used when Claude calls `generateImage`
+  during the agent run) resolves automatically from the system default; an optional
+  advanced selector in the brief wizard lets users override this if needed.
+  The Claude design agent is not user-selectable (infrastructure-level choice).
+- **FR-29** The copy model selector in the brief UI shows only models that an admin
+  has explicitly **enabled** for that slot. Disabled or unregistered models are not
   visible to users.
-- **FR-30** Each brief session starts with the **system default** model pre-selected
-  for each slot (set by admin). The user's choice is not remembered between briefs.
+- **FR-30** Each brief session starts with the **system default** copy model
+  pre-selected (set by admin). The user's choice is not remembered between briefs.
 - **FR-31** Admins can manage available models per slot (copy / image) from the
   settings UI: enable, disable, and set the system default for each slot. Changes
   take effect immediately for new briefs without a redeploy.
@@ -211,28 +208,25 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
 - **FR-32d** The model selector in the brief UI displays each provider's name and label as registered by the admin (e.g. "Claude 3.5 Sonnet (Anthropic)") so users know exactly which model and provider they are selecting.
 
 **AGUI — Chat-driven design refinement**
-- **FR-33** After a design is returned (Path A or Path B), the draft page exposes a **chat-driven refinement panel**. The user types natural language instructions (e.g. "reposition the topic to the bottom", "change the background to something darker"); the AI interprets each instruction and applies the corresponding Canva MCP editing operations. The user never directly manipulates design elements.
-- **FR-33a** Each refinement instruction that results in a committed Canva edit is recorded as a `DraftRevision` row. The user can revert to any prior revision via an explicit undo step, which re-applies the previous design state via a fresh editing transaction.
-- **FR-33b** Before committing any refinement edit, the AI checks whether the instruction conflicts with the resolved brand kit. If a conflict is detected, the AI explains the conflict in the chat panel before applying. If the user replies "override", the edit is applied without further gating.
-- **FR-33c** The existing regenerate buttons (copy and image) remain available on the draft page — the AGUI panel is additive, not a replacement.
-- **FR-33d** The AI driving refinements is the same provider the user selected for that brief — Path A uses the selected copy/image model; Path B uses the orchestrator model. No additional model selection is required.
-- **FR-33e** The refinement panel does not allow direct element dragging, asset uploads, or opening the Canva editor. All changes are applied server-side via Canva MCP editing transactions only.
+- **FR-33** After a design is returned (Path A or Path B), the draft page exposes a **chat-driven refinement panel**. The user types natural language instructions (e.g. "reposition the topic to the bottom", "change the background to something darker"); the backend runs the Claude design agent with `draft.htmlContent` as context plus the instruction. Claude updates the HTML and calls `renderHtml` to produce a new PNG. The user never directly manipulates design elements.
+- **FR-33a** Each refinement instruction that results in a committed render is recorded as a `DraftRevision` row, storing `htmlSnapshot` (the HTML at that point) and `exportUrl` (the rendered PNG). The user can revert to any prior revision via an explicit undo step, which re-renders from the stored `htmlSnapshot`.
+- **FR-33b** Before committing any refinement edit, the AI checks whether the instruction conflicts with the resolved brand kit. If a conflict is detected, the AI returns a **conflict card** with **Override** and **Cancel** buttons. Override applies the change; Cancel dismisses the card with no edit applied.
+- **FR-33c** The copy regenerate button remains available on the draft page — the AGUI panel is additive. Image regeneration is not a separate button; users instruct Claude to change the visual via the AGUI panel instead.
+- **FR-33d** The AI driving refinements uses the same model as the originating path — Path A uses `claude-haiku-4-5-20251001`; Path B uses `claude-sonnet-4-6`. No additional model selection is required.
+- **FR-33e** The refinement panel does not allow direct element dragging or asset uploads. All changes are applied server-side via the Claude design agent (HTML generation) and Puppeteer rendering only.
 
 **In-App Refinement (no pixel editing)**
 - **FR-15** The user can refine a draft entirely within bistec-studio by any
-  combination of: editing copy text, regenerating the image, swapping the brand
-  template, and issuing natural language instructions via the AGUI chat panel (FR-33) —
-  each triggering the appropriate MCP editing transaction and a fresh export. Element
-  IDs are resolved dynamically for each operation via the Claude element resolver
-  (FR-12a) — not cached from the initial instantiation.
-- **FR-16** The system does NOT provide pixel/canvas/layout editing and does NOT
-  open the design in Canva for manual editing. The MCP editing operations are
-  server-side only (text content, image fill) — no Canva editor UI is surfaced.
+  combination of: editing copy text, swapping the brand template (Path A), and
+  issuing natural language instructions via the AGUI chat panel (FR-33) —
+  each triggering a Claude design agent run and a fresh Puppeteer render.
+- **FR-16** The system does NOT provide pixel/canvas/layout editing. All rendering
+  is server-side only — no canvas editor UI is surfaced.
 
-**Export (via MCP)**
-- **FR-17** The system exports the finished design as a publish-ready image
-  (PNG/JPG) via the MCP `export-design` tool, which returns a download URL. The
-  export is stored in the asset library (MinIO object storage) before publishing.
+**Export**
+- **FR-17** The system exports the finished design as a publish-ready PNG by running
+  Puppeteer against the final `draft.htmlContent`. The PNG is stored in MinIO and
+  its pre-signed URL is used for display and publishing.
 
 **Publishing & Scheduling**
 - **FR-18** A user with publish rights can publish an exported post immediately to
@@ -254,24 +248,26 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   generate → refine → publish) must be completable by a team member with no brand
   or channel-publishing expertise. This is the primary design constraint.
 - **NFR-2 (Platform/stack)** Next.js + TypeScript web application.
-- **NFR-3 (Hosting)** Deployed to a VPS using Docker Compose (Next.js app, PostgreSQL, MinIO, scheduler worker as separate containers).
+- **NFR-3 (Hosting)** Deployed to a VPS using Docker Compose (Next.js app, PostgreSQL, MinIO, Puppeteer renderer, scheduler worker as separate containers).
 - **NFR-4 (Brand consistency)** Output is brand-consistent by construction — brand
-  styling comes from the Canva brand kit/templates, not from user choices.
-- **NFR-5 (Security)** Third-party credentials (OpenAI, Canva, Instagram, LinkedIn)
-  are stored server-side as secrets, never exposed to the browser. Social account
-  tokens are stored encrypted at rest.
+  styling comes from the brand kit's structured data (colors, fonts, logo) injected
+  into Claude's system prompt as CSS variables and @font-face declarations, not from
+  user choices.
+- **NFR-5 (Security)** Third-party credentials (OpenAI, Instagram, LinkedIn) are
+  stored server-side as secrets, never exposed to the browser. Social account tokens
+  are stored encrypted at rest.
 - **NFR-6 (Reliability of scheduling)** A scheduled post fires within an acceptable
   window of its target time (target window confirmed in design, e.g. ±5 min) and
   survives an app restart (durable queue/store, not in-memory timers).
-- **NFR-7 (Cost control)** Generation calls (GPT, gpt-image-2) have guardrails to
-  control spend (e.g. per-user or per-period limits) — exact policy in design.
-- **NFR-8 (Resilience to third-party failure)** Failures from OpenAI/Canva MCP
-  tools/social APIs are surfaced as clear, actionable errors and never silently
-  drop a post.
-- **NFR-11 (MCP transaction integrity)** Every Canva editing session that opens a
-  `start-editing-transaction` must always resolve with either
-  `commit-editing-transaction` (success path) or `cancel-editing-transaction`
-  (error/abort path) — orphaned open transactions are not acceptable.
+- **NFR-7 (Cost control)** Generation calls (copy via GPT, image generation via
+  `generateImage` tool when Claude decides to invoke it) have guardrails to control
+  spend (e.g. per-user or per-period limits) — exact policy in design. Image generation
+  is on-demand and only incurred when Claude determines raster imagery is needed.
+- **NFR-8 (Resilience to third-party failure)** Failures from OpenAI / social APIs
+  are surfaced as clear, actionable errors and never silently drop a post.
+- **NFR-11 (Renderer idempotency)** Every `renderHtml` call is stateless — re-running
+  the Puppeteer renderer with the same HTML always produces the same PNG. The renderer
+  holds no session state between calls.
 - **NFR-9 (Auditability)** Publish history is retained and attributable to the
   user who published/scheduled.
 
@@ -289,12 +285,13 @@ Each criterion must pass for the change to be considered complete.
   appears on the respective channel.
 - **AC-4** Given a brief, the system returns generated copy from GPT and a generated
   image from gpt-image-2, and both can be regenerated independently.
-- **AC-5** The composed design (Path A) visibly uses the Bistec brand kit
-  (colors/fonts/logo) without the user configuring any brand styling, and the user
-  can swap between at least the supported set of brand templates.
+- **AC-5** The assembled design (Path A) visibly uses the Bistec brand kit
+  (colors/fonts/logo) embedded in the HTML by Claude, without the user configuring
+  any brand styling, and the user can swap between at least the supported set of
+  brand templates.
 - **AC-5b** A design produced via Path B ("generate new design") is visibly
-  brand-consistent (brand kit applied, brand voice reflected) without the user
-  manually configuring any brand styling.
+  brand-consistent (brand kit applied via Claude's system prompt + structured brand
+  data) without the user manually configuring any brand styling.
 - **AC-5c** An admin can update a brand kit's system prompt in the bistec-studio
   settings UI; a Path B design generated after the update reflects the new prompt
   without a redeploy.
@@ -312,8 +309,8 @@ Each criterion must pass for the change to be considered complete.
   opened by any user pre-selects that model.
 - **AC-6** Editing the copy text and/or regenerating the image and/or swapping the
   template produces an updated exported asset reflecting those changes.
-- **AC-7** There is no UI path to pixel/canvas editing or to opening the design in
-  Canva for manual editing (confirms FR-16).
+- **AC-7** There is no UI path to pixel/canvas editing — all rendering is
+  server-side via Puppeteer only (confirms FR-16).
 - **AC-8** A post scheduled for a future time is published automatically within the
   agreed window of that time, and the scheduler recovers correctly across an app
   restart (a scheduled post is not lost).
@@ -337,14 +334,12 @@ Each criterion must pass for the change to be considered complete.
   error and can retry; no partial/blank draft is silently saved as final.
 - **EC-2** gpt-image-2 returns content that fails moderation / is rejected → user is
   informed and prompted to adjust the brief or regenerate.
-- **EC-3** Canva MCP server is unavailable, or an MCP tool call fails (template
-  instantiation, asset upload, editing transaction, or export) → user is informed
-  with a specific error; the brief/copy/generated image are preserved in the
-  database so no work is lost and the user can retry. An open editing transaction
-  that encounters an error is cancelled via `cancel-editing-transaction` rather than
-  left orphaned.
+- **EC-3** Puppeteer render fails (crash, timeout, or invalid HTML) → user is shown
+  a specific error; the brief, copy, and generated image URL are preserved in the
+  database so no work is lost and the user can retry with the same or a different
+  template.
 - **EC-4** Selected brand template is incompatible with the generated content (e.g.
-  copy too long for the text field) → system truncates/warns or offers another
+  copy too long for the text field) → Claude truncates/warns or offers another
   template rather than producing a broken design.
 - **EC-5** Social publish fails (expired/revoked token, rate limit, channel
   rejection) → recorded as a failed attempt with reason; user can re-authenticate
@@ -358,69 +353,61 @@ Each criterion must pass for the change to be considered complete.
   last-write-wins with indication) confirmed in design.
 - **EC-9** Cost/rate guardrail is hit → generation is blocked with a clear message
   rather than failing opaquely.
-- **EC-11** Path B OpenAI orchestration fails mid-assembly (e.g. OpenAI error, MCP
-  tool call rejected mid-transaction) → the open editing transaction is cancelled
-  via `cancel-editing-transaction`; no partial/broken design is left in Canva; the
-  brief and any already-generated assets are preserved so the user can retry.
-- **EC-12** OpenAI orchestrator enters an unexpected loop or exceeds a maximum
-  tool-call depth → the backend enforces a hard limit on orchestration steps and
-  surfaces a clear error rather than running indefinitely.
+- **EC-11** Claude design agent fails mid-run (e.g. Anthropic API error, tool call
+  rejected) → the agent run is halted; no partial/broken HTML is committed to the
+  draft; the brief and any already-generated assets (copy, image URL) are preserved
+  so the user can retry.
+- **EC-12** Claude design agent enters an unexpected loop or exceeds a maximum
+  tool-call depth → the backend enforces a hard limit of 15 tool calls per
+  generation run and surfaces a clear error rather than running indefinitely.
 - **EC-13** Admin saves a brand kit prompt version that causes all Path B
   generations to fail moderation or produce off-brand output → an admin can revert
   to a previous version via the settings UI (per-brand-kit prompt version history /
   last-known-good retained).
 - **EC-10** User selects both channels but content only suits one → each channel receives channel-appropriate copy (per FR-8); publishing to one channel failing does not block the other.
 - **EC-14** A campaign is soft-deleted while a post under it is in SCHEDULED state → the scheduled post still fires; deletion does not cancel scheduled posts.
-- **EC-15** A project's default brand kit is removed from Canva → campaigns that inherited it fall back to the system global default; existing exports are unaffected (stored in MinIO).
+- **EC-15** A project's default brand kit is removed → campaigns that inherited it fall back to the system global default; existing exports are unaffected (stored in MinIO).
 - **EC-16** A post is linked to two campaigns and one campaign is soft-deleted → the post remains accessible through the other campaign and in "Uncategorized" if no other campaign remains.
 
 ## Dependencies
 
 **External services / APIs**
-- **OpenAI API** — GPT (copy generation, Path A); GPT with function calling as AI
-  orchestrator (Path B); gpt-image-2 (image generation, both paths — mandatory on
-  Path A, AI-decided on Path B). Requires API key + spend controls.
-- **Canva MCP server** — The Next.js backend connects as an MCP client to the
-  Canva MCP server, which exposes structured tool operations:
-  - `list-brand-kits` — discover available brand kits
-  - `create-design-from-brand-template` — instantiate a design from a BTM* template
-  - `upload-asset-from-url` — bridge gpt-image-2 image URLs into Canva assets
-  - `start-editing-transaction` / `perform-editing-operations` (replace_text,
-    update_fill) / `commit-editing-transaction` / `cancel-editing-transaction` —
-    programmatic content injection and refinement
-  - `get-design-content` — read the full element tree; passed to the Claude element
-    resolver to identify target element IDs dynamically (no hardcoded ID mappings)
-  - `get-assets` — retrieve existing brand assets (used by Path B orchestrator as
-    an alternative to generating new imagery)
-  - `export-design` — export as PNG/JPG, returns a download URL
-  The MCP server handles Canva OAuth and all raw API calls; the backend only
-  needs MCP client credentials (not raw Canva REST credentials).
-  Note: `generate-design-structured` is **presentation-only** and is NOT used
-  for social media post generation.
+- **OpenAI API** — GPT (copy generation, both paths); gpt-image-2 (image generation,
+  both paths — mandatory on Path A, Claude-decided on Path B). Requires API key +
+  spend controls.
+- **Anthropic API** — Claude (Anthropic SDK tool-use loop) as the design agent for
+  both Path A (template filling) and Path B (freeform HTML/CSS design), and for AGUI
+  refinement (FR-33). Also used for AI-assisted brand voice prompt generation
+  (FR-26c). Requires API key.
 - **Instagram Graph API (Meta Business)** — publishing to Instagram Business.
   Requires a Meta Business app and app review for publishing permissions.
 - **LinkedIn API** — publishing to a LinkedIn company page. Requires a LinkedIn app
   with the appropriate posting permissions.
 
 **Infrastructure (VPS)**
-- A VPS running Docker Compose (Ubuntu). Containers: Next.js app, PostgreSQL, MinIO, scheduler worker.
+- A VPS running Docker Compose (Ubuntu). Containers: Next.js app, PostgreSQL, MinIO, Puppeteer renderer, scheduler worker.
 - PostgreSQL for persistence (Docker container, data volume on VPS).
-- MinIO (S3-compatible) for generated images and exported designs (Docker container, data volume on VPS).
+- MinIO (S3-compatible) for generated images and exported PNG designs (Docker container, data volume on VPS). MinIO is served to the browser via pre-signed URLs only — the MinIO port is never publicly exposed.
+- **Puppeteer (headless Chromium)** — server-side HTML-to-PNG renderer. Runs as a
+  dedicated container (or within the Next.js app container). Receives an HTML string
+  and returns a PNG byte stream. Stateless; no session state retained between calls.
 - A dedicated Docker container (scheduler worker) for scheduled publishing, polling every minute.
 - Secrets managed via `.env` file on the VPS (never committed to git, permissions `600`, owned by root).
 
 **Internal prerequisites**
-- An existing Bistec **Canva brand kit** and at least one **brand template**.
+- An initial set of on-brand HTML/CSS templates authored for bistec-studio (see
+  Open Questions — template authoring process).
+- Bistec brand fonts available for self-hosting via MinIO (see Open Questions — font
+  licensing).
 - Bistec **Instagram Business** and **LinkedIn company page** accounts the tool
   can be authorized to publish to.
 
 ## Notes
 
 **Open questions to resolve in the design phase (`/specclaw:plan`):**
-0. **Path B OpenAI model** — which OpenAI model drives the Path B orchestration?
-   (GPT-4o is the natural choice for function-calling orchestration; confirm whether
-   a different model is preferred and whether the same model is used for copy
-   generation on Path A or a lighter model is acceptable there.)
+0. **Path B design model** — which Claude model drives the Path B freeform design
+   agent? (Claude 3.5 Sonnet is the natural choice for HTML/CSS generation with
+   tool use; confirm whether a different model is preferred.)
 1. **Auth provider** — custom auth vs. a managed provider vs. Microsoft Entra ID
    SSO (team is on a Microsoft stack; Entra is a natural fit but not a hard v1
    requirement). Also: exact role→permission matrix for publishing.
@@ -429,17 +416,18 @@ Each criterion must pass for the change to be considered complete.
 4. **Social API ownership/timeline** — who obtains the Meta Business app + Instagram
    Graph API review and the LinkedIn app/permissions, and by when. This is the
    highest-risk dependency for the publishing acceptance criteria.
-5. **Canva MCP setup** — confirm: (a) MCP server deployment/hosting for the
-   production bistec-studio environment (same server connected to Claude Code dev
-   session, or a separately hosted instance); (b) MCP client credentials/auth for
-   the Next.js backend; (c) the Bistec brand kit ID and the BTM* template IDs
-   accessible via `list-brand-kits`; (d) **how many brand templates** v1 supports.
-   The `generate-design-structured` tool (presentations only) is NOT in scope.
-6. **Scheduler infrastructure** — Dedicated Docker container (cron worker, polls every minute). Acceptable scheduling window: ±2 minutes (confirmed).
-7. **Cost/rate controls** — concrete per-user/per-period generation limits (NFR-7).
+5. **HTML template authoring process** — who creates the initial brand HTML/CSS
+   templates for bistec-studio, and what is the authoring workflow? (Developer-authored
+   and committed, or admin-pasted via the settings UI, or a hybrid?) Templates must
+   faithfully reproduce the Bistec brand; the authoring responsibility and approval
+   process should be defined before Wave 3b.
+6. **Font licensing** — are the Bistec brand fonts self-hostable (i.e. the team
+   holds a web license)? Fonts must be served from MinIO for Puppeteer to render
+   them correctly. If licensing does not permit self-hosting, a fallback font
+   strategy (Google Fonts equivalent, or licensed CDN) must be agreed before Wave 3b.
+7. **Scheduler infrastructure** — Dedicated Docker container (cron worker, polls every minute). Acceptable scheduling window: ±2 minutes (confirmed).
+8. **Cost/rate controls** — concrete per-user/per-period generation limits (NFR-7).
 
 **Deferred to later phases (explicitly not v1):** video generation/publishing,
-a custom pixel/canvas editor, edit-in-Canva, additional channels (Facebook/X/
-TikTok/YouTube), a full content-calendar surface, and external/client self-serve
-access.
-
+a custom pixel/canvas editor, additional channels (Facebook/X/TikTok/YouTube),
+a full content-calendar surface, and external/client self-serve access.
