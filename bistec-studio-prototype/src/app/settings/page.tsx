@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react'
 import {
   Settings, Cpu, Sparkles, Shield, Plus, Trash2,
   ChevronDown, ChevronUp, EyeOff, RotateCcw,
-  Upload, Check, Star, AlertCircle,
+  Upload, Check, Star, AlertCircle, Pencil, Layout,
 } from 'lucide-react'
 import Header from '@/components/Header'
 import {
-  providers, brandKits,
+  providers, brandKits, canvaBrandKits, canvaTemplatesByKit,
   type AvailableProvider, type BrandKit, type BrandKitPrompt,
-  type BrandKitArtifact, type ProviderSlot,
+  type BrandKitArtifact, type ProviderSlot, type CanvaTemplate,
 } from '@/data/mock'
 
 type ArtifactType = BrandKitArtifact['type']
@@ -66,6 +66,30 @@ export default function SettingsPage() {
   const [newKitName, setNewKitName] = useState('')
   const [newKitSource, setNewKitSource] = useState<'CANVA' | 'BACKEND' | 'HYBRID'>('BACKEND')
   const [newKitCanvaId, setNewKitCanvaId] = useState('')
+  const [canvaKitsLoading, setCanvaKitsLoading] = useState(false)
+  const [canvaKitsLoaded, setCanvaKitsLoaded] = useState(false)
+  const [canvaTemplatesLoading, setCanvaTemplatesLoading] = useState(false)
+  const [canvaTemplatesLoaded, setCanvaTemplatesLoaded] = useState(false)
+  const [modalTemplates, setModalTemplates] = useState<CanvaTemplate[]>([])
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
+  const [modalTemplatePrompts, setModalTemplatePrompts] = useState<Record<string, string>>({})
+  const [kitLinkedTemplates, setKitLinkedTemplates] = useState<Record<string, CanvaTemplate[]>>(
+    () => ({ 'bk-001': canvaTemplatesByKit['bk_bistec_main_xK9pQ'] ?? [] })
+  )
+
+  const [showEditKitModal, setShowEditKitModal] = useState(false)
+  const [editingKit, setEditingKit] = useState<BrandKit | null>(null)
+  const [editKitName, setEditKitName] = useState('')
+  const [editKitSource, setEditKitSource] = useState<'CANVA' | 'BACKEND' | 'HYBRID'>('BACKEND')
+  const [editKitCanvaId, setEditKitCanvaId] = useState('')
+  const [editCanvaKitsLoading, setEditCanvaKitsLoading] = useState(false)
+  const [editCanvaKitsLoaded, setEditCanvaKitsLoaded] = useState(false)
+  const [editCanvaTemplatesLoading, setEditCanvaTemplatesLoading] = useState(false)
+  const [editCanvaTemplatesLoaded, setEditCanvaTemplatesLoaded] = useState(false)
+  const [editModalTemplates, setEditModalTemplates] = useState<CanvaTemplate[]>([])
+  const [editSelectedTemplateIds, setEditSelectedTemplateIds] = useState<string[]>([])
+  const [editModalTemplatePrompts, setEditModalTemplatePrompts] = useState<Record<string, string>>({})
+
   const [localKits, setLocalKits] = useState<BrandKit[]>(brandKits)
 
   const [enabledProviders, setEnabledProviders] = useState<Record<string, boolean>>(
@@ -125,6 +149,114 @@ export default function SettingsPage() {
     setToastMessage('Artifact uploaded')
   }
 
+  function handleSourceChange(s: 'CANVA' | 'BACKEND' | 'HYBRID') {
+    setNewKitSource(s)
+    setNewKitCanvaId('')
+    setModalTemplates([])
+    setSelectedTemplateIds([])
+    setCanvaTemplatesLoaded(false)
+    if ((s === 'CANVA' || s === 'HYBRID') && !canvaKitsLoaded) {
+      setCanvaKitsLoading(true)
+      setTimeout(() => { setCanvaKitsLoading(false); setCanvaKitsLoaded(true) }, 1200)
+    }
+  }
+
+  function handleCanvaKitSelect(kitId: string) {
+    setNewKitCanvaId(kitId)
+    setModalTemplates([])
+    setSelectedTemplateIds([])
+    setModalTemplatePrompts({})
+    setCanvaTemplatesLoaded(false)
+    if (kitId) {
+      setCanvaTemplatesLoading(true)
+      setTimeout(() => {
+        const templates = canvaTemplatesByKit[kitId] ?? []
+        setModalTemplates(templates)
+        setModalTemplatePrompts(Object.fromEntries(templates.map(t => [t.id, t.imagePrompt ?? ''])))
+        setCanvaTemplatesLoading(false)
+        setCanvaTemplatesLoaded(true)
+      }, 900)
+    }
+  }
+
+  function toggleTemplateId(id: string, selected: string[], setSelected: (v: string[]) => void) {
+    setSelected(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+  }
+
+  function handleOpenEditKit(kit: BrandKit) {
+    setEditingKit(kit)
+    setEditKitName(kit.name)
+    setEditKitSource(kit.source)
+    setEditKitCanvaId(kit.canvaBrandKitId ?? '')
+    const linked = kitLinkedTemplates[kit.id] ?? []
+    setEditSelectedTemplateIds(linked.map(t => t.id))
+    setEditModalTemplatePrompts(Object.fromEntries(linked.map(t => [t.id, t.imagePrompt ?? ''])))
+    setEditCanvaKitsLoaded(!!kit.canvaBrandKitId)
+    setEditCanvaTemplatesLoaded(false)
+    setEditModalTemplates([])
+    if (kit.canvaBrandKitId) {
+      setEditCanvaTemplatesLoading(true)
+      setTimeout(() => {
+        const templates = canvaTemplatesByKit[kit.canvaBrandKitId!] ?? []
+        setEditModalTemplates(templates)
+        setEditModalTemplatePrompts(Object.fromEntries(
+          templates.map(t => {
+            const existing = linked.find(l => l.id === t.id)
+            return [t.id, existing?.imagePrompt ?? t.imagePrompt ?? '']
+          })
+        ))
+        setEditCanvaTemplatesLoading(false)
+        setEditCanvaTemplatesLoaded(true)
+      }, 900)
+    }
+    setShowEditKitModal(true)
+  }
+
+  function handleEditSourceChange(s: 'CANVA' | 'BACKEND' | 'HYBRID') {
+    setEditKitSource(s)
+    setEditKitCanvaId('')
+    setEditModalTemplates([])
+    setEditSelectedTemplateIds([])
+    setEditCanvaTemplatesLoaded(false)
+    if ((s === 'CANVA' || s === 'HYBRID') && !editCanvaKitsLoaded) {
+      setEditCanvaKitsLoading(true)
+      setTimeout(() => { setEditCanvaKitsLoading(false); setEditCanvaKitsLoaded(true) }, 1200)
+    }
+  }
+
+  function handleEditCanvaKitSelect(kitId: string) {
+    setEditKitCanvaId(kitId)
+    setEditModalTemplates([])
+    setEditSelectedTemplateIds([])
+    setEditModalTemplatePrompts({})
+    setEditCanvaTemplatesLoaded(false)
+    if (kitId) {
+      setEditCanvaTemplatesLoading(true)
+      setTimeout(() => {
+        const templates = canvaTemplatesByKit[kitId] ?? []
+        setEditModalTemplates(templates)
+        setEditModalTemplatePrompts(Object.fromEntries(templates.map(t => [t.id, t.imagePrompt ?? ''])))
+        setEditCanvaTemplatesLoading(false)
+        setEditCanvaTemplatesLoaded(true)
+      }, 900)
+    }
+  }
+
+  function handleSaveEditKit() {
+    if (!editingKit || !editKitName.trim()) return
+    setLocalKits(prev => prev.map(k => k.id === editingKit.id
+      ? { ...k, name: editKitName.trim(), source: editKitSource, canvaBrandKitId: editKitCanvaId || undefined }
+      : k
+    ))
+    const linkedTemplates = editModalTemplates
+      .filter(t => editSelectedTemplateIds.includes(t.id))
+      .map(t => ({ ...t, imagePrompt: editModalTemplatePrompts[t.id] || undefined }))
+    setKitLinkedTemplates(prev => ({ ...prev, [editingKit.id]: linkedTemplates }))
+    setShowEditKitModal(false)
+    setEditingKit(null)
+    setToastMessage('Brand kit updated')
+  }
+
   function handleAddKit() {
     if (!newKitName.trim()) return
     const newKit: BrandKit = {
@@ -133,9 +265,15 @@ export default function SettingsPage() {
       isDefault: false, isDeleted: false, createdAt: new Date().toISOString().slice(0, 10),
       prompts: [], artifacts: [],
     }
+    const linkedTemplates = modalTemplates
+      .filter(t => selectedTemplateIds.includes(t.id))
+      .map(t => ({ ...t, imagePrompt: modalTemplatePrompts[t.id] || undefined }))
     setLocalKits(prev => [...prev, newKit])
     setKitArtifacts(prev => ({ ...prev, [newKit.id]: [] }))
+    setKitLinkedTemplates(prev => ({ ...prev, [newKit.id]: linkedTemplates }))
     setNewKitName(''); setNewKitCanvaId(''); setNewKitSource('BACKEND')
+    setModalTemplates([]); setSelectedTemplateIds([]); setModalTemplatePrompts({})
+    setCanvaKitsLoaded(false); setCanvaTemplatesLoaded(false)
     setShowAddKitModal(false)
     setToastMessage('Brand kit added')
   }
@@ -233,8 +371,17 @@ export default function SettingsPage() {
                         <span className="font-mono text-[0.62rem] text-slate-600 hidden sm:inline">{kit.canvaBrandKitId}</span>
                       )}
                     </div>
-                    <div className="text-slate-600 flex-shrink-0">
-                      {expandedKits.has(kit.id) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={e => { e.stopPropagation(); handleOpenEditKit(kit) }}
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-slate-300 hover:bg-white/[0.06] transition-all"
+                        title="Edit brand kit"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <span className="text-slate-600">
+                        {expandedKits.has(kit.id) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </span>
                     </div>
                   </button>
 
@@ -361,6 +508,45 @@ export default function SettingsPage() {
                           ))}
                         </div>
                       </div>
+
+                      {(kit.source === 'CANVA' || kit.source === 'HYBRID') && (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-[0.72rem] font-semibold text-slate-500 uppercase tracking-wider">Brand Templates</span>
+                            <button
+                              onClick={() => handleOpenEditKit(kit)}
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[0.72rem] text-violet-400 hover:bg-violet-400/10 transition-colors"
+                            >
+                              <Plus size={12} /> Manage Templates
+                            </button>
+                          </div>
+                          <div className="space-y-1.5">
+                            {(kitLinkedTemplates[kit.id] ?? []).length === 0 ? (
+                              <div className="flex items-center gap-2 text-[0.75rem] text-slate-600 py-2">
+                                <AlertCircle size={13} /> No templates linked — click Manage Templates to add
+                              </div>
+                            ) : (
+                              (kitLinkedTemplates[kit.id] ?? []).map(tmpl => (
+                                <div key={tmpl.id} className="py-2 px-3 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                                  <div className="flex items-center gap-3">
+                                    <Layout size={13} className="text-violet-400 flex-shrink-0" />
+                                    <span className="flex-1 min-w-0 text-[0.8rem] text-slate-300 truncate">{tmpl.name}</span>
+                                    <span className="font-mono text-[0.6rem] text-slate-700 flex-shrink-0">{tmpl.id}</span>
+                                  </div>
+                                  {tmpl.imagePrompt && (
+                                    <p className="mt-1.5 ml-6 text-[0.68rem] text-slate-600 leading-relaxed line-clamp-2">
+                                      <span className="text-slate-700 mr-1">Image prompt:</span>{tmpl.imagePrompt}
+                                    </p>
+                                  )}
+                                  {!tmpl.imagePrompt && (
+                                    <p className="mt-1 ml-6 text-[0.65rem] text-slate-700 italic">No image prompt — uses brief</p>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                     </div>
                   )}
@@ -504,7 +690,7 @@ export default function SettingsPage() {
                     {(['BACKEND', 'CANVA', 'HYBRID'] as const).map(s => (
                       <button
                         key={s}
-                        onClick={() => setNewKitSource(s)}
+                        onClick={() => handleSourceChange(s)}
                         className={`px-3 py-1.5 rounded-lg text-[0.75rem] font-medium border transition-all ${
                           newKitSource === s
                             ? `${SOURCE_BADGE[s]} border-current`
@@ -518,13 +704,111 @@ export default function SettingsPage() {
                 </div>
                 {(newKitSource === 'CANVA' || newKitSource === 'HYBRID') && (
                   <div>
-                    <label className="block text-[0.72rem] font-medium text-slate-500 mb-1.5">Canva Brand Kit ID <span className="text-slate-700">(optional)</span></label>
-                    <input
-                      value={newKitCanvaId}
-                      onChange={e => setNewKitCanvaId(e.target.value)}
-                      placeholder="bk_xxxxxxxx"
-                      className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg px-3 py-2 text-[0.82rem] font-mono text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-400/30 transition-colors"
-                    />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[0.72rem] font-medium text-slate-500">Canva Brand Kit</label>
+                      <span className="text-[0.62rem] text-slate-600">via list-brand-kits</span>
+                    </div>
+                    {canvaKitsLoading ? (
+                      <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[0.75rem] text-slate-500">
+                        <svg className="animate-spin w-3.5 h-3.5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        Fetching from Canva…
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <button
+                          onClick={() => setNewKitCanvaId('')}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-[0.78rem] transition-all ${
+                            newKitCanvaId === ''
+                              ? 'border-white/[0.12] bg-white/[0.04] text-slate-400'
+                              : 'border-transparent text-slate-600 hover:bg-white/[0.02]'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full border-2 flex-shrink-0 border-current flex items-center justify-center">
+                            {newKitCanvaId === '' && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                          </span>
+                          <span className="italic">None — backend only</span>
+                        </button>
+                        {canvaBrandKits.map(ck => (
+                          <button
+                            key={ck.id}
+                            onClick={() => handleCanvaKitSelect(ck.id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all ${
+                              newKitCanvaId === ck.id
+                                ? 'border-violet-400/30 bg-violet-400/[0.06]'
+                                : 'border-transparent hover:bg-white/[0.02]'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full border-2 flex-shrink-0 border-violet-400 flex items-center justify-center">
+                              {newKitCanvaId === ck.id && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-[0.78rem] text-slate-200 font-medium">{ck.name}</div>
+                              {ck.description && <div className="text-[0.65rem] text-slate-500">{ck.description}</div>}
+                              <div className="text-[0.6rem] text-slate-700 font-mono mt-0.5">{ck.id}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {newKitCanvaId && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[0.72rem] font-medium text-slate-500">Brand Templates</label>
+                      <span className="text-[0.62rem] text-slate-600">via search-brand-templates</span>
+                    </div>
+                    {canvaTemplatesLoading ? (
+                      <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[0.75rem] text-slate-500">
+                        <svg className="animate-spin w-3.5 h-3.5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        Fetching templates…
+                      </div>
+                    ) : canvaTemplatesLoaded && modalTemplates.length === 0 ? (
+                      <p className="text-[0.75rem] text-slate-600 py-2">No templates found for this brand kit</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {modalTemplates.map(tmpl => {
+                          const isSelected = selectedTemplateIds.includes(tmpl.id)
+                          return (
+                            <div key={tmpl.id} className={`rounded-lg border transition-all ${isSelected ? 'border-violet-400/30 bg-violet-400/[0.04]' : 'border-transparent'}`}>
+                              <button
+                                onClick={() => toggleTemplateId(tmpl.id, selectedTemplateIds, setSelectedTemplateIds)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
+                              >
+                                <span className={`w-3.5 h-3.5 rounded flex-shrink-0 border flex items-center justify-center transition-all ${
+                                  isSelected ? 'bg-violet-400 border-violet-400' : 'border-white/[0.2]'
+                                }`}>
+                                  {isSelected && <Check size={9} className="text-black" />}
+                                </span>
+                                <Layout size={12} className="text-slate-500 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[0.78rem] text-slate-200 font-medium">{tmpl.name}</div>
+                                  <div className="text-[0.6rem] text-slate-700 font-mono">{tmpl.id}</div>
+                                </div>
+                              </button>
+                              {isSelected && (
+                                <div className="px-3 pb-2.5">
+                                  <label className="block text-[0.65rem] text-slate-600 mb-1">Background image prompt <span className="text-slate-700">(optional — overrides brief)</span></label>
+                                  <textarea
+                                    value={modalTemplatePrompts[tmpl.id] ?? ''}
+                                    onChange={e => setModalTemplatePrompts(prev => ({ ...prev, [tmpl.id]: e.target.value }))}
+                                    placeholder="e.g. Dark abstract tech background, deep navy tones, cinematic lighting…"
+                                    rows={2}
+                                    className="w-full bg-black/20 border border-white/[0.06] rounded-lg px-2.5 py-1.5 text-[0.75rem] text-slate-300 placeholder:text-slate-700 outline-none focus:border-violet-400/30 resize-none transition-colors"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -538,6 +822,169 @@ export default function SettingsPage() {
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[0.78rem] bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                 >
                   <Plus size={13} /> Add Kit
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showEditKitModal && editingKit && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowEditKitModal(false)} />
+          <div className="fixed inset-0 z-51 flex items-center justify-center p-4 pointer-events-none">
+            <div className="glass rounded-2xl border border-white/[0.08] shadow-2xl shadow-black/60 w-full max-w-md pointer-events-auto animate-scale-in max-h-[90vh] flex flex-col">
+              <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between flex-shrink-0">
+                <span className="text-[0.9rem] font-semibold text-slate-200">Edit Brand Kit</span>
+                <button onClick={() => setShowEditKitModal(false)} className="text-slate-600 hover:text-slate-400 transition-colors text-[1.1rem] leading-none">×</button>
+              </div>
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div>
+                  <label className="block text-[0.72rem] font-medium text-slate-500 mb-1.5">Name</label>
+                  <input
+                    value={editKitName}
+                    onChange={e => setEditKitName(e.target.value)}
+                    className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg px-3 py-2 text-[0.82rem] text-slate-200 placeholder:text-slate-600 outline-none focus:border-cyan-400/30 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[0.72rem] font-medium text-slate-500 mb-2">Source</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {(['BACKEND', 'CANVA', 'HYBRID'] as const).map(s => (
+                      <button
+                        key={s}
+                        onClick={() => handleEditSourceChange(s)}
+                        className={`px-3 py-1.5 rounded-lg text-[0.75rem] font-medium border transition-all ${
+                          editKitSource === s
+                            ? `${SOURCE_BADGE[s]} border-current`
+                            : 'text-slate-600 border-white/[0.06] hover:border-white/[0.12]'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(editKitSource === 'CANVA' || editKitSource === 'HYBRID') && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[0.72rem] font-medium text-slate-500">Canva Brand Kit</label>
+                      <span className="text-[0.62rem] text-slate-600">via list-brand-kits</span>
+                    </div>
+                    {editCanvaKitsLoading ? (
+                      <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[0.75rem] text-slate-500">
+                        <svg className="animate-spin w-3.5 h-3.5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        Fetching from Canva…
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <button
+                          onClick={() => handleEditCanvaKitSelect('')}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left text-[0.78rem] transition-all ${
+                            editKitCanvaId === ''
+                              ? 'border-white/[0.12] bg-white/[0.04] text-slate-400'
+                              : 'border-transparent text-slate-600 hover:bg-white/[0.02]'
+                          }`}
+                        >
+                          <span className="w-3 h-3 rounded-full border-2 flex-shrink-0 border-current flex items-center justify-center">
+                            {editKitCanvaId === '' && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                          </span>
+                          <span className="italic">None — backend only</span>
+                        </button>
+                        {canvaBrandKits.map(ck => (
+                          <button
+                            key={ck.id}
+                            onClick={() => handleEditCanvaKitSelect(ck.id)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all ${
+                              editKitCanvaId === ck.id
+                                ? 'border-violet-400/30 bg-violet-400/[0.06]'
+                                : 'border-transparent hover:bg-white/[0.02]'
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full border-2 flex-shrink-0 border-violet-400 flex items-center justify-center">
+                              {editKitCanvaId === ck.id && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="text-[0.78rem] text-slate-200 font-medium">{ck.name}</div>
+                              {ck.description && <div className="text-[0.65rem] text-slate-500">{ck.description}</div>}
+                              <div className="text-[0.6rem] text-slate-700 font-mono mt-0.5">{ck.id}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {editKitCanvaId && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[0.72rem] font-medium text-slate-500">Brand Templates</label>
+                      <span className="text-[0.62rem] text-slate-600">via search-brand-templates</span>
+                    </div>
+                    {editCanvaTemplatesLoading ? (
+                      <div className="flex items-center gap-2 py-3 px-3 rounded-lg bg-white/[0.02] border border-white/[0.06] text-[0.75rem] text-slate-500">
+                        <svg className="animate-spin w-3.5 h-3.5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        Fetching templates…
+                      </div>
+                    ) : editCanvaTemplatesLoaded && editModalTemplates.length === 0 ? (
+                      <p className="text-[0.75rem] text-slate-600 py-2">No templates found for this brand kit</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {editModalTemplates.map(tmpl => {
+                          const isSelected = editSelectedTemplateIds.includes(tmpl.id)
+                          return (
+                            <div key={tmpl.id} className={`rounded-lg border transition-all ${isSelected ? 'border-violet-400/30 bg-violet-400/[0.04]' : 'border-transparent'}`}>
+                              <button
+                                onClick={() => toggleTemplateId(tmpl.id, editSelectedTemplateIds, setEditSelectedTemplateIds)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 text-left"
+                              >
+                                <span className={`w-3.5 h-3.5 rounded flex-shrink-0 border flex items-center justify-center transition-all ${
+                                  isSelected ? 'bg-violet-400 border-violet-400' : 'border-white/[0.2]'
+                                }`}>
+                                  {isSelected && <Check size={9} className="text-black" />}
+                                </span>
+                                <Layout size={12} className="text-slate-500 flex-shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[0.78rem] text-slate-200 font-medium">{tmpl.name}</div>
+                                  <div className="text-[0.6rem] text-slate-700 font-mono">{tmpl.id}</div>
+                                </div>
+                              </button>
+                              {isSelected && (
+                                <div className="px-3 pb-2.5">
+                                  <label className="block text-[0.65rem] text-slate-600 mb-1">Background image prompt <span className="text-slate-700">(optional — overrides brief)</span></label>
+                                  <textarea
+                                    value={editModalTemplatePrompts[tmpl.id] ?? ''}
+                                    onChange={e => setEditModalTemplatePrompts(prev => ({ ...prev, [tmpl.id]: e.target.value }))}
+                                    placeholder="e.g. Dark abstract tech background, deep navy tones, cinematic lighting…"
+                                    rows={2}
+                                    className="w-full bg-black/20 border border-white/[0.06] rounded-lg px-2.5 py-1.5 text-[0.75rem] text-slate-300 placeholder:text-slate-700 outline-none focus:border-violet-400/30 resize-none transition-colors"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="px-5 pb-5 flex gap-2 justify-end flex-shrink-0 border-t border-white/[0.06] pt-4">
+                <button onClick={() => setShowEditKitModal(false)} className="px-4 py-2 rounded-lg text-[0.78rem] text-slate-500 hover:text-slate-400 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEditKit}
+                  disabled={!editKitName.trim()}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[0.78rem] bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  <Check size={13} /> Save Changes
                 </button>
               </div>
             </div>

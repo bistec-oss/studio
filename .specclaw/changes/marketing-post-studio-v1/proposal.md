@@ -1,4 +1,4 @@
-# Proposal: Marketing Post Studio (v1)
+﻿# Proposal: Marketing Post Studio (v1)
 
 **Created:** 2026-06-08
 **Status:** 🟡 Draft
@@ -26,7 +26,7 @@ brand-consistent rendering and export.
 **Core v1 flow:**
 1. An authenticated team member writes a **brief** (topic, goal, channel, tone).
 2. **OpenAI GPT** drafts the marketing copy from the brief.
-3. **gpt-image-1** generates the post imagery.
+3. **gpt-image-2** generates the post imagery.
 4. The copy + image **auto-fill a Canva brand template** drawn from Bistec Care's
    existing Canva brand kit.
 5. The user can **edit in-app** — tweak the copy text, regenerate the image, or
@@ -46,7 +46,7 @@ finished posts, and a publish-history log.
   publishing gated by role).
 - Brief input UI.
 - AI copy generation via **OpenAI GPT**.
-- AI image generation via **gpt-image-1**.
+- AI image generation via **gpt-image-2**.
 - Canva integration: pull brand kit + a small set of brand templates, auto-fill
   with generated copy/image, export the rendered design.
 - In-app refinement: edit copy text, regenerate image, swap template, re-export.
@@ -99,6 +99,21 @@ finished posts, and a publish-history log.
 8. **Brand voice / guardrails:** Are there compliance constraints on healthcare
    marketing copy (claims, disclaimers) the copy generation must respect?
 
+## Decisions made post-proposal
+
+The following were settled during the design and planning phase — recorded here for completeness:
+
+- **Hosting:** moved from Azure to self-hosted VPS (Docker Compose). Azure dependencies removed.
+- **Auth:** Clerk (admin + editor roles).
+- **Image model:** `gpt-image-2`. Policy: always use the latest available model; new providers default to their latest image generation model.
+- **Canva integration:** via MCP server (MCP client in Next.js backend), not raw REST API.
+- **Brand kits:** first-class admin-managed entities with versioned brand voice prompts, artifacts, and linked Canva brand templates. Templates discovered via `search-brand-templates` — no manual ID entry.
+- **Two design paths:** Path A (preset Canva template, Claude element resolver) and Path B (GPT-4o orchestrates Canva MCP tools as functions).
+- **AGUI design refinement:** After generation, the draft page includes a chat-driven refinement panel. Users type natural language instructions ("reposition the topic", "change the background"); the AI calls the appropriate Canva MCP operations. Each committed edit is recorded as a revision with an explicit undo step. If an instruction breaks the brand kit the AI warns before applying; user can override. The existing regenerate buttons remain — AGUI is additive. The AI provider driving refinements is the same one the user selected for the brief.
+- **AI provider registration from UI:** Admins register new AI providers (Anthropic, OpenAI, and others) directly from the settings UI — no redeploy required. The system auto-identifies the provider from the API key prefix where possible (e.g. `sk-ant-` → Anthropic); if unrecognized, the admin manually specifies the provider name and proceeds. Keys are validated against the provider's API before saving and stored encrypted. The model selector in the brief UI shows the provider name and label as registered by the admin.
+- **v2 target — bistec-studio as an interoperable AI system:** Architecture is compatible with exposing bistec-studio as both an **MCP server** (AI models call `generate-post`, `list-brand-kits`, `publish-post` as tools) and an **ACP server** (Agent Communication Protocol — peer agents orchestrate bistec-studio as a step in larger workflows). Both are additive adapters over the same tool logic; no redesign required.
+
 ---
 
 **To proceed:** Review this proposal and approve to begin planning.
+

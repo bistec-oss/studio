@@ -1,12 +1,12 @@
-# Tasks: Marketing Post Studio (v1)
+﻿# Tasks: Marketing Post Studio (v1)
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
-**Total Tasks:** 27
+**Total Tasks:** 28
 
 ## Summary
 
-27 tasks across 6 waves (plus Wave 3b). Waves 1–3 establish the foundation
+28 tasks across 6 waves (plus Wave 3b). Waves 1–3 establish the foundation
 (project scaffold, design system, data layer, provider abstraction, Canva + MinIO
 clients). Wave 3b adds the brand kit, project, and campaign data layer (these are
 referenced by the brief/generation flow). Waves 4–5 build the two design paths and
@@ -35,7 +35,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `docker-compose.yml`, `.env.example`, `.gitignore`
   - Estimate: medium
   - Depends: T01
-  - Notes: `docker-compose.yml` defines five services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only), `agent` (computer-use agent service, built from `agent-service/Dockerfile`, port 3001 on internal Docker network only — never publicly exposed). All services use `env_file: .env`. `.env.example` documents every variable including `ANTHROPIC_API_KEY`, `CANVA_AGENT_EMAIL`, `CANVA_AGENT_PASSWORD`, `AGENT_SERVICE_URL`, `AGENT_TIMEOUT_SECONDS`. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
+  - Notes: `docker-compose.yml` defines four services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only). All services use `env_file: .env` — no secrets in compose file. `.env.example` documents every variable. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
 
 - [ ] `T03` — Prisma schema + initial migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
@@ -63,7 +63,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/providers/interfaces/CopyProvider.ts`, `src/providers/interfaces/ImageProvider.ts`, `src/providers/interfaces/DesignOrchestrator.ts`
   - Estimate: small
   - Depends: T01
-  - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string, onStep: (step: AgentStep) => Promise<void>): Promise<{ canvaDesignId: string }>` where `AgentStep = { step: string; status: 'in_progress' | 'done' | 'error'; timestamp: string }`. The `onStep` callback is invoked as the agent emits progress events; the route handler uses it to append to `Draft.agentSteps` in the DB for SSE delivery to the browser. These interfaces are the stable contract — all future AI models plug in here.
+  - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string): Promise<{ canvaDesignId: string }>`. These interfaces are the stable contract — all future AI models plug in here.
 
 - [ ] `T06` — OpenAI copy provider implementation
   - Files: `src/providers/implementations/copy/openai.ts`
@@ -75,7 +75,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/providers/implementations/image/openai.ts`
   - Estimate: small
   - Depends: T05
-  - Notes: Implements `ImageProvider`. Calls gpt-image-1 via OpenAI Images API. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`.
+  - Notes: Implements `ImageProvider`. Calls gpt-image-2 via OpenAI Images API. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`.
 
 - [ ] `T08` — Provider registry
   - Files: `src/providers/registry.ts`
@@ -87,11 +87,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 3 — Canva MCP client + MinIO storage
 
-- [ ] `T09` — Canva MCP client with transaction guard
-  - Files: `src/lib/canva/client.ts`, `src/lib/canva/types.ts`
+- [ ] `T09` — Canva MCP client with transaction guard + element resolver
+  - Files: `src/lib/canva/client.ts`, `src/lib/canva/types.ts`, `src/lib/canva/elementResolver.ts`
   - Estimate: medium
   - Depends: T01
-  - Notes: Typed wrapper over all Canva MCP tool calls used in the system: `listBrandKits`, `createFromTemplate`, `uploadAsset`, `getDesignContent`, `getAssets`, `withEditingTransaction` (the `try/finally` guard — see design.md), `exportDesign`. The `withEditingTransaction` method is the only way callers can open an editing session — raw start/commit/cancel are not exported.
+  - Notes: Two deliverables. (1) `client.ts` — typed wrapper over all Canva MCP tool calls: `listBrandKits`, `createFromTemplate`, `uploadAsset`, `getDesignContent`, `getAssets`, `withEditingTransaction` (the `try/finally` guard — see design.md), `exportDesign`. The `withEditingTransaction` method is the only way callers can open an editing session — raw start/commit/cancel are not exported. (2) `elementResolver.ts` — Claude-powered element targeting. After `getDesignContent` returns the element tree, `resolveEditingOperations(elementTree, intent)` calls Claude (Anthropic SDK, claude-sonnet-4-6) with the tree as JSON and the edit intent (text slots + image slots with roles), and Claude returns the matching element IDs. Validates that every requested slot was matched — throws `ElementNotFoundError` if not. No element IDs are hardcoded or pre-mapped per template. Template designers just need to use descriptive layer names in Canva.
 
 - [ ] `T10` — MinIO storage client
   - Files: `src/lib/storage/minio.ts`
@@ -104,10 +104,10 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 ### Wave 3b — Brand kits, Projects & Campaigns (data layer)
 
 - [ ] `T26` — BrandKit management (API + admin UI)
-  - Files: `src/app/api/admin/brandkits/route.ts`, `src/app/api/admin/brandkits/[id]/route.ts`, `src/app/api/admin/brandkits/[id]/prompt/route.ts`, `src/app/api/admin/brandkits/[id]/artifacts/route.ts`, `src/lib/brandkit/resolve.ts`, `src/app/(app)/admin/settings/brandkits/page.tsx`
+  - Files: `src/app/api/admin/brandkits/route.ts`, `src/app/api/admin/brandkits/[id]/route.ts`, `src/app/api/admin/brandkits/[id]/prompt/route.ts`, `src/app/api/admin/brandkits/[id]/artifacts/route.ts`, `src/app/api/admin/brandkits/[id]/templates/route.ts`, `src/app/api/admin/brandkits/[id]/templates/[tid]/route.ts`, `src/app/api/canva/brand-templates/route.ts`, `src/lib/brandkit/resolve.ts`, `src/app/(app)/admin/settings/brandkits/page.tsx`
   - Estimate: large
-  - Depends: T03, T04, T10, T25
-  - Notes: Admin-only BrandKit CRUD. A BrandKit is hybrid (`source = CANVA | BACKEND | HYBRID`) with optional `canvaBrandKitId` and an optional MinIO artifact folder. (1) Prompt versioning: list versions, POST new version (becomes active), POST `/prompt/[v]/activate` for rollback (EC-13). (2) Artifacts: upload to MinIO `brandkits` bucket with `type` + `feedToAI` flag, list, delete. (3) Set the system default kit (`isDefault`, one per system). (4) `src/lib/brandkit/resolve.ts` exports the shared precedence resolver (campaign → project default → system default) reused by T23 and T14. Admin-role-gated throughout. FR-25b–FR-29b, AC-5c, AC-5d, AC-5e.
+  - Depends: T03, T04, T09, T10, T25
+  - Notes: Admin-only BrandKit CRUD. A BrandKit is hybrid (`source = CANVA | BACKEND | HYBRID`) with optional `canvaBrandKitId` and an optional MinIO artifact folder. **Create and Edit are separate UI flows** — an Edit button on each kit card opens a pre-populated modal (name, source, Canva kit link, linked templates with imagePrompts); prompt versioning and artifact management stay on the card and are not part of the edit modal. `PATCH /api/admin/brandkits/[id]` handles all editable fields. (1) Prompt versioning: list versions, POST new version (becomes active), POST `/prompt/[v]/activate` for rollback (EC-13). (1b) **AI prompt assistance**: `POST /api/admin/brandkits/[id]/prompt/generate` — admin submits plain-text brand description, Claude returns a drafted brand voice prompt for review (not auto-saved); `POST /api/admin/brandkits/[id]/prompt/improve` — Claude refines the current active prompt, returns improved version for review. Both admin-gated, both use Anthropic SDK (claude-sonnet-4-6). (2) Artifacts: upload to MinIO `brandkits` bucket with `type` + `feedToAI` flag, list, delete. (3) Set the system default kit (`isDefault`, one per system). (4) **Template management**: when creating or editing a brand kit, the admin UI calls `GET /api/canva/brand-templates?kitId=bk_xxx` which proxies `search-brand-templates` MCP filtered to the linked Canva brand kit — results are shown as a checkbox picker (no manual BTM* ID entry). Each selected template has an optional `imagePrompt` field — if set, used verbatim for gpt-image-2 background generation instead of deriving from the brief (FR-25c). Selected templates are stored as `BrandKitTemplate` rows with `imagePrompt`; `POST/DELETE /api/admin/brandkits/[id]/templates/[tid]` manages them. The brief wizard (T11) reads these rows to populate the template picker for Path A; T13 reads `imagePrompt` to resolve the image generation prompt. (5) `src/lib/brandkit/resolve.ts` exports the shared precedence resolver (campaign → project default → system default) reused by T23 and T14. Admin-role-gated throughout. FR-13, FR-25b–FR-25c, FR-26b–FR-26c, FR-28b–FR-29b, AC-5c, AC-5d, AC-5e.
 
 - [ ] `T23` — Project & Campaign API routes
   - Files: `src/app/api/projects/route.ts`, `src/app/api/projects/[id]/route.ts`, `src/app/api/campaigns/route.ts`, `src/app/api/campaigns/[id]/route.ts`, `src/app/api/campaigns/[id]/projects/route.ts`, `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts`, `src/app/api/campaigns/[id]/brandkit/route.ts`
@@ -129,25 +129,25 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
   - Depends: T03, T04, T08, T23, T25, T26
-  - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Model dropdowns populate from `GET /api/providers/available`. Design mode radio (Path A / Path B). FR-5, FR-5a, FR-5b, FR-6, FR-28–FR-30, AC-13, AC-16, AC-17.
+  - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Model dropdowns populate from `GET /api/providers/available`. Design mode radio (Path A / Path B). **Image uploads differ by path:** Path A shows a single "Additional Image" upload (stored as `additionalImageUrl` in Brief — placed into a specific template slot by the element resolver). Path B shows a multi-image "Reference Images" upload (stored as `referenceImageUrls[]` in Brief — passed to the GPT orchestrator which decides how to use them). The image model selector is hidden for Path B. FR-5, FR-5a, FR-5b, FR-6, FR-18c, FR-28–FR-30, AC-13, AC-16, AC-17.
 
 - [ ] `T12` — Copy + image generation API routes
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
   - Estimate: small
   - Depends: T08, T10, T11
-  - Notes: Both routes are POST, auth-required, create/update a Draft record. Image route uploads gpt-image-1 output to MinIO `generated-images` bucket and stores the pre-signed URL. Both support regeneration (POST again on existing draftId). FR-7–FR-11, AC-4.
+  - Notes: Both routes are POST, auth-required, create/update a Draft record. Image route uploads gpt-image-2 output to MinIO `generated-images` bucket and stores the pre-signed URL. Both support regeneration (POST again on existing draftId). FR-7–FR-11, AC-4.
 
 - [ ] `T13` — Path A: design assembly API route (preset template)
   - Files: `src/app/api/design/assemble/route.ts` (mode=template branch)
   - Estimate: medium
   - Depends: T09, T12
-  - Notes: `POST /api/design/assemble` with `mode=template`. Calls `uploadAsset` → `createFromTemplate` → `withEditingTransaction([replace_text, update_fill])`. Reads element IDs from `getDesignContent` after template instantiation. Stores `canvaDesignId` on Draft. FR-12, FR-12a, FR-13, FR-14.
+  - Notes: `POST /api/design/assemble` with `mode=template`. Flow: (1) `uploadAsset(bgImageUrl)` for the AI-generated background, `uploadAsset(additionalImageUrl)` if user uploaded a photo. (2) `createFromTemplate(templateId)`. (3) `getDesignContent(designId)` → element tree. (4) `elementResolver.resolveEditingOperations(tree, intent)` where intent carries topic/copy as text slots and the Canva asset IDs as image slots with human-readable roles ("background image", "person photo"). (5) `withEditingTransaction(resolvedOps)` → commit. Stores `canvaDesignId` on Draft. FR-12, FR-12a, FR-12b, FR-13, FR-14.
 
-- [ ] `T14` — Computer-use agent service (Path B design generation)
-  - Files: `agent-service/src/index.ts`, `agent-service/src/canva-agent.ts`, `agent-service/src/session.ts`, `agent-service/package.json`, `agent-service/Dockerfile`, `src/providers/implementations/orchestrator/agent.ts`, `src/app/api/design/assemble/route.ts` (mode=generate branch), `src/app/api/design/assemble/[draftId]/steps/route.ts`, `docker-compose.yml` (add `agent` service)
+- [ ] `T14` — Path B: OpenAI orchestrator + design assembly
+  - Files: `src/providers/implementations/orchestrator/openai-canva.ts`, `src/app/api/design/assemble/route.ts` (mode=generate branch)
   - Estimate: large
-  - Depends: T05, T09, T12, T26
-  - Notes: Two parts. (1) **Agent service** (`agent-service/`): standalone Node.js + Playwright app. Built from `mcr.microsoft.com/playwright/node:20`. Exposes internal HTTP API: `POST /generate` starts a session, `GET /generate/:sessionId` returns status + steps. On `/generate`: opens Canva editor in persistent headless browser (dedicated Canva account — `CANVA_AGENT_EMAIL`/`CANVA_AGENT_PASSWORD`), creates new design at channel dimensions, uses Claude computer-use API (`ANTHROPIC_API_KEY`) to compose full layout (background, imagery, text, brand styling) using brief + brand context (voice prompt + feedToAI artifact URLs). Emits step events to `AGENT_CALLBACK_URL` (the Next.js app) as work progresses. Returns `{ canvaDesignId }` on completion. Hard timeout via `AGENT_TIMEOUT_SECONDS` (default 300s) — Playwright terminates active tab on expiry (EC-12). Re-authenticates if Canva session expires (EC-17). On any error: terminates session, deletes partial design if created. (2) **Orchestrator adapter** (`src/providers/implementations/orchestrator/agent.ts`): implements `DesignOrchestrator`. POSTs to agent service (`AGENT_SERVICE_URL`), polls for steps, calls `onStep` callback as events arrive (route handler appends to `Draft.agentSteps`), resolves with `{ canvaDesignId }`. (3) **SSE route** (`GET /api/design/assemble/[draftId]/steps`): streams `Draft.agentSteps` as Server-Sent Events for the live progress UI (T27). FR-18b–FR-22b, EC-11, EC-12, EC-17.
+  - Depends: T09, T12, T08, T26
+  - Notes: Implements `DesignOrchestrator`. Resolves the BrandKit (campaign → project → system default) and passes brief + the kit's active `BrandKitPrompt` + feed-to-AI artifacts + `canvaBrandKitId` + `brief.referenceImageUrls[]` (user-supplied images, uploaded to MinIO at brief creation time) + Canva MCP tool schemas as OpenAI function definitions. The orchestrator receives all reference image URLs and decides their role — it may call `upload-asset-from-url` to place them directly, use them as gpt-image-2 style context, or ignore them. Enforces 20-tool-call hard limit (EC-12). On any error: calls `cancelTransaction` before throwing (EC-11). Stores `canvaDesignId` on Draft. FR-18b–FR-21b, FR-18c, FR-27b.
 
 - [ ] `T15` — Design export API route
   - Files: `src/app/api/design/export/route.ts`
@@ -189,27 +189,27 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 - [ ] `T20` — Admin: provider management settings
   - Files: `src/app/api/admin/providers/route.ts`, `src/app/api/admin/providers/[id]/route.ts`, `src/app/(app)/admin/settings/page.tsx`
-  - Estimate: small
-  - Depends: T04, T08, T25
-  - Notes: Provider management section of the admin settings page (brand kit management lives in T26). GET all registered providers per slot, PATCH to enable/disable or set as default, immediately reflected in `GET /api/providers/available` for all users' brief UIs. Links to the BrandKit manager (T26). Admin-role-gated. FR-31, AC-14, AC-15.
-
-- [ ] `T21` — Draft refinement UI
-  - Files: `src/app/(app)/draft/[id]/page.tsx`
   - Estimate: medium
-  - Depends: T13, T14, T15, T25
-  - Notes: Shows generated copy (editable textarea), generated image (with "Regenerate" button), template selector (Path A: dropdown of brand templates; Path B: N/A), preview of assembled Canva design (thumbnail via `get-design-thumbnail`), "Export" button. For Path B drafts with `status=IN_PROGRESS`, renders the `AgentProgress` component (T27) in place of the thumbnail until the agent completes. No Canva editor embed — FR-16 confirmed. AC-6, AC-7, AC-5b.
+  - Depends: T04, T08, T25
+  - Notes: Provider management section of the admin settings page. Admins register new AI providers directly from the UI — no redeploy required. Registration flow: admin enters API key → server inspects prefix (`sk-ant-` → Anthropic, `sk-` → OpenAI, etc.) and auto-populates provider name + label → if prefix unrecognized, admin manually specifies name and label → key validated against provider API before saving → key stored encrypted (AES-256-GCM) → only `keyPrefix` shown in UI thereafter (never full key). `POST /api/admin/providers` body: `{ slot, apiKey, providerName?, label }`. `PATCH` to enable/disable, set default, or update label. `DELETE` to remove. Brief UI model selector shows provider name + label as registered (e.g. "Claude 3.5 Sonnet (Anthropic)"). Changes immediately reflected in `GET /api/providers/available`. Admin-role-gated. FR-31, FR-32, FR-32a–FR-32d, AC-14, AC-15.
 
-- [ ] `T27` — Agent step live status UI
-  - Files: `src/components/agent/AgentProgress.tsx`, `src/hooks/useAgentSteps.ts`
-  - Estimate: small
-  - Depends: T14, T25
-  - Notes: `AgentProgress` renders a vertical step list — each step shows a spinner (in_progress), checkmark (done), or X (error) icon alongside the step name. Subscribes to `GET /api/design/assemble/[draftId]/steps` (SSE) via the `useAgentSteps` hook (manages EventSource lifecycle: open on mount, close on unmount or on a `done`/`error` terminal event). Used in the brief submission loading state and in the draft page (T21) during Path B generation. Step names match FR-20b: "Starting Canva session", "Creating canvas", "Adding background", "Uploading brand assets", "Writing headline", "Applying brand colors", "Reviewing composition", "Exporting design", "Complete". FR-20b, AC-5b.
+- [ ] `T21` — Draft refinement UI + AGUI backend
+  - Files: `src/app/(app)/draft/[id]/page.tsx`, `src/components/draft/RefinementPanel.tsx`, `src/app/api/drafts/[id]/refine/route.ts`, `src/app/api/drafts/[id]/revisions/route.ts`, `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts`
+  - Estimate: large
+  - Depends: T13, T14, T15, T25, T03
+  - Notes: Two deliverables. (1) **Draft page UI** — generated copy (editable textarea), generated image ("Regenerate" button), template selector (Path A only), Canva design thumbnail, "Export" button. No Canva editor embed (FR-16). (2) **AGUI refinement panel** — chat input + AI reply area + undo history list, positioned alongside the design preview. Backend: `POST /api/drafts/[id]/refine` receives the instruction, calls the active AI provider (same as brief — resolved from `brief.copyProviderKey` or orchestrator), provides the current element tree (`getDesignContent`) + brand kit context. AI returns a reply: if no brand kit conflict → applies `withEditingTransaction` → commits → creates `DraftRevision` row → returns `{ reply, revisionId }`. If brand kit conflict detected → returns `{ reply }` with no edit applied — client waits for user to send "override". `GET /api/drafts/[id]/revisions` returns revision list for the undo panel. `POST /api/drafts/[id]/revisions/[rev]/restore` re-applies the element tree snapshot from that revision via a fresh editing transaction. FR-33, FR-33a–FR-33e, AC-6, AC-7.
 
 - [ ] `T22` — End-to-end test pass + acceptance criteria sign-off
   - Files: `tests/e2e/` (Playwright)
   - Estimate: large
   - Depends: T20, T21, T19
-  - Notes: Walk each AC (AC-1 through AC-12, AC-5b, AC-5c) with Playwright against a staging environment. Test both design paths. Confirm no secrets in browser network tab (AC-12). Confirm scheduled post fires after mock time advance. Document any ACs that require manual verification (e.g. actual Instagram/LinkedIn publish requires live social credentials).
+  - Notes: Walk each AC (AC-1 through AC-12, AC-5b, AC-5c, FR-32–FR-33e) with Playwright against a staging environment. Test both design paths. Confirm no secrets in browser network tab (AC-12). Confirm scheduled post fires after mock time advance. Document any ACs that require manual verification. Additional test suites: (a) **provider-registration.test.ts** — register provider with known key prefix (auto-detect), register with unknown prefix (manual name), invalid key fails validation, key prefix shown in UI, full key never in network response; (b) **agui-refinement.test.ts** — instruction applied via Canva MCP, revision created, undo restores prior state, brand kit conflict returns warning without applying edit, "override" forces apply.
+
+- [ ] `T27` — Prisma migration: DraftRevision + AvailableProvider schema update
+  - Files: `prisma/schema.prisma`, `prisma/migrations/`
+  - Estimate: small
+  - Depends: T03
+  - Notes: Add `DraftRevision` model and update `AvailableProvider` with `providerName`, `keyPrefix`, `encryptedApiKey` fields. Run `prisma migrate dev`. Required before T21 (AGUI backend) can be implemented.
 
 ---
 
@@ -228,3 +228,4 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: <task ids>
   - Notes: <context>
 ```
+

@@ -30,6 +30,7 @@ export default function DraftClient({ id }: { id: string }) {
   const [regeneratingCopy, setRegeneratingCopy] = useState(false)
   const [regeneratingImage, setRegeneratingImage] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportStep, setExportStep] = useState<string | null>(null)
   const [showPublishPanel, setShowPublishPanel] = useState(false)
   const [showSchedulePanel, setShowSchedulePanel] = useState(false)
   const [publishedChannels, setPublishedChannels] = useState<string[]>([])
@@ -77,13 +78,30 @@ export default function DraftClient({ id }: { id: string }) {
     }, 2200)
   }
 
-  const handleExport = () => {
+  const handleExport = async () => {
     setExporting(true)
-    setTimeout(() => {
-      setDraft(d => d ? { ...d, status: 'EXPORTED', exportUrl: d.imageUrl } : d)
-      setExporting(false)
-      showToast('Design exported from Canva — ready to publish')
-    }, 2000)
+    if (draft?.designMode === 'TEMPLATE') {
+      const steps = [
+        'Fetching design element tree from Canva…',
+        'Claude resolving element targets…',
+        'Applying edits via Canva MCP transaction…',
+        'Exporting design…',
+      ]
+      for (const step of steps) {
+        setExportStep(step)
+        await new Promise(r => setTimeout(r, 900))
+      }
+    } else {
+      await new Promise(r => setTimeout(r, 2000))
+    }
+    setDraft(d => d ? { ...d, status: 'EXPORTED', exportUrl: d.imageUrl } : d)
+    setExporting(false)
+    setExportStep(null)
+    showToast(
+      draft?.designMode === 'TEMPLATE'
+        ? 'Claude resolved elements — edits applied and design exported'
+        : 'Design exported from Canva — ready to publish'
+    )
   }
 
   const handlePublish = () => {
@@ -142,9 +160,9 @@ export default function DraftClient({ id }: { id: string }) {
             )}
             {(draft.status === 'IN_PROGRESS') && (
               <button onClick={handleExport} disabled={exporting}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-400/10 text-cyan-400 text-[0.78rem] hover:bg-cyan-400/20 border border-cyan-400/20 transition-colors disabled:opacity-50">
-                {exporting ? <RefreshCw size={13} className="animate-spin" /> : <ExternalLink size={13} />}
-                {exporting ? 'Exporting…' : 'Export from Canva'}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-400/10 text-cyan-400 text-[0.78rem] hover:bg-cyan-400/20 border border-cyan-400/20 transition-colors disabled:opacity-50 max-w-xs truncate">
+                {exporting ? <RefreshCw size={13} className="animate-spin flex-shrink-0" /> : <ExternalLink size={13} className="flex-shrink-0" />}
+                <span className="truncate">{exportStep ?? (exporting ? 'Exporting…' : 'Export from Canva')}</span>
               </button>
             )}
           </div>
@@ -254,16 +272,24 @@ export default function DraftClient({ id }: { id: string }) {
           <div className="space-y-4">
             <div className="glass rounded-xl">
               <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ImagePlus size={14} className="text-slate-400" />
-                  <span className="text-[0.8rem] font-semibold">Generated Image</span>
-                  <span className="text-[0.62rem] text-slate-600 ml-1">via {draft.imageProviderLabel}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <ImagePlus size={14} className="text-slate-400 flex-shrink-0" />
+                  <span className="text-[0.8rem] font-semibold">
+                    {draft.designMode === 'TEMPLATE' ? 'Generated Image' : 'AI Image'}
+                  </span>
+                  <span className="text-[0.62rem] text-slate-600 ml-1 truncate">
+                    {draft.designMode === 'TEMPLATE'
+                      ? `via ${draft.imageProviderLabel}`
+                      : 'GPT orchestrator (gpt-image-1 or brand asset)'}
+                  </span>
                 </div>
-                <button onClick={handleRegenerateImage} disabled={regeneratingImage}
-                  className="flex items-center gap-1.5 text-[0.72rem] text-cyan-400 hover:text-cyan-300 disabled:opacity-50 transition-colors">
-                  <RefreshCw size={12} className={regeneratingImage ? 'animate-spin' : ''} />
-                  {regeneratingImage ? 'Generating…' : 'Regenerate'}
-                </button>
+                {draft.designMode === 'TEMPLATE' && (
+                  <button onClick={handleRegenerateImage} disabled={regeneratingImage}
+                    className="flex items-center gap-1.5 text-[0.72rem] text-cyan-400 hover:text-cyan-300 disabled:opacity-50 transition-colors flex-shrink-0 ml-2">
+                    <RefreshCw size={12} className={regeneratingImage ? 'animate-spin' : ''} />
+                    {regeneratingImage ? 'Generating…' : 'Regenerate'}
+                  </button>
+                )}
               </div>
               <div className="p-4">
                 {draft.imageUrl ? (

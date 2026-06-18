@@ -1,4 +1,4 @@
-// ─── Domain Types ───────────────────────────────────────────────────────────
+﻿// ─── Domain Types ───────────────────────────────────────────────────────────
 
 export type BrandKitSource = 'CANVA' | 'BACKEND' | 'HYBRID'
 export type ArtifactType = 'LOGO' | 'FONT' | 'COLOR' | 'REFERENCE_IMAGE' | 'EXAMPLE_POST' | 'OTHER'
@@ -56,6 +56,18 @@ export type FeedItem = {
   actor: string; action: string; time: string
   status: 'complete' | 'processing'; type: 'publish' | 'draft' | 'schedule' | 'generate'
 }
+
+// ─── Canva Brand Kits (returned by list-brand-kits MCP tool) ─────────────────
+
+export type CanvaBrandKit = {
+  id: string; name: string; description?: string
+}
+
+export const canvaBrandKits: CanvaBrandKit[] = [
+  { id: 'bk_bistec_main_xK9pQ', name: 'Bistec Main', description: 'Primary brand kit — all channels' },
+  { id: 'bk_bistec_events_mR3tL', name: 'Bistec Events', description: 'Conference and event visuals' },
+  { id: 'bk_bistec_hiring_vZ7wN', name: 'Bistec Hiring', description: 'Recruitment and talent brand' },
+]
 
 // ─── Brand Kits ──────────────────────────────────────────────────────────────
 
@@ -137,7 +149,7 @@ export const drafts: Draft[] = [
     exportUrl: 'https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=1080&q=90',
     canvaDesignId: 'DAFx_kP9mNT', templateName: 'Bistec Square — Dark',
     status: 'EXPORTED', campaignId: 'camp-003', campaignName: 'Bistec Studio Launch',
-    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-1', createdAt: '2026-06-14',
+    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-2', createdAt: '2026-06-14',
   },
   {
     id: 'draft-002', briefId: 'brief-002',
@@ -149,7 +161,7 @@ export const drafts: Draft[] = [
     exportUrl: 'https://images.unsplash.com/photo-1551434678-e076c223a692?w=1080&q=90',
     canvaDesignId: 'DAFy_qR3sTU', status: 'PUBLISHED',
     campaignId: 'camp-002', campaignName: 'Client Success Stories',
-    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-1', createdAt: '2026-06-12',
+    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-2', createdAt: '2026-06-12',
   },
   {
     id: 'draft-003', briefId: 'brief-003',
@@ -161,7 +173,7 @@ export const drafts: Draft[] = [
     exportUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1080&q=90',
     canvaDesignId: 'DAFz_mN5vWX', templateName: 'Bistec Story — Gradient',
     status: 'PUBLISHED', campaignId: 'camp-005', campaignName: "We're Hiring — Sri Lanka",
-    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-1', createdAt: '2026-06-10',
+    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-2', createdAt: '2026-06-10',
   },
   {
     id: 'draft-004', briefId: 'brief-004',
@@ -170,7 +182,7 @@ export const drafts: Draft[] = [
     tone: 'Insightful, data-driven', channels: ['LINKEDIN'], designMode: 'GENERATE',
     copyText: '', imageUrl: '', status: 'IN_PROGRESS',
     campaignId: 'camp-001', campaignName: 'Summer Thought Leadership',
-    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-1', createdAt: '2026-06-15',
+    copyProviderLabel: 'GPT-4o', imageProviderLabel: 'gpt-image-2', createdAt: '2026-06-15',
   },
   {
     id: 'draft-005', briefId: 'brief-005',
@@ -180,7 +192,7 @@ export const drafts: Draft[] = [
     copyText: "From brief to published post in 5 steps — here's how Bistec Studio works:\n\n1️⃣ Fill in a short brief (topic, goal, tone)\n2️⃣ Select your campaign — brand kit auto-populates\n3️⃣ AI generates on-brand copy + imagery\n4️⃣ Review in the design preview — edit if needed\n5️⃣ Publish now or schedule for later\n\nNo Canva expertise required. No chasing the brand guide. Just a brief and a button.",
     imageUrl: 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=800&q=80',
     status: 'IN_PROGRESS', campaignId: 'camp-003', campaignName: 'Bistec Studio Launch',
-    copyProviderLabel: 'Claude 3.5 Sonnet', imageProviderLabel: 'gpt-image-1', createdAt: '2026-06-15',
+    copyProviderLabel: 'Claude 3.5 Sonnet', imageProviderLabel: 'gpt-image-2', createdAt: '2026-06-15',
   },
 ]
 
@@ -239,7 +251,7 @@ export const providers: AvailableProvider[] = [
   { id: 'prov-002', slot: 'COPY', providerKey: 'openai-gpt4o-mini', label: 'GPT-4o mini', isEnabled: true, isDefault: false },
   { id: 'prov-003', slot: 'COPY', providerKey: 'anthropic-claude', label: 'Claude 3.5 Sonnet', isEnabled: true, isDefault: false },
   { id: 'prov-004', slot: 'COPY', providerKey: 'gemini-pro', label: 'Gemini 1.5 Pro', isEnabled: false, isDefault: false },
-  { id: 'prov-005', slot: 'IMAGE', providerKey: 'openai-image-1', label: 'gpt-image-1', isEnabled: true, isDefault: true },
+  { id: 'prov-005', slot: 'IMAGE', providerKey: 'openai-image-1', label: 'gpt-image-2', isEnabled: true, isDefault: true },
   { id: 'prov-006', slot: 'IMAGE', providerKey: 'dalle-3', label: 'DALL·E 3', isEnabled: true, isDefault: false },
   { id: 'prov-007', slot: 'IMAGE', providerKey: 'stability', label: 'Stable Diffusion 3', isEnabled: false, isDefault: false },
 ]
@@ -263,11 +275,32 @@ export const getCampaignsForProject = (projectId: string) => campaigns.filter(c 
 export const getPostsForCampaign = (campaignId: string) => posts.filter(p => p.campaignId === campaignId)
 export const getUncategorizedPosts = () => posts.filter(p => !p.campaignId)
 
-export const canvaTemplates = [
-  { id: 'tmpl-001', name: 'Bistec Square — Dark', preview: 'https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=400&q=80' },
-  { id: 'tmpl-002', name: 'Bistec Story — Gradient', preview: 'https://images.unsplash.com/photo-1545665277-5937489579f2?w=400&q=80' },
-  { id: 'tmpl-003', name: 'Bistec Landscape — Clean', preview: 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=400&q=80' },
-]
+export type CanvaTemplate = {
+  id: string           // BTM* ID from Canva
+  name: string
+  preview: string      // thumbnail URL
+  canvaBrandKitId?: string
+  imagePrompt?: string // optional fixed prompt for background image generation — overrides brief-derived prompt
+}
+
+// Templates returned by search-brand-templates, keyed by Canva brand kit ID
+export const canvaTemplatesByKit: Record<string, CanvaTemplate[]> = {
+  'bk_bistec_main_xK9pQ': [
+    { id: 'BTMsq1Dark_xK9', name: 'Bistec Square — Dark', preview: 'https://images.unsplash.com/photo-1611532736597-de2d4265fba3?w=400&q=80', canvaBrandKitId: 'bk_bistec_main_xK9pQ', imagePrompt: 'Dark abstract technology background, deep navy and black tones, subtle circuit patterns, cinematic lighting, minimal' },
+    { id: 'BTMst2Grad_xK9', name: 'Bistec Story — Gradient', preview: 'https://images.unsplash.com/photo-1545665277-5937489579f2?w=400&q=80', canvaBrandKitId: 'bk_bistec_main_xK9pQ' },
+    { id: 'BTMls3Clean_xK9', name: 'Bistec Landscape — Clean', preview: 'https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?w=400&q=80', canvaBrandKitId: 'bk_bistec_main_xK9pQ', imagePrompt: 'Clean minimal workspace, soft natural light, white and light grey tones, professional, wide landscape crop' },
+  ],
+  'bk_bistec_events_mR3tL': [
+    { id: 'BTMev1Hero_mR3', name: 'Events Hero — Bold', preview: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=400&q=80', canvaBrandKitId: 'bk_bistec_events_mR3tL', imagePrompt: 'Large modern conference stage with dramatic lighting, audience silhouettes, bold and energetic atmosphere' },
+    { id: 'BTMev2Speaker_mR3', name: 'Speaker Spotlight', preview: 'https://images.unsplash.com/photo-1475721027785-f74eccf877e2?w=400&q=80', canvaBrandKitId: 'bk_bistec_events_mR3tL' },
+  ],
+  'bk_bistec_hiring_vZ7wN': [
+    { id: 'BTMhr1Role_vZ7', name: 'Open Role — Minimal', preview: 'https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&q=80', canvaBrandKitId: 'bk_bistec_hiring_vZ7wN' },
+  ],
+}
+
+// All templates flattened — used by the brief wizard template picker
+export const canvaTemplates: CanvaTemplate[] = Object.values(canvaTemplatesByKit).flat()
 
 export const toneOptions = [
   'Confident, results-focused', 'Professional, evidence-based', 'Warm, aspirational',
@@ -286,3 +319,4 @@ export const items = drafts.map(d => ({
   value: 0,
   created: d.createdAt,
 }))
+
