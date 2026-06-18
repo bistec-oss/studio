@@ -102,25 +102,30 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   brand template; the user does not configure brand styling manually. Available
   brand kits are discovered at runtime via `list-brand-kits`.
 
-**Design Path B — AI-Generated New Design (OpenAI orchestrates Canva MCP)**
+**Design Path B — AI-Generated New Design (Computer-Use Agent)**
 - **FR-18b** When the user selects "generate new design" in the brief, the backend
-  invokes OpenAI (Chat Completions with function calling) as an **AI orchestrator**,
-  passing it: the user's brief, the resolved brand kit's active system prompt and
-  feed-to-AI artifacts (see FR-25b–FR-27b), the brand kit's Canva brand kit ID,
-  and the Canva MCP tool schemas as available
-  functions. OpenAI plans and directs the full design assembly by calling Canva MCP
-  tools — this replicates the ChatGPT + Canva plugin pattern (canva.com/integrations/
-  chatgpt) in bistec-studio's own backend, without depending on ChatGPT's UI.
-- **FR-19b** OpenAI may call `gpt-image-1` to generate imagery (uploaded via
-  `upload-asset-from-url` → Canva asset ID) or elect to use an existing brand asset
-  already in the user's Canva account via `get-assets` — depending on what best
-  serves the brief. The orchestrator decides; the user is not required to choose.
-- **FR-20b** The assembled design is produced via a Canva editing transaction
-  (`start-editing-transaction` → `perform-editing-operations` for all elements →
-  `commit-editing-transaction`), with the brand kit ID applied to enforce brand
-  consistency, regardless of whether OpenAI chose generated imagery or brand assets.
-- **FR-21b** Once assembled, the new design enters the same in-app refinement and
-  export flow as Path A (FR-15, FR-16, FR-17).
+  dispatches to a **computer-use agent service** — a dedicated Docker container
+  running a headless Chromium browser controlled by the Claude computer-use API.
+  The agent receives the brief (topic, description, goal, tone, channel, dimensions)
+  and the resolved brand kit context (active brand voice prompt, feed-to-AI artifacts,
+  brand colors/fonts) and operates the Canva editor UI directly to compose a
+  fully custom design from scratch.
+- **FR-19b** The agent designs the post within the Canva editor: creates a new design
+  at the correct channel dimensions (Instagram 1080×1080, LinkedIn 1200×628),
+  composes the visual layout, applies brand colors and typography, places copy text,
+  and incorporates imagery (from brand assets or AI-generated via gpt-image-1). The
+  agent has full layout control — element positioning, sizing, layering, and styling —
+  because it operates the Canva UI rather than the MCP editing API.
+- **FR-20b** As the agent works, it emits named step events that are streamed to the
+  draft UI in real time (e.g. "Creating canvas", "Adding background", "Writing
+  headline", "Applying brand colors", "Exporting design") so the user sees live
+  progress rather than an opaque spinner.
+- **FR-21b** Once the agent completes the design, it is identified by its Canva
+  design ID and enters the same in-app refinement and export flow as Path A
+  (FR-15, FR-16, FR-17).
+- **FR-22b** Each agent session has a configurable hard timeout (default: 5 minutes).
+  If exceeded, the session is terminated, any partial Canva design is cleaned up,
+  and the user receives a clear error with the option to retry (EC-12).
 
 **Admin: Brand Kits**
 - **FR-25b** A **brand kit** is a first-class, admin-managed entity. It owns: a
@@ -210,6 +215,11 @@ manual edit-in-Canva, channels limited to Instagram + LinkedIn, internal team on
   `start-editing-transaction` must always resolve with either
   `commit-editing-transaction` (success path) or `cancel-editing-transaction`
   (error/abort path) — orphaned open transactions are not acceptable.
+- **NFR-12 (Agent timeout and cleanup)** Every computer-use agent session (Path B)
+  has a configurable hard timeout (`AGENT_TIMEOUT_SECONDS`, default 300s). On
+  timeout or error, the session is force-terminated, any partial Canva design is
+  deleted, and the error is surfaced as a clear retryable failure. No orphaned
+  browser sessions or partial designs may remain after a timeout or error.
 - **NFR-9 (Auditability)** Publish history is retained and attributable to the
   user who published/scheduled.
 
@@ -230,9 +240,10 @@ Each criterion must pass for the change to be considered complete.
 - **AC-5** The composed design (Path A) visibly uses the Bistec brand kit
   (colors/fonts/logo) without the user configuring any brand styling, and the user
   can swap between at least the supported set of brand templates.
-- **AC-5b** A design produced via Path B ("generate new design") is visibly
-  brand-consistent (brand kit applied, brand voice reflected) without the user
-  manually configuring any brand styling.
+- **AC-5b** A design produced via the computer-use agent path ("generate new design")
+  is visibly brand-consistent (brand colors, fonts, and voice reflected in the layout)
+  and the user sees named step-by-step progress during generation without manually
+  configuring any brand styling.
 - **AC-5c** An admin can update a brand kit's system prompt in the bistec-studio
   settings UI; a Path B design generated after the update reflects the new prompt
   without a redeploy.
@@ -296,13 +307,20 @@ Each criterion must pass for the change to be considered complete.
   last-write-wins with indication) confirmed in design.
 - **EC-9** Cost/rate guardrail is hit → generation is blocked with a clear message
   rather than failing opaquely.
-- **EC-11** Path B OpenAI orchestration fails mid-assembly (e.g. OpenAI error, MCP
-  tool call rejected mid-transaction) → the open editing transaction is cancelled
-  via `cancel-editing-transaction`; no partial/broken design is left in Canva; the
-  brief and any already-generated assets are preserved so the user can retry.
-- **EC-12** OpenAI orchestrator enters an unexpected loop or exceeds a maximum
-  tool-call depth → the backend enforces a hard limit on orchestration steps and
-  surfaces a clear error rather than running indefinitely.
+- **EC-11** Computer-use agent encounters an error mid-design (Claude API error,
+  Canva UI interaction failure, browser crash) → the agent session is terminated;
+  any partial Canva design is deleted from the dedicated account; the brief and
+  already-generated copy/image assets are preserved so the user can retry without
+  re-entering the brief.
+- **EC-12** Computer-use agent exceeds the configured hard timeout → session is
+  force-terminated, same cleanup as EC-11 applies, and the user receives a clear
+  timeout error with a retry option.
+- **EC-17** Canva browser session expires mid-generation → the agent service
+  re-authenticates using stored credentials and resumes; if re-auth fails, the
+  session is terminated and the user is notified.
+- **EC-18** Canva deploys a UI update that breaks the agent's interaction patterns
+  → Path B generation fails with a clear error; Path A (template mode) is entirely
+  unaffected; the operator is alerted so the agent can be updated.
 - **EC-13** Admin saves a brand kit prompt version that causes all Path B
   generations to fail moderation or produce off-brand output → an admin can revert
   to a previous version via the settings UI (per-brand-kit prompt version history /
@@ -315,9 +333,13 @@ Each criterion must pass for the change to be considered complete.
 ## Dependencies
 
 **External services / APIs**
-- **OpenAI API** — GPT (copy generation, Path A); GPT with function calling as AI
-  orchestrator (Path B); gpt-image-1 (image generation, both paths — mandatory on
-  Path A, AI-decided on Path B). Requires API key + spend controls.
+- **OpenAI API** — GPT (copy generation); gpt-image-1 (image generation). Requires
+  API key + spend controls.
+- **Anthropic API (Claude computer-use)** — powers the Path B computer-use agent
+  service. The agent container calls the Claude API with computer-use beta enabled
+  (`claude-opus-4` or later). Requires a separate Anthropic API key + spend controls.
+  Cost is higher per call than text-only models due to vision input; generation budget
+  guardrails apply (NFR-7).
 - **Canva MCP server** — The Next.js backend connects as an MCP client to the
   Canva MCP server, which exposes structured tool operations:
   - `list-brand-kits` — discover available brand kits
@@ -347,17 +369,17 @@ Each criterion must pass for the change to be considered complete.
 - Secrets managed via `.env` file on the VPS (never committed to git, permissions `600`, owned by root).
 
 **Internal prerequisites**
-- An existing Bistec **Canva brand kit** and at least one **brand template**.
+- An existing Bistec **Canva brand kit** and at least one **brand template** (required for Path A).
+- A dedicated **Canva account** for the computer-use agent (Path B) — separate from
+  team members' personal accounts, with its own login credentials stored as secrets.
 - Bistec **Instagram Business** and **LinkedIn company page** accounts the tool
   can be authorized to publish to.
 
 ## Notes
 
 **Open questions to resolve in the design phase (`/specclaw:plan`):**
-0. **Path B OpenAI model** — which OpenAI model drives the Path B orchestration?
-   (GPT-4o is the natural choice for function-calling orchestration; confirm whether
-   a different model is preferred and whether the same model is used for copy
-   generation on Path A or a lighter model is acceptable there.)
+0. **Agent timeout** — confirm acceptable maximum generation time for the
+   computer-use agent (5 minutes proposed as default; confirm with team).
 1. **Auth provider** — custom auth vs. a managed provider vs. Microsoft Entra ID
    SSO (team is on a Microsoft stack; Entra is a natural fit but not a hard v1
    requirement). Also: exact role→permission matrix for publishing.

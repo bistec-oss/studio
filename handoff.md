@@ -115,17 +115,17 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 
 **Brief fields (Path A):** topic · description (AI prompt context — speaker bios, event details, key messages) · goal/CTA · tone · channels · template selection · additional image (optional upload)
 
-### Path B — AI-generated new design
-1. User writes a brief (design mode = "Generate new design") — same topic + description fields as Path A; no additional image upload (AI controls all layers)
-2. Backend calls **OpenAI Chat Completions with function calling**, passing:
-   - The brief
-   - The resolved BrandKit's active system prompt + feed-to-AI artifacts (campaign → project → default)
-   - The BrandKit's Canva brand kit ID
-   - Canva MCP tool schemas as function definitions
-3. OpenAI orchestrates the full design assembly by calling Canva MCP tools directly
-4. OpenAI decides whether to generate imagery (gpt-image-1) or use an existing brand asset
-5. Hard limit: 20 tool calls max (prevents runaway loops)
-6. On any error: `cancel-editing-transaction` is always called (no orphaned Canva sessions)
+### Path B — AI-generated new design (Computer-Use Agent)
+1. User writes a brief (design mode = "Generate new design")
+2. Backend dispatches to a **computer-use agent service** — a dedicated Docker
+   container (Node.js + Playwright + headless Chromium + Claude computer-use API)
+3. Agent receives the brief + brand context (voice prompt, feedToAI artifacts, channel dimensions)
+4. Agent opens the Canva editor UI directly (as the dedicated Canva account) and
+   designs the post from scratch — full layout control: position, resize, color,
+   typography, imagery — not limited to content substitution
+5. As the agent works, it emits step events streamed live to the UI
+   (e.g. "Creating canvas", "Adding background", "Writing headline")
+6. Hard timeout: 5 minutes (configurable via `AGENT_TIMEOUT_SECONDS`)
 7. Same export → publish flow as Path A
 
 ---
@@ -137,8 +137,12 @@ The frontend never knows which AI model runs. Three stable interfaces in `src/pr
 ```
 CopyProvider      { generateCopy(brief): Promise<string> }
 ImageProvider     { generateImage(brief): Promise<{ url: string }> }
-DesignOrchestrator{ orchestrate(brief, brandKitId): Promise<{ canvaDesignId: string }> }
+DesignOrchestrator{ orchestrate(brief, brandKitId, onStep): Promise<{ canvaDesignId: string }> }
 ```
+
+The `onStep` callback on `DesignOrchestrator` receives `AgentStep` events as the
+computer-use agent works; the route handler uses these to update `Draft.agentSteps`
+for SSE streaming to the browser.
 
 **Provider resolution order (copy + image):**
 1. `providerKey` stored on the Brief record (user's choice at brief time)
@@ -203,13 +207,13 @@ The Next.js backend connects to Canva as an **MCP client**. No raw Canva REST in
 
 | Wave | Focus | Tasks |
 |---|---|---|
-| 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
-| 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
+| 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose (5 services), T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
+| 2 | Provider abstraction layer | T05 Interfaces (incl. onStep callback), T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | Canva MCP client + MinIO storage | T09 Canva client (tx guard), T10 MinIO client |
 | 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
-| 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy/image routes, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
+| 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy/image routes, T13 Path A assembly, T14 Computer-use agent service (Path B), T15 Export route |
 | 5 | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
-| 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI, T22 E2E Playwright tests |
+| 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI, T27 Agent live status UI, T22 E2E Playwright tests |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).
 Start the Meta Business app registration **before** Wave 1 code begins — it blocks AC-3.

@@ -42,7 +42,7 @@ admin config. No frontend changes, no API contract changes.
 │  implementations/                                            │
 │    copy/openai.ts          ← GPT-4o mini (Path A default)   │
 │    image/openai.ts         ← gpt-image-1                    │
-│    orchestrator/openai-canva.ts  ← GPT-4o + Canva MCP       │
+│    orchestrator/agent.ts   ← Claude computer-use + Canva UI │
 │    [future: copy/anthropic.ts, image/stability.ts, ...]     │
 │                                                              │
 │  registry.ts   ← resolves active provider from config       │
@@ -50,8 +50,8 @@ admin config. No frontend changes, no API contract changes.
            │                │
 ┌──────────▼──────┐  ┌──────▼──────────────────────────────┐
 │  OpenAI API     │  │  Canva MCP Client (src/lib/canva/)  │
-│  (copy, image,  │  │  Wraps MCP tool calls:              │
-│   orchestrator) │  │  list-brand-kits                    │
+│  (copy, image)  │  │  Wraps MCP tool calls:              │
+│                 │  │  list-brand-kits                    │
 └─────────────────┘  │  create-design-from-brand-template  │
                      │  upload-asset-from-url              │
                      │  start/perform/commit-editing-tx    │
@@ -73,6 +73,13 @@ admin config. No frontend changes, no API contract changes.
 ┌─────────────────────────────────────────────────────────────┐
 │  Scheduler  (Docker container — cron worker, every minute)  │
 │  Polls DB for due scheduled posts → calls publish layer     │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  Computer-Use Agent Service  (Docker container)             │
+│  Node.js + Playwright + Chromium                            │
+│  Internal HTTP API (port 3001, Docker network only)         │
+│  Calls Anthropic API (computer-use) → operates Canva UI     │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -115,18 +122,20 @@ POST /api/design/assemble?mode=template
 POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → blob storage
 ```
 
-**Path B — AI-generated new design:**
+**Path B — AI-generated new design (computer-use agent):**
 ```
 POST /api/design/assemble?mode=generate
   → resolve BrandKit (campaign → project → system default)
-  → DesignOrchestrator.orchestrate(brief, brandKit)
-    // brandKit supplies: active BrandKitPrompt (brand voice), canvaBrandKitId,
-    // and feedToAI artifacts (reference images, etc.) as brand context
-    OpenAI Chat Completions (function calling, Canva MCP tools as functions)
-    orchestrator loop (max 20 tool calls — EC-12 hard limit):
-      may call: upload-asset-from-url, get-assets,
-                start-editing-transaction, perform-editing-operations,
-                commit-editing-transaction (or cancel on error)
+  → DesignOrchestrator.orchestrate(brief, brandKit, onStep)
+    // brandKit supplies: active BrandKitPrompt (brand voice),
+    // feedToAI artifacts, channel + dimensions as agent context
+    → HTTP POST agent-service:3001/generate { brief, brandContext }
+    → agent service (headless Chromium + Claude computer-use):
+        open Canva editor → create new design at channel dimensions
+        → compose layout (background, imagery, text, brand styling)
+        → emit step events → onStep(step) → Draft.agentSteps updated → SSE to browser
+        → return { canvaDesignId }
+GET /api/design/assemble/[draftId]/steps  → SSE stream of agentSteps for live UI
 POST /api/design/export   → CanvaMcpClient.exportDesign(designId) → MinIO
 ```
 
@@ -239,10 +248,12 @@ model Brief {
   campaignId       String?    // null = Uncategorized
   campaign         Campaign?  @relation(fields: [campaignId], references: [id])
   topic            String
+  description      String?    // AI prompt context — speaker bios, event details, key messages
   goal             String
   tone             String
   channels         String[]   // ["instagram", "linkedin"]
   designMode       DesignMode
+  additionalImageUrl String?  // MinIO URL of user-uploaded image (Path A only)
   copyProviderKey  String     // e.g. "openai" — user's choice at brief time
   imageProviderKey String     // e.g. "gemini" — user's choice at brief time
   createdAt        DateTime   @default(now())
@@ -261,6 +272,7 @@ model Draft {
   templateId    String?
   exportUrl     String?         // MinIO URL of exported PNG/JPG
   status        DraftStatus     @default(IN_PROGRESS)
+  agentSteps    Json?           // [{ step, status, timestamp }] — Path B live progress events
   createdAt     DateTime        @default(now())
   posts         Post[]
   campaigns     CampaignDraft[] // shared asset links
@@ -399,6 +411,54 @@ async withEditingTransaction<T>(
 ): Promise<T>
 ```
 
+### Computer-Use Agent Service
+
+A dedicated Docker container (`agent` service in `docker-compose.yml`) — a Node.js
+process running Playwright with a persistent headless Chromium browser, with the
+Claude computer-use API providing design intelligence. The container is built from
+`agent-service/Dockerfile` (uses `mcr.microsoft.com/playwright/node:20`, which
+includes Chromium pre-installed) and is exposed only on the internal Docker network
+(port 3001) — never publicly accessible.
+
+**Internal HTTP API:**
+- `POST /generate` — `{ brief, brandContext, channel }` → starts an agent session,
+  returns `{ sessionId }`
+- `GET /generate/:sessionId` → `{ status, steps[], canvaDesignId? }`
+
+**Agent behaviour per request:**
+1. Receives brief + brand context (active brand voice prompt, feed-to-AI artifact
+   URLs, channel + dimensions)
+2. Opens the Canva editor in the persistent headless browser (logged in as the
+   dedicated Canva account — credentials from `CANVA_AGENT_EMAIL` / `CANVA_AGENT_PASSWORD`)
+3. Creates a new design at the correct channel dimensions (Instagram 1080×1080,
+   LinkedIn 1200×628)
+4. Composes the full layout using Claude computer-use vision + action loop: background,
+   imagery (brand assets or gpt-image-1 generated), text elements, brand colors, typography
+5. Emits named step events as work progresses — POSTed back to the app service at
+   `AGENT_CALLBACK_URL` and stored in `Draft.agentSteps`
+6. Exports the completed design and returns `{ canvaDesignId }` extracted from the
+   Canva URL
+
+**Step events streamed to the UI:**
+"Starting Canva session" → "Creating canvas" → "Adding background" →
+"Uploading brand assets" → "Writing headline" → "Writing body text" →
+"Applying brand colors" → "Reviewing composition" → "Exporting design" → "Complete"
+
+**Session management:**
+- The headless browser maintains a persistent Canva session (cookies stored in a
+  volume mount). A startup script authenticates once; subsequent requests reuse the
+  session. Re-authenticates if the session expires mid-generation (EC-17).
+- Hard timeout enforced via `AGENT_TIMEOUT_SECONDS` (default 300s). On timeout,
+  Playwright terminates the active tab and the service returns a timeout error (EC-12).
+- Each generation creates a new Canva design in the dedicated account (serves as an
+  audit record; not auto-deleted after export).
+
+**`DesignOrchestrator` implementation (`src/providers/implementations/orchestrator/agent.ts`):**
+POSTs to the agent service URL (`AGENT_SERVICE_URL` env var, internal Docker network),
+polls for step events, invokes the `onStep` callback as events arrive (which the
+route handler uses to update `Draft.agentSteps` for SSE delivery to the browser),
+and resolves with `{ canvaDesignId }` when the agent completes.
+
 ### Secrets management
 
 All third-party credentials are provided as environment variables via a `.env` file
@@ -449,7 +509,15 @@ on the VPS. Security protocols:
 | `src/providers/interfaces/` | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces |
 | `src/providers/implementations/copy/openai.ts` | create | GPT copy provider |
 | `src/providers/implementations/image/openai.ts` | create | gpt-image-1 provider |
-| `src/providers/implementations/orchestrator/openai-canva.ts` | create | Path B orchestrator |
+| `src/providers/implementations/orchestrator/agent.ts` | create | Path B DesignOrchestrator — calls agent service, relays step events |
+| `agent-service/src/index.ts` | create | Agent service HTTP server (Express, port 3001) |
+| `agent-service/src/canva-agent.ts` | create | Claude computer-use loop — Playwright + Anthropic API |
+| `agent-service/src/session.ts` | create | Persistent Canva browser session management |
+| `agent-service/package.json` | create | Agent service dependencies (Playwright, @anthropic-ai/sdk) |
+| `agent-service/Dockerfile` | create | Built from mcr.microsoft.com/playwright/node:20 |
+| `src/app/api/design/assemble/[draftId]/steps/route.ts` | create | SSE endpoint — streams Draft.agentSteps to browser |
+| `src/components/agent/AgentProgress.tsx` | create | Live step-list UI component (spinner/check/error per step) |
+| `src/hooks/useAgentSteps.ts` | create | SSE subscription hook for AgentProgress |
 | `src/providers/registry.ts` | create | Provider resolution from env config |
 | `src/lib/canva/client.ts` | create | Typed Canva MCP client with tx guard |
 | `src/lib/social/instagram.ts` | create | Instagram Graph API publisher |
@@ -574,7 +642,19 @@ main app, runs `src/scheduler/worker.ts`, and polls every 60 seconds. This share
 the Prisma client and business logic with zero code duplication. Docker Compose
 restarts the container automatically on failure (`restart: unless-stopped`).
 
-**6. BrandKit as a first-class entity (owns prompt + artifacts + Canva link)**
+**6. Computer-use agent over OpenAI function calling for Path B**
+The original Path B design used OpenAI function calling to orchestrate Canva MCP
+tools. This was replaced with a computer-use agent (Claude + Playwright + headless
+Chromium) because the Canva MCP editing API (`perform-editing-operations`) only
+supports content substitution (`replace_text`, `update_fill`) — it cannot reposition,
+resize, or create new elements. A computer-use agent operates the Canva UI directly
+with full layout control: move elements, resize, change typography, add new objects,
+apply any styling — the same capabilities a human designer has. Tradeoff: higher
+per-generation API cost (~$0.10–0.50/generation estimate) and slower generation
+(~60–90s vs ~5s for function calling). Accepted because post quality is the primary
+objective for this tool.
+
+**7. BrandKit as a first-class entity (owns prompt + artifacts + Canva link)**
 Rather than a free-floating `BrandSystemPrompt` table and raw Canva ID strings on
 Project/Campaign, a **BrandKit** is a proper entity that Projects and Campaigns
 reference by FK. It is **hybrid**: it can link to a Canva brand kit
@@ -594,7 +674,9 @@ system default (`BrandKit.isDefault = true`).
 | Instagram Graph API app review takes weeks | High | High (blocks AC-3) | Start Meta Business app registration immediately; build and test publish flow with a test account before review completes |
 | LinkedIn app publishing permissions gated | Medium | High (blocks AC-3) | Apply for LinkedIn app early; design the publish layer to degrade gracefully (one channel fails, other proceeds) |
 | Canva MCP server not available in Azure prod | Medium | High (blocks entire design flow) | Confirm production MCP server hosting in design Q5 before build starts; have a fallback plan (Canva REST API adapter implementing same interface) |
-| Path B orchestrator runaway / high token cost | Medium | Medium | Hard limit of 20 tool calls per orchestration (EC-12); per-user generation budget enforced by NFR-7 |
+| Computer-use agent: Canva UI change breaks interaction | Medium | High (Path B down) | Monitor Canva UI releases; Path A (template mode) unaffected and always available as fallback; agent patched on UI change |
+| Computer-use agent: high per-call API cost | Medium | Medium | Claude computer-use calls are more expensive than text; per-user generation budget (NFR-7) caps spend |
+| Computer-use agent: slow generation (60–90s) | Low | Low | Accepted for v1; live step-by-step UI (FR-20b) makes the wait feel active rather than dead |
 | gpt-image-1 output incompatible with template dimensions | Low | Medium | Canva `update_fill` crops/scales to element bounds; validate output dimensions in EC-4 handler; offer template swap |
 | MinIO disk fills up on VPS | Low | Medium | Monitor VPS disk usage; 7-day lifecycle rule on `generated-images` bucket auto-deletes temp images; alert if disk > 80% |
 | `.env` file leaked via git | Low | High | `.gitignore` enforced; pre-commit hook blocks accidental commit of `.env`; rotate all secrets immediately if leak occurs |

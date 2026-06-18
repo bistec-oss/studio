@@ -2,11 +2,11 @@
 
 **Change:** marketing-post-studio-v1
 **Created:** 2026-06-12
-**Total Tasks:** 26
+**Total Tasks:** 27
 
 ## Summary
 
-26 tasks across 6 waves (plus Wave 3b). Waves 1–3 establish the foundation
+27 tasks across 6 waves (plus Wave 3b). Waves 1–3 establish the foundation
 (project scaffold, design system, data layer, provider abstraction, Canva + MinIO
 clients). Wave 3b adds the brand kit, project, and campaign data layer (these are
 referenced by the brief/generation flow). Waves 4–5 build the two design paths and
@@ -35,7 +35,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `docker-compose.yml`, `.env.example`, `.gitignore`
   - Estimate: medium
   - Depends: T01
-  - Notes: `docker-compose.yml` defines four services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only). All services use `env_file: .env` — no secrets in compose file. `.env.example` documents every variable. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
+  - Notes: `docker-compose.yml` defines five services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only), `agent` (computer-use agent service, built from `agent-service/Dockerfile`, port 3001 on internal Docker network only — never publicly exposed). All services use `env_file: .env`. `.env.example` documents every variable including `ANTHROPIC_API_KEY`, `CANVA_AGENT_EMAIL`, `CANVA_AGENT_PASSWORD`, `AGENT_SERVICE_URL`, `AGENT_TIMEOUT_SECONDS`. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
 
 - [ ] `T03` — Prisma schema + initial migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
@@ -63,7 +63,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/providers/interfaces/CopyProvider.ts`, `src/providers/interfaces/ImageProvider.ts`, `src/providers/interfaces/DesignOrchestrator.ts`
   - Estimate: small
   - Depends: T01
-  - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string): Promise<{ canvaDesignId: string }>`. These interfaces are the stable contract — all future AI models plug in here.
+  - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string, onStep: (step: AgentStep) => Promise<void>): Promise<{ canvaDesignId: string }>` where `AgentStep = { step: string; status: 'in_progress' | 'done' | 'error'; timestamp: string }`. The `onStep` callback is invoked as the agent emits progress events; the route handler uses it to append to `Draft.agentSteps` in the DB for SSE delivery to the browser. These interfaces are the stable contract — all future AI models plug in here.
 
 - [ ] `T06` — OpenAI copy provider implementation
   - Files: `src/providers/implementations/copy/openai.ts`
@@ -143,11 +143,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: T09, T12
   - Notes: `POST /api/design/assemble` with `mode=template`. Calls `uploadAsset` → `createFromTemplate` → `withEditingTransaction([replace_text, update_fill])`. Reads element IDs from `getDesignContent` after template instantiation. Stores `canvaDesignId` on Draft. FR-12, FR-12a, FR-13, FR-14.
 
-- [ ] `T14` — Path B: OpenAI orchestrator + design assembly
-  - Files: `src/providers/implementations/orchestrator/openai-canva.ts`, `src/app/api/design/assemble/route.ts` (mode=generate branch)
+- [ ] `T14` — Computer-use agent service (Path B design generation)
+  - Files: `agent-service/src/index.ts`, `agent-service/src/canva-agent.ts`, `agent-service/src/session.ts`, `agent-service/package.json`, `agent-service/Dockerfile`, `src/providers/implementations/orchestrator/agent.ts`, `src/app/api/design/assemble/route.ts` (mode=generate branch), `src/app/api/design/assemble/[draftId]/steps/route.ts`, `docker-compose.yml` (add `agent` service)
   - Estimate: large
-  - Depends: T09, T12, T08, T26
-  - Notes: Implements `DesignOrchestrator`. Resolves the BrandKit (campaign → project → system default) and passes brief + the kit's active `BrandKitPrompt` + feed-to-AI artifacts + `canvaBrandKitId` + Canva MCP tool schemas as OpenAI function definitions. Enforces 20-tool-call hard limit (EC-12). On any error: calls `cancelTransaction` before throwing (EC-11). Stores `canvaDesignId` on Draft. FR-18b–FR-21b, FR-27b.
+  - Depends: T05, T09, T12, T26
+  - Notes: Two parts. (1) **Agent service** (`agent-service/`): standalone Node.js + Playwright app. Built from `mcr.microsoft.com/playwright/node:20`. Exposes internal HTTP API: `POST /generate` starts a session, `GET /generate/:sessionId` returns status + steps. On `/generate`: opens Canva editor in persistent headless browser (dedicated Canva account — `CANVA_AGENT_EMAIL`/`CANVA_AGENT_PASSWORD`), creates new design at channel dimensions, uses Claude computer-use API (`ANTHROPIC_API_KEY`) to compose full layout (background, imagery, text, brand styling) using brief + brand context (voice prompt + feedToAI artifact URLs). Emits step events to `AGENT_CALLBACK_URL` (the Next.js app) as work progresses. Returns `{ canvaDesignId }` on completion. Hard timeout via `AGENT_TIMEOUT_SECONDS` (default 300s) — Playwright terminates active tab on expiry (EC-12). Re-authenticates if Canva session expires (EC-17). On any error: terminates session, deletes partial design if created. (2) **Orchestrator adapter** (`src/providers/implementations/orchestrator/agent.ts`): implements `DesignOrchestrator`. POSTs to agent service (`AGENT_SERVICE_URL`), polls for steps, calls `onStep` callback as events arrive (route handler appends to `Draft.agentSteps`), resolves with `{ canvaDesignId }`. (3) **SSE route** (`GET /api/design/assemble/[draftId]/steps`): streams `Draft.agentSteps` as Server-Sent Events for the live progress UI (T27). FR-18b–FR-22b, EC-11, EC-12, EC-17.
 
 - [ ] `T15` — Design export API route
   - Files: `src/app/api/design/export/route.ts`
@@ -197,7 +197,13 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/(app)/draft/[id]/page.tsx`
   - Estimate: medium
   - Depends: T13, T14, T15, T25
-  - Notes: Shows generated copy (editable textarea), generated image (with "Regenerate" button), template selector (Path A: dropdown of brand templates; Path B: N/A), preview of assembled Canva design (thumbnail via `get-design-thumbnail`), "Export" button. No Canva editor embed — FR-16 confirmed. AC-6, AC-7.
+  - Notes: Shows generated copy (editable textarea), generated image (with "Regenerate" button), template selector (Path A: dropdown of brand templates; Path B: N/A), preview of assembled Canva design (thumbnail via `get-design-thumbnail`), "Export" button. For Path B drafts with `status=IN_PROGRESS`, renders the `AgentProgress` component (T27) in place of the thumbnail until the agent completes. No Canva editor embed — FR-16 confirmed. AC-6, AC-7, AC-5b.
+
+- [ ] `T27` — Agent step live status UI
+  - Files: `src/components/agent/AgentProgress.tsx`, `src/hooks/useAgentSteps.ts`
+  - Estimate: small
+  - Depends: T14, T25
+  - Notes: `AgentProgress` renders a vertical step list — each step shows a spinner (in_progress), checkmark (done), or X (error) icon alongside the step name. Subscribes to `GET /api/design/assemble/[draftId]/steps` (SSE) via the `useAgentSteps` hook (manages EventSource lifecycle: open on mount, close on unmount or on a `done`/`error` terminal event). Used in the brief submission loading state and in the draft page (T21) during Path B generation. Step names match FR-20b: "Starting Canva session", "Creating canvas", "Adding background", "Uploading brand assets", "Writing headline", "Applying brand colors", "Reviewing composition", "Exporting design", "Complete". FR-20b, AC-5b.
 
 - [ ] `T22` — End-to-end test pass + acceptance criteria sign-off
   - Files: `tests/e2e/` (Playwright)
