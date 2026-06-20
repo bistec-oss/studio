@@ -189,7 +189,7 @@ Agent loop (standard Anthropic SDK tool-use pattern):
 ```typescript
 async function renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer>
 // Uses puppeteer-core + chromium-min
-// deviceScaleFactor: 2 → 2160×2160 → downsampled to 1080×1080 for Instagram
+// deviceScaleFactor: 2 → 2160×2160 → downsampled to 1080×1080 square (all platforms)
 // page.setContent(html, { waitUntil: 'networkidle0' })
 // Returns PNG buffer — caller uploads to MinIO
 ```
@@ -697,7 +697,7 @@ project ever migrates to AWS S3, only the env vars change.
 **4. Puppeteer for HTML→PNG (over html2canvas / node-canvas)**
 Puppeteer (headless Chromium) produces browser-identical rendering: CSS gradients,
 shadows, clip-paths, custom fonts — all correct. `deviceScaleFactor: 2` gives
-retina-quality output at 2160×2160, downsampled to 1080×1080 for Instagram.
+retina-quality output at 2160×2160, downsampled to 1080×1080 square for all platforms (Instagram and LinkedIn both use square post format).
 html2canvas loses fidelity on modern CSS. node-canvas requires reimplementing a
 layout engine. Production screenshot services (Vercel OG, Bannerbear) all use
 headless Chrome. `chromium-min` keeps the Docker layer size manageable with

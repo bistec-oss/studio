@@ -35,13 +35,12 @@ function KitCard({ kit, isSelected, onClick }: { kit: BrandKit; isSelected: bool
           <div className="text-[0.7rem] text-slate-400 mt-0.5">{templates.length} template{templates.length !== 1 ? 's' : ''}</div>
         </div>
         <div className="flex gap-1">
-          {['instagram', 'linkedin'].map(p => (
-            templates.some(t => t.platform === p) && (
-              <div key={p} className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center">
-                {p === 'instagram' ? <Instagram size={11} className="text-slate-500" /> : <Linkedin size={11} className="text-slate-500" />}
-              </div>
-            )
-          ))}
+          <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center" title="Instagram">
+            <Instagram size={11} className="text-slate-400" />
+          </div>
+          <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center" title="LinkedIn">
+            <Linkedin size={11} className="text-slate-400" />
+          </div>
         </div>
       </div>
       <div className="flex gap-1.5 mb-3">
@@ -174,10 +173,8 @@ export default function BrandKitsPage() {
                         <div className="text-[0.68rem] text-slate-400 mt-0.5">{t.description}</div>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center gap-1 text-slate-400">
-                            {t.platform === 'instagram'
-                              ? <><Instagram size={10} /><span className="text-[0.65rem]">Instagram</span></>
-                              : <><Linkedin size={10} /><span className="text-[0.65rem]">LinkedIn</span></>
-                            }
+                            <Instagram size={10} /><Linkedin size={10} />
+                            <span className="text-[0.65rem]">All platforms</span>
                           </div>
                           <button className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[0.65rem] text-blue-600 font-semibold transition-opacity">
                             Edit <ChevronRight size={10} />

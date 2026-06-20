@@ -41,7 +41,6 @@ export type BrandKitTemplate = {
   brandKitId: string
   name: string
   description: string
-  platform: Platform
   previewColor: string
 }
 
@@ -173,15 +172,15 @@ export const brandKits: BrandKit[] = [
 ]
 
 export const brandKitTemplates: BrandKitTemplate[] = [
-  { id: 't1', brandKitId: 'bk1', name: 'Blue Gradient Card', description: 'Bold heading with gradient overlay', platform: 'instagram', previewColor: '#2563eb' },
-  { id: 't2', brandKitId: 'bk1', name: 'Clean Split', description: 'Left image, right text block', platform: 'linkedin', previewColor: '#7c3aed' },
-  { id: 't3', brandKitId: 'bk1', name: 'Announcement Banner', description: 'Full-bleed with centered call-out', platform: 'instagram', previewColor: '#10b981' },
-  { id: 't4', brandKitId: 'bk1', name: 'Stat Showcase', description: 'Three-column metrics layout', platform: 'linkedin', previewColor: '#2563eb' },
-  { id: 't5', brandKitId: 'bk2', name: 'Sky Card', description: 'Light airy card with skyblue accents', platform: 'instagram', previewColor: '#0ea5e9' },
-  { id: 't6', brandKitId: 'bk2', name: 'Professional Post', description: 'Formal grid layout for B2B', platform: 'linkedin', previewColor: '#6366f1' },
-  { id: 't7', brandKitId: 'bk3', name: 'Event Promo', description: 'High-energy event announcement', platform: 'instagram', previewColor: '#dc2626' },
-  { id: 't8', brandKitId: 'bk3', name: 'Speaker Spotlight', description: 'Speaker photo with event details', platform: 'instagram', previewColor: '#ea580c' },
-  { id: 't9', brandKitId: 'bk3', name: 'Recap Post', description: 'Post-event highlights layout', platform: 'linkedin', previewColor: '#facc15' },
+  { id: 't1', brandKitId: 'bk1', name: 'Blue Gradient Card', description: 'Bold heading with gradient overlay', previewColor: '#2563eb' },
+  { id: 't2', brandKitId: 'bk1', name: 'Clean Split', description: 'Left image, right text block', previewColor: '#7c3aed' },
+  { id: 't3', brandKitId: 'bk1', name: 'Announcement Banner', description: 'Full-bleed with centered call-out', previewColor: '#10b981' },
+  { id: 't4', brandKitId: 'bk1', name: 'Stat Showcase', description: 'Three-column metrics layout', previewColor: '#2563eb' },
+  { id: 't5', brandKitId: 'bk2', name: 'Sky Card', description: 'Light airy card with skyblue accents', previewColor: '#0ea5e9' },
+  { id: 't6', brandKitId: 'bk2', name: 'Professional Post', description: 'Formal grid layout for B2B', previewColor: '#6366f1' },
+  { id: 't7', brandKitId: 'bk3', name: 'Event Promo', description: 'High-energy event announcement', previewColor: '#dc2626' },
+  { id: 't8', brandKitId: 'bk3', name: 'Speaker Spotlight', description: 'Speaker photo with event details', previewColor: '#ea580c' },
+  { id: 't9', brandKitId: 'bk3', name: 'Recap Post', description: 'Post-event highlights layout', previewColor: '#facc15' },
 ]
 
 // ─── Projects ─────────────────────────────────────────────────────────────────

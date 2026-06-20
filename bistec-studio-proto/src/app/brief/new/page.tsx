@@ -41,7 +41,7 @@ export default function NewBriefPage() {
 
   const update = (patch: Partial<WizardState>) => setState(s => ({ ...s, ...patch }))
 
-  const kitForPlatform = brandKitTemplates.filter(t => t.platform === state.platform)
+  const allTemplates = brandKitTemplates
 
   function addImage() {
     const id = `img-${Date.now()}`
@@ -162,7 +162,7 @@ export default function NewBriefPage() {
                   <div className="mt-5">
                     <label className="text-[0.72rem] font-bold tracking-widest uppercase text-slate-500 mb-2 block">Template</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {kitForPlatform.map(t => {
+                      {allTemplates.map(t => {
                         const kit = brandKits.find(k => k.id === t.brandKitId)
                         return (
                           <button
@@ -205,7 +205,7 @@ export default function NewBriefPage() {
                         </div>
                         <div className="text-[0.78rem] font-semibold text-slate-600">No reference</div>
                       </button>
-                      {kitForPlatform.map(t => {
+                      {allTemplates.map(t => {
                         const kit = brandKits.find(k => k.id === t.brandKitId)
                         return (
                           <button
