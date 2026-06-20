@@ -67,7 +67,7 @@ export default function NewBriefPage() {
   }
 
   const canNext = [
-    true,
+    state.pathType === 'A' ? state.templateId !== '' : true,
     true, // campaignId '' = Uncategorized is valid
     state.copyPrompt.trim().length > 10,
     true,
