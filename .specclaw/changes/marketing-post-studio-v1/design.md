@@ -135,9 +135,18 @@ POST /api/design/assemble?mode=generate
   → launch Claude design agent (designAgent.ts):
       system prompt: "design a complete HTML/CSS social media post from scratch"
       tools: generateImage, renderHtml, getBrandKitContext
-      context: brief (topic, description, goal, tone, channels, referenceImageUrls)
+      context: brief (topic, description, goal, tone, channels)
+               + briefImages[] ({ url, intent: "embed" | "reference" })
+                 — "embed" images must appear in the HTML layout via <img>
+                 — "reference" images are compositional inspiration only
+               + referenceTemplateHtml? (htmlTemplate of the chosen BrandKitTemplate,
+                 with a "style inspiration, not a template to fill" instruction)
                + brand kit (colors, fonts, logoUrl, voicePrompt)
-      Claude generates HTML/CSS → calls generateImage if imagery needed
+      Claude generates HTML/CSS:
+        — embeds "embed" images in the layout
+        — uses "reference" images for compositional guidance only
+        — uses referenceTemplateHtml as loose style inspiration if provided
+        — calls generateImage if additional raster imagery is needed
         → calls renderHtml → Puppeteer → PNG → MinIO
   → returns { draftId, exportUrl, htmlContent }
 ```
@@ -317,7 +326,11 @@ model Brief {
   copyProviderKey       String     // e.g. "openai" — user's choice at brief time
   imageProviderKey      String?    // preferred image provider if Claude calls generateImage; null = system default
   additionalImageUrl    String?    // Path A only — MinIO URL of user-uploaded image for a specific template slot
-  referenceImageUrls    String[]   // Path B only — MinIO URLs of user-supplied images passed to the Claude design agent
+  briefImages           Json?      // Path B only — { url: string, intent: "embed" | "reference" }[]
+                                   //   "embed"     → Claude places this image in the HTML layout via <img>
+                                   //   "reference" → Claude uses it for compositional inspiration only
+  referenceTemplateId   String?    // Path B only — FK → BrandKitTemplate; passed to Claude as style inspiration
+  referenceTemplate     BrandKitTemplate? @relation("BriefReferenceTemplate", fields: [referenceTemplateId], references: [id])
   createdAt             DateTime   @default(now())
   drafts                Draft[]
 }
@@ -391,6 +404,7 @@ model BrandKitTemplate {
   name         String   // display name shown in brief picker
   htmlTemplate String   @db.Text  // base HTML/CSS template with content slots
   createdAt    DateTime @default(now())
+  referencedByBriefs Brief[] @relation("BriefReferenceTemplate")  // Path B style-reference back-relation
 }
 
 // Versioned brand voice / system prompt — prepended to Path B design agent system prompt.

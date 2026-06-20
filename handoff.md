@@ -117,10 +117,12 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 **Brief fields (Path A):** topic · description (AI prompt context — speaker bios, event details, key messages) · goal/CTA · tone · channels · template selection · additional image (optional upload)
 
 ### Path B — Claude-generated freeform design
-1. User writes a brief (design mode = "Generate new design"); user may optionally upload one or more **Reference Images** (speaker photo, product shot, etc.) stored in MinIO
+1. User writes a brief (design mode = "Generate new design"); user may optionally:
+   - Upload one or more **images**, each tagged with intent: **"Embed in design"** (Claude must include it in the layout via `<img>`) or **"Style reference only"** (Claude uses it for compositional inspiration but doesn't embed it)
+   - Pick an optional **template reference** from the brand kit's linked templates — passed to Claude as loose style inspiration ("design in this spirit, not a template to fill")
 2. `POST /api/design/assemble?mode=generate` launches Claude design agent in freeform mode:
-   - Claude receives: brief + brand kit (colors, fonts, logoUrl, voice prompt, feed-to-AI artifacts) + referenceImageUrls[]
-   - Claude generates complete HTML/CSS design from scratch
+   - Claude receives: brief + brand kit (colors, fonts, logoUrl, voice prompt, feed-to-AI artifacts) + `briefImages[]` (each with `url` + `intent: "embed" | "reference"`) + optional reference template HTML (with "style inspiration only" instruction)
+   - Claude generates complete HTML/CSS design from scratch; embeds images tagged `"embed"` directly in the HTML; uses images tagged `"reference"` only as compositional guidance
    - Claude calls `generateImage(prompt)` tool only when raster imagery genuinely serves the design → MinIO; otherwise uses CSS/SVG/gradient backgrounds
    - Claude calls `renderHtml(html, 1080, 1080)` → Puppeteer → PNG → MinIO
 3. Draft saved with `htmlContent` + `exportUrl`
@@ -179,7 +181,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt
 - `ProjectCampaign` — M2M join (project ↔ campaign)
 - `CampaignDraft` — M2M join (campaign ↔ draft, shared asset linking)
-- `Brief` — topic, **description** (AI prompt context — speaker bios, event details, key messages), goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, **imageProviderKey** (optional — overrides system default image provider if Claude calls `generateImage`), **additionalImageUrl** (nullable — MinIO URL of user-uploaded image placed into template slot, Path A only), **referenceImageUrls** (MinIO URLs of user-supplied images passed to the design agent, Path B only)
+- `Brief` — topic, **description** (AI prompt context — speaker bios, event details, key messages), goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, **imageProviderKey** (optional — overrides system default image provider if Claude calls `generateImage`), **additionalImageUrl** (nullable — MinIO URL of user-uploaded image placed into template slot, Path A only), **briefImages** (Path B only — JSON array of `{ url: string, intent: "embed" | "reference" }` objects; MinIO URLs of user-supplied images; `"embed"` images are placed in the HTML layout, `"reference"` images are passed as compositional inspiration only), **referenceTemplateId** (nullable — FK → BrandKitTemplate; Path B only — the chosen template's HTML is passed to Claude as style inspiration, not filled)
 - `Draft` — copyText, **imageUrl?** (MinIO URL from `generateImage` tool call — null if Claude used CSS/SVG), **htmlContent** (current HTML state), templateId, exportUrl (MinIO), status
 - `Post` — channel (INSTAGRAM | LINKEDIN), status, scheduledAt, publishedAt, platformId, errorReason
 - `BrandKit` — name, **colors Json?** (hex palette), **fonts Json?** ({name, url}[]), **logoUrl String?**, isDefault, isDeleted — first-class, admin-managed; referenced by Project.defaultBrandKitId and Campaign.brandKitId

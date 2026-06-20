@@ -159,7 +159,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
   - Depends: T03, T04, T08, T23, T25, T26
-  - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Copy model dropdown populates from `GET /api/providers/available`. Design mode radio (Path A / Path B). **Image uploads differ by path:** Path A shows a single "Additional Image" upload (stored as `additionalImageUrl` in Brief — passed into the HTML template by the Claude design agent). Path B shows a multi-image "Reference Images" upload (stored as `referenceImageUrls[]` in Brief — passed to the Claude design agent as context for freeform generation). **Image provider selector is hidden by default** — system default is used when Claude calls `generateImage`. An "Advanced" disclosure exposes it for users who want to override. FR-5, FR-5a, FR-5b, FR-6, FR-18c, FR-28–FR-30, AC-13, AC-16, AC-17.
+  - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Copy model dropdown populates from `GET /api/providers/available`. Design mode radio (Path A / Path B). **Image uploads differ by path:** Path A shows a single "Additional Image" upload (stored as `additionalImageUrl` in Brief — passed into the HTML template by the Claude design agent). Path B shows a multi-image upload where each image is tagged with an **intent**: "Embed in design" (Claude places this image in the HTML layout) or "Style reference only" (Claude uses it for compositional inspiration only). Stored as `briefImages: { url, intent }[]` (JSON) in Brief. Path B also shows an optional **template reference** picker (same thumbnail list as Path A's picker) — user can choose a template from the resolved brand kit as style inspiration; stored as `referenceTemplateId` FK on Brief. **Image provider selector is hidden by default** — system default is used when Claude calls `generateImage`. An "Advanced" disclosure exposes it for users who want to override. FR-5, FR-5a, FR-5b, FR-6, FR-18c, FR-18d, FR-28–FR-30, AC-13, AC-16, AC-17.
 
 - [ ] `T12` — Copy generation API route + image tool handler
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
@@ -187,10 +187,14 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: T09, T12, T08, T26
   - Notes: Implements `DesignOrchestrator`. `POST /api/generate/assemble-b`. Flow:
     1. Resolve brand kit → get `colors`, `fonts`, `logoUrl`, active voice prompt, feed-to-AI artifact URLs.
-    2. Launch `runDesignAgent` in freeform-generation mode: system prompt instructs Claude to design a complete HTML/CSS post from scratch using brand guidelines. Include `referenceImageUrls[]` from brief as context images for Claude.
-    3. Tools available: `generateImage`, `renderHtml`, `getBrandKitContext`. Claude generates HTML, optionally calls `generateImage` for custom imagery, calls `renderHtml` to produce PNG.
-    4. Create `Draft` row: `{ copyText, imageUrl? (from any generateImage tool call, null if Claude used CSS/SVG), htmlContent, exportUrl, status: EXPORTED }`.
-    5. Return `{ draftId, exportUrl }`.
+    2. If `brief.referenceTemplateId` is set, load `BrandKitTemplate.htmlTemplate` — pass to agent with "style inspiration only" instruction.
+    3. Launch `runDesignAgent` in freeform-generation mode: system prompt instructs Claude to design a complete HTML/CSS post from scratch using brand guidelines.
+       - Pass `brief.briefImages[]` ({ url, intent }) — agent prompt explicitly instructs Claude to embed `"embed"` images in the HTML layout and use `"reference"` images for compositional inspiration only.
+       - Pass reference template HTML (if present) with "design in this spirit, not a template to fill" instruction.
+       - Tools available: `generateImage`, `renderHtml`, `getBrandKitContext`.
+    4. Claude generates HTML, embeds `"embed"` images, optionally calls `generateImage` for additional imagery, calls `renderHtml` to produce PNG.
+    5. Create `Draft` row: `{ copyText, imageUrl? (from any generateImage tool call, null if Claude used CSS/SVG), htmlContent, exportUrl, status: EXPORTED }`.
+    6. Return `{ draftId, exportUrl }`.
 
     Hard limit: 15 tool calls (EC-12). On tool error: agent halted, error returned to caller with brief preserved.
 
@@ -283,6 +287,10 @@ Within a wave, tasks without inter-dependencies can run in parallel.
     - `BrandKitTemplate.htmlTemplate String @db.Text` — added; HTML/CSS template string
     - `BrandKitTemplate.canvaTemplateId` — **removed**
     - `BrandKitSource` enum — **removed**
+    - `Brief.briefImages Json?` — added; Path B only — `{ url: string, intent: "embed" | "reference" }[]`; replaces flat `referenceImageUrls String[]`
+    - `Brief.referenceImageUrls` — **removed** (replaced by `briefImages`)
+    - `Brief.referenceTemplateId String?` — added; Path B only — FK → BrandKitTemplate (style inspiration reference)
+    - `BrandKitTemplate.referencedByBriefs` — back-relation for the above FK
 
 - [ ] `T28` — bistec-studio MCP server (admin + generation tools)
   - Files: `src/mcp/server.ts`, `src/mcp/tools/brandkit.ts`, `src/mcp/tools/generate.ts`, `src/mcp/tools/publish.ts`, `src/mcp/auth.ts`

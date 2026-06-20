@@ -123,17 +123,28 @@ channels limited to Instagram + LinkedIn, internal team only.
   runs the Claude design agent in freeform mode. Claude receives: the user's brief,
   the resolved brand kit's active system prompt, structured brand data (colors,
   fonts, logoUrl), feed-to-AI artifact URLs (see FR-25b), the generated copy text,
-  and any user-supplied reference image URLs (see FR-18c). Claude designs a complete
-  HTML/CSS post from scratch, calls the `generateImage` tool if additional imagery
-  is needed, then calls `renderHtml` to produce the PNG.
-- **FR-18c** The brief UI for Path B includes an optional **reference image upload**
-  (one or more images — e.g. a speaker photo, product shot, or event graphic).
-  Uploaded images are stored in MinIO and their URLs are passed to the Claude design
-  agent. Claude decides how to use them: it may embed them directly in the HTML
-  design via `<img>` tags, use them as compositional reference when calling
-  `generateImage`, or ignore them if they don't fit the design. The user hands the
-  images over; Claude decides their role. This is distinct from Path A's image URL,
-  which is always embedded into a specific template slot.
+  any user-supplied images with their intent tags (see FR-18c), and an optional
+  template reference (see FR-18d). Claude designs a complete HTML/CSS post from
+  scratch, calls the `generateImage` tool if additional imagery is needed, then calls
+  `renderHtml` to produce the PNG.
+- **FR-18c** The brief UI for Path B includes an optional **image upload** (one or
+  more images — e.g. a speaker photo, product shot, or event graphic). For each
+  uploaded image the user selects an **intent**:
+  - **"Embed in design"** — Claude must include this image in the HTML layout via an
+    `<img>` tag. The image is placed in the design as a visual element.
+  - **"Style reference only"** — Claude uses this image for compositional inspiration
+    (layout, color mood, composition) but does not embed it in the output HTML.
+  Uploaded images are stored in MinIO as `briefImages: { url, intent }[]` on the
+  Brief record. Claude receives both the URLs and their intent tags and acts
+  accordingly. This replaces the old flat `referenceImageUrls[]` field.
+- **FR-18d** The brief UI for Path B includes an optional **template reference**
+  picker: the user can select one of the brand kit's linked HTML/CSS templates as a
+  **style inspiration**. The selected template's HTML is passed to the Claude design
+  agent with an explicit instruction that it is a style guide only — Claude must
+  design a new post from scratch inspired by it, not fill it. This is stored as
+  `Brief.referenceTemplateId` (FK → BrandKitTemplate). The brief UI shows the same
+  template thumbnails as Path A's picker, making it easy to say "make something in
+  the spirit of this template".
 - **FR-19b** Claude may call the `generateImage` tool (which calls the resolved
   ImageProvider, e.g. gpt-image-2) to produce imagery, or embed existing brand asset
   URLs (from MinIO) directly in the HTML — depending on what best serves the brief.

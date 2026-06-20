@@ -34,7 +34,8 @@ Build the brief wizard UI and the full AI generation backend — copy, image, an
   - Campaign selector (optional) — overrides brand kit if campaign has one
   - Design mode toggle: Path A (Preset Template) vs Path B (AI Generated)
   - Path A: shows template picker drawn from `BrandKitTemplate` rows linked to the selected kit
-  - Path B: reference image upload slots (up to 3 `referenceImageUrls`) — passed to the Claude design agent as context for freeform generation
+  - Path B: multi-image upload — each image is tagged with an **intent** (radio or toggle per image): **"Embed in design"** (Claude places it in the HTML via `<img>`) or **"Style reference only"** (compositional inspiration, not embedded). Stored as `briefImages: { url, intent }[]` on Brief. Up to 5 images.
+  - Path B: optional **template reference** picker — same thumbnail list as the Path A template picker, filtered to the resolved brand kit. User selects a template as loose style inspiration; stored as `Brief.referenceTemplateId`.
   - Additional image upload (Path A optional): uploads to MinIO → stored as `Brief.additionalImageUrl` — passed into the HTML template by the Claude design agent
 
   **Step 3 — Channels & Providers**
@@ -100,12 +101,14 @@ Build the brief wizard UI and the full AI generation backend — copy, image, an
   **`POST /api/generate/assemble-b`** — Path B pipeline:
 
   1. Resolve brand kit → get `colors`, `fonts`, `logoUrl`, active voice prompt, feed-to-AI artifact URLs.
-  2. Launch `runDesignAgent` in **freeform-generation mode**: system prompt instructs Claude to design a complete HTML/CSS post from scratch using the brand guidelines.
-     - Include `referenceImageUrls[]` from the brief as context images for Claude
+  2. If `brief.referenceTemplateId` is set, load `BrandKitTemplate.htmlTemplate` for the style reference.
+  3. Launch `runDesignAgent` in **freeform-generation mode**: system prompt instructs Claude to design a complete HTML/CSS post from scratch using the brand guidelines.
+     - Pass `brief.briefImages[]` ({ url, intent }) — prompt instructs Claude to embed `"embed"` images in the HTML layout and use `"reference"` images for compositional inspiration only
+     - If reference template provided, include its HTML with instruction: "use as style inspiration only — do not fill this template"
      - Tools available: `generateImage`, `renderHtml`, `getBrandKitContext`
-  3. Claude generates HTML from scratch, calls `generateImage` if raster imagery is needed (Claude decides), then calls `renderHtml` to produce the final PNG.
-  4. Create `Draft` row: `{ copyText, imageUrl? (from any generateImage tool call, null if CSS/SVG used instead), htmlContent, exportUrl, status: EXPORTED }`.
-  5. Return `{ draftId, exportUrl }`.
+  4. Claude generates HTML from scratch, embeds `"embed"` images, calls `generateImage` if additional raster imagery is needed (Claude decides), then calls `renderHtml` to produce the final PNG.
+  5. Create `Draft` row: `{ copyText, imageUrl? (from any generateImage tool call, null if CSS/SVG used instead), htmlContent, exportUrl, status: EXPORTED }`.
+  6. Return `{ draftId, exportUrl }`.
 
   Hard limit: 15 tool calls (EC-12). On tool error: agent halted, error returned to caller with brief record preserved.
 
@@ -166,6 +169,8 @@ After generation, the draft view (T21) allows:
 - [ ] Path A: agent error is surfaced as a 422 with a descriptive message
 - [ ] Path B: Claude design agent completes freeform HTML generation (`htmlContent` non-null)
 - [ ] Path B: `exportUrl` set and PNG renders correctly
+- [ ] Path B: `"embed"` intent images appear in the rendered HTML layout; `"reference"` intent images do not appear as `<img>` tags
+- [ ] Path B: when `referenceTemplateId` is set, the generated design reflects the template's visual style without copying its structure verbatim
 - [ ] Agent `generateImage` tool call: when Claude calls it, result is uploaded to MinIO and URL embedded in HTML
 - [ ] `Draft.imageUrl` is null when Claude uses CSS/SVG; non-null when Claude calls `generateImage`
 - [ ] Export route produces a stable MinIO URL and sets `Draft.status = EXPORTED`
