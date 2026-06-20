@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Instagram, Linkedin, Upload, X, Image as ImageIcon, Link as LinkIcon, ChevronRight, ChevronLeft, Sparkles, FileText } from 'lucide-react'
 import Header from '@/components/Header'
-import { brandKits, brandKitTemplates, campaigns } from '@/data/mock'
+import { brandKits, brandKitTemplates, campaigns, projects, getCampaignBrandKit, getBrandKitSource } from '@/data/mock'
 import type { Platform, PathType, ImageIntent } from '@/data/mock'
 
 type UploadedImage = {
@@ -67,10 +67,10 @@ export default function NewBriefPage() {
   }
 
   const canNext = [
-    true, // step 0 always valid
-    state.campaignId !== '',
+    true,
+    true, // campaignId '' = Uncategorized is valid
     state.copyPrompt.trim().length > 10,
-    true, // images optional
+    true,
     true,
   ]
 
@@ -235,28 +235,107 @@ export default function NewBriefPage() {
             {step === 1 && (
               <div>
                 <h2 className="text-[1rem] font-bold text-slate-800 mb-1">Select Campaign</h2>
-                <p className="text-[0.78rem] text-slate-500 mb-6">Group this post under a campaign for organisation.</p>
-                <div className="space-y-2">
-                  {campaigns.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => update({ campaignId: c.id })}
-                      className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                        state.campaignId === c.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        c.status === 'active' ? 'bg-emerald-500' : c.status === 'draft' ? 'bg-amber-500' : 'bg-slate-400'
-                      }`} />
-                      <div className="flex-1">
-                        <div className={`text-[0.85rem] font-semibold ${state.campaignId === c.id ? 'text-blue-700' : 'text-slate-700'}`}>{c.name}</div>
-                        <div className="text-[0.7rem] text-slate-400">{c.postCount} posts · {c.status}</div>
+                <p className="text-[0.78rem] text-slate-500 mb-5">
+                  Group this post under a campaign. Brand kit and tone are auto-populated from the campaign or its parent project.
+                </p>
+
+                {/* Selected campaign — brand kit preview */}
+                {state.campaignId && (() => {
+                  const selectedCampaign = campaigns.find(c => c.id === state.campaignId)
+                  if (!selectedCampaign) return null
+                  const kit = getCampaignBrandKit(selectedCampaign)
+                  const kitSource = getBrandKitSource(selectedCampaign)
+                  const srcLabel = { campaign: 'Campaign override', project: 'Inherited from project', default: 'System default' }
+                  const srcColor = { campaign: 'text-blue-600 bg-blue-50 ring-1 ring-blue-200/60', project: 'text-violet-600 bg-violet-50 ring-1 ring-violet-200/60', default: 'text-slate-500 bg-slate-50 ring-1 ring-slate-200/60' }
+                  return (
+                    <div className="flex items-center gap-2.5 mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <div className="flex gap-1">
+                        {[kit.primaryColor, kit.secondaryColor, kit.accentColor].map((color, i) => (
+                          <span key={i} className="w-4 h-4 rounded-full border border-white shadow-sm" style={{ background: color }} />
+                        ))}
                       </div>
-                      {state.campaignId === c.id && <span className="text-blue-600 text-[0.72rem] font-bold">Selected</span>}
-                    </button>
-                  ))}
+                      <span className="text-[0.78rem] font-semibold text-emerald-800">{kit.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[0.62rem] font-semibold ${srcColor[kitSource]}`}>
+                        {srcLabel[kitSource]}
+                      </span>
+                      <span className="text-[0.72rem] text-emerald-600 ml-auto">Auto-populated</span>
+                    </div>
+                  )
+                })()}
+
+                <div className="space-y-1.5">
+                  {/* Uncategorized option */}
+                  <button
+                    onClick={() => update({ campaignId: '' })}
+                    className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all ${
+                      state.campaignId === ''
+                        ? 'border-amber-400 bg-amber-50'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-3 h-3 rounded border-2 border-dashed border-slate-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className={`text-[0.85rem] font-semibold ${state.campaignId === '' ? 'text-amber-700' : 'text-slate-600'}`}>No campaign (Uncategorized)</div>
+                      <div className="text-[0.7rem] text-slate-400">Post will use the system default brand kit. Can be assigned later.</div>
+                    </div>
+                    {state.campaignId === '' && <span className="text-amber-600 text-[0.72rem] font-bold">Selected</span>}
+                  </button>
+
+                  {/* Campaigns grouped by project */}
+                  {projects.map(project => {
+                    const projectCampaigns = campaigns.filter(c => c.projectIds.includes(project.id))
+                    if (projectCampaigns.length === 0) return null
+                    return (
+                      <div key={project.id}>
+                        <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-slate-400">{project.name}</div>
+                        {projectCampaigns.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => update({ campaignId: c.id })}
+                            className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all mb-1.5 ${
+                              state.campaignId === c.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                              c.status === 'active' ? 'bg-emerald-500' : c.status === 'draft' ? 'bg-amber-500' : 'bg-slate-400'
+                            }`} />
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-[0.85rem] font-semibold truncate ${state.campaignId === c.id ? 'text-blue-700' : 'text-slate-700'}`}>{c.name}</div>
+                              <div className="text-[0.7rem] text-slate-400">{c.postCount} posts · {c.status}</div>
+                            </div>
+                            {state.campaignId === c.id && <span className="text-blue-600 text-[0.72rem] font-bold flex-shrink-0">Selected</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })}
+
+                  {/* Standalone campaigns */}
+                  {campaigns.filter(c => c.projectIds.length === 0).length > 0 && (
+                    <div>
+                      <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-slate-400">Standalone</div>
+                      {campaigns.filter(c => c.projectIds.length === 0).map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => update({ campaignId: c.id })}
+                          className={`w-full flex items-center gap-3 p-3.5 rounded-xl border-2 text-left transition-all mb-1.5 ${
+                            state.campaignId === c.id
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="w-2 h-2 rounded-full flex-shrink-0 bg-slate-400" />
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-[0.85rem] font-semibold truncate ${state.campaignId === c.id ? 'text-blue-700' : 'text-slate-700'}`}>{c.name}</div>
+                            <div className="text-[0.7rem] text-slate-400">{c.postCount} posts · {c.status}</div>
+                          </div>
+                          {state.campaignId === c.id && <span className="text-blue-600 text-[0.72rem] font-bold flex-shrink-0">Selected</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -340,7 +419,7 @@ export default function NewBriefPage() {
                   {[
                     { label: 'Platform', value: state.platform },
                     { label: 'Path', value: `Path ${state.pathType} — ${state.pathType === 'A' ? 'Template fill' : 'Freeform design'}` },
-                    { label: 'Campaign', value: campaigns.find(c => c.id === state.campaignId)?.name ?? '—' },
+                    { label: 'Campaign', value: state.campaignId ? campaigns.find(c => c.id === state.campaignId)?.name ?? '—' : 'Uncategorized' },
                     { label: 'Template', value: state.templateId ? brandKitTemplates.find(t => t.id === state.templateId)?.name : state.referenceTemplateId ? `Style ref: ${brandKitTemplates.find(t => t.id === state.referenceTemplateId)?.name}` : 'None' },
                     { label: 'Images', value: state.images.length > 0 ? `${state.images.length} image${state.images.length > 1 ? 's' : ''} (${state.images.filter(i => i.intent === 'embed').length} embed, ${state.images.filter(i => i.intent === 'reference').length} reference)` : 'None' },
                   ].map(row => (

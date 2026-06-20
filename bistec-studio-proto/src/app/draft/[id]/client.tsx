@@ -129,7 +129,7 @@ export default function DraftClient({ draft }: { draft: Draft }) {
       <Header
         breadcrumbs={[
           { label: 'Library', href: '/library' },
-          { label: draft.campaignName, href: '/library' },
+          { label: draft.campaignName ?? 'Uncategorized', href: '/library' },
           { label: draft.briefSummary },
         ]}
       />

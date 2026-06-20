@@ -13,6 +13,15 @@ export type BriefImage = {
   filename: string
 }
 
+export type Project = {
+  id: string
+  name: string
+  defaultBrandKitId?: string
+  defaultTone?: string
+  status: 'active' | 'archived'
+  createdAt: string
+}
+
 export type BrandKit = {
   id: string
   name: string
@@ -39,6 +48,9 @@ export type BrandKitTemplate = {
 export type Campaign = {
   id: string
   name: string
+  projectIds: string[]   // M:N — a campaign can belong to multiple projects
+  brandKitId?: string    // overrides project default if set
+  defaultTone?: string
   status: 'active' | 'draft' | 'completed' | 'archived'
   postCount: number
   createdAt: string
@@ -46,8 +58,9 @@ export type Campaign = {
 
 export type Brief = {
   id: string
-  campaignId: string
-  campaignName: string
+  campaignId: string | null   // null = Uncategorized
+  campaignName: string | null
+  projectId: string | null    // derived from campaign's primary project
   platform: Platform
   pathType: PathType
   templateId?: string
@@ -71,7 +84,10 @@ export type Draft = {
   id: string
   briefId: string
   briefSummary: string
-  campaignName: string
+  campaignId: string | null   // null = Uncategorized
+  campaignName: string | null
+  projectId: string | null
+  projectName: string | null
   platform: Platform
   pathType: PathType
   status: DraftStatus
@@ -100,7 +116,7 @@ export type ActivityEvent = {
   icon: 'check' | 'publish' | 'brief' | 'revision' | 'provider'
 }
 
-// ─── Legacy type kept for Header search compat ───────────────────────────────
+// Legacy type kept for Header search compat
 export type Item = {
   id: string
   name: string
@@ -168,13 +184,83 @@ export const brandKitTemplates: BrandKitTemplate[] = [
   { id: 't9', brandKitId: 'bk3', name: 'Recap Post', description: 'Post-event highlights layout', platform: 'linkedin', previewColor: '#facc15' },
 ]
 
+// ─── Projects ─────────────────────────────────────────────────────────────────
+
+export const projects: Project[] = [
+  {
+    id: 'p1',
+    name: 'Q3 2026 Growth',
+    defaultBrandKitId: 'bk1',
+    defaultTone: 'Professional, energetic',
+    status: 'active',
+    createdAt: '2026-05-20',
+  },
+  {
+    id: 'p2',
+    name: 'Events 2026',
+    defaultBrandKitId: 'bk3',
+    defaultTone: 'Exciting, bold',
+    status: 'active',
+    createdAt: '2026-06-01',
+  },
+  {
+    id: 'p3',
+    name: 'Brand Awareness',
+    defaultBrandKitId: 'bk1',
+    defaultTone: 'Warm, approachable',
+    status: 'active',
+    createdAt: '2026-04-01',
+  },
+]
+
 // ─── Campaigns ───────────────────────────────────────────────────────────────
 
 export const campaigns: Campaign[] = [
-  { id: 'c1', name: 'Q3 Product Launch', status: 'active', postCount: 8, createdAt: '2026-06-01' },
-  { id: 'c2', name: 'Hiring Push — July', status: 'active', postCount: 5, createdAt: '2026-06-10' },
-  { id: 'c3', name: 'Bistec Summit 2026', status: 'draft', postCount: 2, createdAt: '2026-06-15' },
-  { id: 'c4', name: 'Q2 Highlights', status: 'completed', postCount: 12, createdAt: '2026-04-01' },
+  {
+    id: 'c1',
+    name: 'Q3 Product Launch',
+    projectIds: ['p1'],
+    brandKitId: 'bk1',
+    status: 'active',
+    postCount: 8,
+    createdAt: '2026-06-01',
+  },
+  {
+    id: 'c2',
+    name: 'Hiring Push — July',
+    projectIds: ['p1'],
+    brandKitId: undefined,  // inherits from project p1 → bk1
+    status: 'active',
+    postCount: 5,
+    createdAt: '2026-06-10',
+  },
+  {
+    id: 'c3',
+    name: 'Bistec Summit 2026',
+    projectIds: ['p2'],
+    brandKitId: 'bk3',
+    status: 'draft',
+    postCount: 2,
+    createdAt: '2026-06-15',
+  },
+  {
+    id: 'c4',
+    name: 'Q2 Highlights',
+    projectIds: ['p3'],
+    brandKitId: 'bk1',
+    status: 'completed',
+    postCount: 12,
+    createdAt: '2026-04-01',
+  },
+  {
+    id: 'c5',
+    name: 'Social Proof Series',
+    projectIds: [],         // standalone — no project
+    brandKitId: undefined,  // falls back to system default bk1
+    status: 'active',
+    postCount: 3,
+    createdAt: '2026-06-18',
+  },
 ]
 
 // ─── Briefs ───────────────────────────────────────────────────────────────────
@@ -184,6 +270,7 @@ export const briefs: Brief[] = [
     id: 'br1',
     campaignId: 'c1',
     campaignName: 'Q3 Product Launch',
+    projectId: 'p1',
     platform: 'instagram',
     pathType: 'A',
     templateId: 't1',
@@ -196,6 +283,7 @@ export const briefs: Brief[] = [
     id: 'br2',
     campaignId: 'c2',
     campaignName: 'Hiring Push — July',
+    projectId: 'p1',
     platform: 'linkedin',
     pathType: 'B',
     referenceTemplateId: 't2',
@@ -210,6 +298,7 @@ export const briefs: Brief[] = [
     id: 'br3',
     campaignId: 'c1',
     campaignName: 'Q3 Product Launch',
+    projectId: 'p1',
     platform: 'linkedin',
     pathType: 'B',
     briefImages: [
@@ -223,6 +312,7 @@ export const briefs: Brief[] = [
     id: 'br4',
     campaignId: 'c3',
     campaignName: 'Bistec Summit 2026',
+    projectId: 'p2',
     platform: 'instagram',
     pathType: 'A',
     templateId: 't7',
@@ -230,6 +320,18 @@ export const briefs: Brief[] = [
     copyPrompt: 'Summit announcement post. Bold, exciting. September 12 — Colombo. Register now.',
     status: 'published',
     createdAt: '2026-06-17',
+  },
+  {
+    id: 'br5',
+    campaignId: null,
+    campaignName: null,
+    projectId: null,
+    platform: 'instagram',
+    pathType: 'B',
+    briefImages: [],
+    copyPrompt: 'Quick Instagram post celebrating 5 years of Bistec.',
+    status: 'ready',
+    createdAt: '2026-06-20',
   },
 ]
 
@@ -242,14 +344,18 @@ export const draftRevisions: DraftRevision[] = [
   { id: 'rv4', draftId: 'd2', revisionNumber: 1, instruction: 'Initial generation', exportUrl: '', createdAt: '2026-06-19T08:00:00Z' },
   { id: 'rv5', draftId: 'd3', revisionNumber: 1, instruction: 'Initial generation', exportUrl: '', createdAt: '2026-06-17T14:00:00Z' },
   { id: 'rv6', draftId: 'd3', revisionNumber: 2, instruction: 'Add the summit date more prominently', exportUrl: '', createdAt: '2026-06-17T14:18:00Z' },
+  { id: 'rv7', draftId: 'd5', revisionNumber: 1, instruction: 'Initial generation', exportUrl: '', createdAt: '2026-06-20T09:00:00Z' },
 ]
 
 export const drafts: Draft[] = [
   {
     id: 'd1',
     briefId: 'br1',
-    briefSummary: 'bistec-studio product launch',
+    briefSummary: 'bistec-studio launch post',
+    campaignId: 'c1',
     campaignName: 'Q3 Product Launch',
+    projectId: 'p1',
+    projectName: 'Q3 2026 Growth',
     platform: 'instagram',
     pathType: 'A',
     status: 'ready',
@@ -261,7 +367,10 @@ export const drafts: Draft[] = [
     id: 'd2',
     briefId: 'br2',
     briefSummary: 'Senior engineer hiring',
+    campaignId: 'c2',
     campaignName: 'Hiring Push — July',
+    projectId: 'p1',
+    projectName: 'Q3 2026 Growth',
     platform: 'linkedin',
     pathType: 'B',
     status: 'generating',
@@ -273,7 +382,10 @@ export const drafts: Draft[] = [
     id: 'd3',
     briefId: 'br4',
     briefSummary: 'Bistec Summit announcement',
+    campaignId: 'c3',
     campaignName: 'Bistec Summit 2026',
+    projectId: 'p2',
+    projectName: 'Events 2026',
     platform: 'instagram',
     pathType: 'A',
     status: 'published',
@@ -285,7 +397,10 @@ export const drafts: Draft[] = [
     id: 'd4',
     briefId: 'br3',
     briefSummary: 'Feature showcase post',
+    campaignId: 'c1',
     campaignName: 'Q3 Product Launch',
+    projectId: 'p1',
+    projectName: 'Q3 2026 Growth',
     platform: 'linkedin',
     pathType: 'B',
     status: 'failed',
@@ -293,13 +408,28 @@ export const drafts: Draft[] = [
     revisions: [],
     createdAt: '2026-06-19T09:00:00Z',
   },
+  {
+    id: 'd5',
+    briefId: 'br5',
+    briefSummary: '5 years of Bistec celebration',
+    campaignId: null,
+    campaignName: null,
+    projectId: null,
+    projectName: null,
+    platform: 'instagram',
+    pathType: 'B',
+    status: 'ready',
+    exportUrl: '',
+    revisions: draftRevisions.filter(r => r.draftId === 'd5'),
+    createdAt: '2026-06-20T09:00:00Z',
+  },
 ]
 
 // ─── AI Providers ─────────────────────────────────────────────────────────────
 
 export const providers: AvailableProvider[] = [
   {
-    id: 'p1',
+    id: 'ap1',
     name: 'Anthropic Claude',
     type: 'copy',
     keyPrefix: 'sk-ant-api03-••••',
@@ -309,7 +439,7 @@ export const providers: AvailableProvider[] = [
     lastUsed: '2026-06-19T10:00:00Z',
   },
   {
-    id: 'p2',
+    id: 'ap2',
     name: 'OpenAI GPT',
     type: 'image',
     keyPrefix: 'sk-proj-••••',
@@ -319,7 +449,7 @@ export const providers: AvailableProvider[] = [
     lastUsed: '2026-06-18T15:30:00Z',
   },
   {
-    id: 'p3',
+    id: 'ap3',
     name: 'Stability AI',
     type: 'image',
     keyPrefix: '',
@@ -332,18 +462,51 @@ export const providers: AvailableProvider[] = [
 // ─── Activity Feed ────────────────────────────────────────────────────────────
 
 export const activityFeed: ActivityEvent[] = [
-  { id: 'a1', type: 'draft_ready', title: 'Draft ready', meta: 'bistec-studio launch · Instagram · Path A', time: '2 min ago', icon: 'check' },
-  { id: 'a2', type: 'brief_created', title: 'Brief created', meta: 'Senior hiring post · LinkedIn · Path B', time: '14 min ago', icon: 'brief' },
+  { id: 'a1', type: 'draft_ready', title: 'Draft ready', meta: 'bistec-studio launch · Q3 Product Launch · Instagram', time: '2 min ago', icon: 'check' },
+  { id: 'a2', type: 'brief_created', title: 'Brief created', meta: 'Senior hiring post · Hiring Push — July · Path B', time: '14 min ago', icon: 'brief' },
   { id: 'a3', type: 'revision_added', title: 'Revision applied', meta: 'Change background to deep blue gradient', time: '32 min ago', icon: 'revision' },
   { id: 'a4', type: 'post_published', title: 'Post published', meta: 'Bistec Summit announcement · Instagram', time: '2 hr ago', icon: 'publish' },
   { id: 'a5', type: 'revision_added', title: 'Revision applied', meta: 'Make heading larger and bolder', time: '3 hr ago', icon: 'revision' },
   { id: 'a6', type: 'provider_connected', title: 'Provider connected', meta: 'Anthropic Claude · claude-sonnet-4-6', time: '1 day ago', icon: 'provider' },
 ]
 
-// ─── items alias — kept for Header search ─────────────────────────────────────
+// ─── Derived helpers ──────────────────────────────────────────────────────────
+
+export function getCampaignBrandKit(campaign: Campaign): BrandKit {
+  if (campaign.brandKitId) {
+    return brandKits.find(b => b.id === campaign.brandKitId) ?? brandKits.find(b => b.isDefault)!
+  }
+  const project = projects.find(p => campaign.projectIds[0] && p.id === campaign.projectIds[0])
+  if (project?.defaultBrandKitId) {
+    return brandKits.find(b => b.id === project.defaultBrandKitId) ?? brandKits.find(b => b.isDefault)!
+  }
+  return brandKits.find(b => b.isDefault)!
+}
+
+export function getBrandKitSource(campaign: Campaign): 'campaign' | 'project' | 'default' {
+  if (campaign.brandKitId) return 'campaign'
+  const project = projects.find(p => campaign.projectIds[0] && p.id === campaign.projectIds[0])
+  if (project?.defaultBrandKitId) return 'project'
+  return 'default'
+}
+
+export function getProjectCampaigns(projectId: string): Campaign[] {
+  return campaigns.filter(c => c.projectIds.includes(projectId))
+}
+
+export function getCampaignDrafts(campaignId: string): Draft[] {
+  return drafts.filter(d => d.campaignId === campaignId)
+}
+
+export function getUncategorizedDrafts(): Draft[] {
+  return drafts.filter(d => d.campaignId === null)
+}
+
+// ─── items alias — kept for Header search ────────────────────────────────────
 
 export const items: Item[] = [
   ...drafts.map(d => ({ id: d.id, name: d.briefSummary, category: d.platform, status: d.status, priority: 'medium', assigned: null, value: 0, created: d.createdAt.slice(0, 10) })),
   ...campaigns.map(c => ({ id: c.id, name: c.name, category: 'campaign', status: c.status, priority: 'medium', assigned: null, value: 0, created: c.createdAt })),
+  ...projects.map(p => ({ id: p.id, name: p.name, category: 'project', status: p.status, priority: 'medium', assigned: null, value: 0, created: p.createdAt })),
   ...brandKits.map(b => ({ id: b.id, name: b.name, category: 'brand-kit', status: b.isDefault ? 'active' : 'pending', priority: 'low', assigned: null, value: 0, created: b.createdAt })),
 ]

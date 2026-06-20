@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutGrid, FileText, Image, Palette, Settings, Sparkles, Menu, X, BookImage } from 'lucide-react'
+import { LayoutGrid, FileText, Palette, Settings, Sparkles, Menu, X, BookImage, FolderKanban } from 'lucide-react'
 
 const navItems = [
   { section: 'Create' },
   { href: '/', icon: LayoutGrid, label: 'Dashboard', tourId: 'tour-nav-dashboard' },
   { href: '/brief/new', icon: FileText, label: 'New Brief', tourId: 'tour-nav-brief' },
+  { section: 'Organize' },
+  { href: '/projects', icon: FolderKanban, label: 'Projects', tourId: 'tour-nav-projects' },
   { href: '/library', icon: BookImage, label: 'Library', tourId: 'tour-nav-library' },
   { section: 'Admin' },
   { href: '/admin/brandkits', icon: Palette, label: 'Brand Kits', tourId: 'tour-nav-brandkits' },
