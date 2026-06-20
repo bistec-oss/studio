@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Plus, FolderKanban, ChevronRight, Circle } from 'lucide-react'
+import { Plus, FolderKanban, ChevronRight, Circle, X } from 'lucide-react'
 import Header from '@/components/Header'
 import { projects, campaigns, drafts, brandKits } from '@/data/mock'
 
@@ -13,6 +13,7 @@ const statusColors = {
 
 export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false)
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false)
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -161,40 +162,100 @@ export default function ProjectsPage() {
           {(() => {
             const standalone = campaigns.filter(c => c.projectIds.length === 0)
             const standaloneDrafts = drafts.filter(d => d.campaignId && standalone.map(c => c.id).includes(d.campaignId))
-            if (standalone.length === 0) return null
             return (
-              <div className="glass rounded-xl p-5 border border-dashed border-slate-200">
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200">
-                    <Circle size={16} className="text-slate-400" />
+              <div className="glass rounded-xl p-5 border border-dashed border-slate-200 flex flex-col">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200 flex-shrink-0">
+                      <Circle size={16} className="text-slate-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-[0.9rem] font-semibold text-slate-600 leading-tight">Standalone Campaigns</h3>
+                      <p className="text-[0.68rem] text-slate-400">Not assigned to any project</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-[0.9rem] font-semibold text-slate-600 leading-tight">Standalone Campaigns</h3>
-                    <p className="text-[0.68rem] text-slate-400">Not assigned to any project</p>
-                  </div>
+                  <button
+                    onClick={() => setShowCreateCampaign(v => !v)}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[0.72rem] font-semibold transition-colors flex-shrink-0"
+                  >
+                    <Plus size={12} /> New Campaign
+                  </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="text-center py-2 bg-slate-50 rounded-lg">
-                    <div className="text-[1rem] font-bold text-slate-700">{standalone.length}</div>
-                    <div className="text-[0.6rem] uppercase tracking-widest text-slate-400 font-semibold">Campaigns</div>
+
+                {showCreateCampaign && (
+                  <div className="mb-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[0.78rem] font-semibold text-slate-700">New Standalone Campaign</p>
+                      <button onClick={() => setShowCreateCampaign(false)} className="p-0.5 rounded text-slate-400 hover:text-slate-600">
+                        <X size={14} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                      <div>
+                        <label className="block text-[0.68rem] font-semibold text-slate-500 uppercase tracking-widest mb-1">Campaign Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Social Proof Series 2"
+                          className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[0.8rem] text-slate-700 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[0.68rem] font-semibold text-slate-500 uppercase tracking-widest mb-1">Brand Kit <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                        <select className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[0.8rem] text-slate-700 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                          <option value="">— System default —</option>
+                          {brandKits.map(bk => (
+                            <option key={bk.id} value={bk.id}>{bk.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowCreateCampaign(false)}
+                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.75rem] font-semibold transition-colors"
+                      >
+                        Create
+                      </button>
+                      <button
+                        onClick={() => setShowCreateCampaign(false)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[0.75rem] font-medium hover:bg-slate-50 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-center py-2 bg-slate-50 rounded-lg">
-                    <div className="text-[1rem] font-bold text-slate-700">{standaloneDrafts.length}</div>
-                    <div className="text-[0.6rem] uppercase tracking-widest text-slate-400 font-semibold">Posts</div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {standalone.map(c => (
-                    <Link
-                      key={c.id}
-                      href={`/campaigns/${c.id}`}
-                      onClick={e => e.stopPropagation()}
-                      className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[0.68rem] font-medium border border-slate-200/80 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                    >
-                      {c.name}
-                    </Link>
-                  ))}
-                </div>
+                )}
+
+                {standalone.length > 0 && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div className="text-center py-2 bg-slate-50 rounded-lg">
+                        <div className="text-[1rem] font-bold text-slate-700">{standalone.length}</div>
+                        <div className="text-[0.6rem] uppercase tracking-widest text-slate-400 font-semibold">Campaigns</div>
+                      </div>
+                      <div className="text-center py-2 bg-slate-50 rounded-lg">
+                        <div className="text-[1rem] font-bold text-slate-700">{standaloneDrafts.length}</div>
+                        <div className="text-[0.6rem] uppercase tracking-widest text-slate-400 font-semibold">Posts</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {standalone.map(c => (
+                        <Link
+                          key={c.id}
+                          href={`/campaigns/${c.id}`}
+                          onClick={e => e.stopPropagation()}
+                          className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[0.68rem] font-medium border border-slate-200/80 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        >
+                          {c.name}
+                        </Link>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {standalone.length === 0 && !showCreateCampaign && (
+                  <p className="text-[0.75rem] text-slate-400 text-center py-2">No standalone campaigns yet.</p>
+                )}
               </div>
             )
           })()}

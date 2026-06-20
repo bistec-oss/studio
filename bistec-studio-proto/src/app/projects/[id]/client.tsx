@@ -1,7 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
-import { FolderKanban, ChevronRight, Plus, ArrowUpRight, Instagram, Linkedin } from 'lucide-react'
+import { FolderKanban, ChevronRight, Plus, ArrowUpRight, Instagram, Linkedin, X } from 'lucide-react'
 import Header from '@/components/Header'
 import { Badge } from '@/components/Badge'
 import { campaigns, drafts, brandKits, getBrandKitSource, getCampaignBrandKit } from '@/data/mock'
@@ -28,6 +29,7 @@ const bkSourceColors: Record<string, string> = {
 }
 
 export default function ProjectClient({ project }: { project: Project }) {
+  const [showCreateCampaign, setShowCreateCampaign] = useState(false)
   const projectCampaigns = campaigns.filter(c => c.projectIds.includes(project.id))
   const projectDrafts = drafts.filter(d => d.projectId === project.id)
   const defaultBrandKit = brandKits.find(b => b.id === project.defaultBrandKitId)
@@ -107,15 +109,75 @@ export default function ProjectClient({ project }: { project: Project }) {
         </div>
 
         {/* Campaigns */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[0.82rem] font-bold text-slate-700 uppercase tracking-widest">Campaigns</h2>
-          <Link
-            href="/brief/new"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.75rem] font-semibold transition-colors"
-          >
-            <Plus size={13} /> New Brief
-          </Link>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCreateCampaign(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-[0.75rem] font-semibold transition-colors"
+            >
+              <Plus size={13} /> New Campaign
+            </button>
+            <Link
+              href="/brief/new"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.75rem] font-semibold transition-colors"
+            >
+              <Plus size={13} /> New Brief
+            </Link>
+          </div>
         </div>
+
+        {showCreateCampaign && (
+          <div className="glass rounded-xl p-5 mb-4 border border-blue-100 bg-blue-50/30">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[0.88rem] font-semibold text-slate-700">New Campaign in <span className="text-blue-700">{project.name}</span></h3>
+              <button onClick={() => setShowCreateCampaign(false)} className="p-1 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-[0.72rem] font-semibold text-slate-500 uppercase tracking-widest mb-1">Campaign Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Q4 Product Launch"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[0.82rem] text-slate-700 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.72rem] font-semibold text-slate-500 uppercase tracking-widest mb-1">Brand Kit Override <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                <select className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[0.82rem] text-slate-700 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+                  <option value="">— Inherit from project ({defaultBrandKit?.name ?? 'system default'}) —</option>
+                  {brandKits.map(bk => (
+                    <option key={bk.id} value={bk.id}>{bk.name}{bk.isDefault ? ' (system default)' : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-[0.72rem] font-semibold text-slate-500 uppercase tracking-widest mb-1">Tone Override <span className="normal-case font-normal text-slate-400">(optional)</span></label>
+                <input
+                  type="text"
+                  placeholder={`Leave blank to inherit: "${project.defaultTone ?? 'none set'}"`}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-[0.82rem] text-slate-700 bg-white focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowCreateCampaign(false)}
+                className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[0.78rem] font-semibold transition-colors"
+              >
+                Create Campaign
+              </button>
+              <button
+                onClick={() => setShowCreateCampaign(false)}
+                className="px-4 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-[0.78rem] font-medium hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {projectCampaigns.length === 0 ? (
           <div className="glass rounded-xl p-10 text-center">
