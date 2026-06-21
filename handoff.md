@@ -371,6 +371,37 @@ Exposes bistec-studio as a peer agent in multi-agent systems. Where MCP makes bi
 
 ---
 
+## Prototype — bistec-studio-proto
+
+A static Next.js 15 prototype lives at `bistec-studio-proto/` in this repo. It covers the full UI surface of the real app using mock data (no backend calls). Use it as the primary reference for page layouts, user flows, and interaction patterns before implementing each wave.
+
+**Stack:** Next.js 15 + React 19 + Tailwind CSS 3.4 + TypeScript; `next export` static output; light glassmorphic theme.
+
+**Pages implemented:**
+
+| Route | Purpose |
+|---|---|
+| `/` | Dashboard — KPIs, recent drafts, quick actions, activity feed |
+| `/brief/new` | 5-step Brief Wizard — platform/path, campaign, copy prompt, images, review |
+| `/projects` | Projects list + inline create forms for projects and standalone campaigns |
+| `/projects/[id]` | Project detail — stats, default brand kit/tone, campaigns list, inline campaign creation |
+| `/campaigns/[id]` | Campaign detail — brand kit resolution card, posts table |
+| `/library` | Library with drill-down nav (Project → Campaign → Uncategorized) + status/platform filters |
+| `/draft/[id]` | Draft workspace — rendered preview, revision history, AGUI chat panel, export/publish |
+| `/admin/brandkits` | Brand kits admin — kit list sidebar, detail panel with colors/fonts/templates/voice prompt |
+| `/admin/settings` | AI providers admin — provider cards with key entry, model display, default toggle |
+
+**Key behaviours prototyped:**
+- Path A blocks Continue on Step 0 until a template is selected
+- Campaign selection auto-populates brand kit + tone with source label ("Campaign override" / "Inherited from project" / "System default")
+- Library drill-down filters the right panel without page navigation
+- Draft AGUI panel with suggestion chips and freeform input
+
+**Full page outline (functionality, data, actions — no design details):**
+→ [`docs/prototype-pages.md`](docs/prototype-pages.md)
+
+---
+
 ## Repo notes
 
 - Remote is still named `bistec-oss/designer` on GitHub — user attempted rename to

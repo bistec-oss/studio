@@ -413,6 +413,14 @@ Each criterion must pass for the change to be considered complete.
 - Bistec **Instagram Business** and **LinkedIn company page** accounts the tool
   can be authorized to publish to.
 
+## UI Reference
+
+A working prototype covering all pages exists at `bistec-studio-proto/` in this repo. Use it as a reference for page layouts, user flows, and interaction patterns when implementing each wave.
+
+**Page outline (routes, functionality, data, actions — no design details):** [`docs/prototype-pages.md`](../../../../docs/prototype-pages.md)
+
+---
+
 ## Notes
 
 **Open questions to resolve in the design phase (`/specclaw:plan`):**

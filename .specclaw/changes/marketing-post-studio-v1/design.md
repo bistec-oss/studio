@@ -521,6 +521,14 @@ on the VPS. Security protocols:
   at rest** using a `TOKEN_ENCRYPTION_KEY` env var (AES-256-GCM) — the raw token
   never sits in plaintext in the DB
 
+## UI Reference
+
+A working prototype covering all pages exists at `bistec-studio-proto/` in this repo. Consult it for the intended page structure, data displayed, and user interactions before implementing any frontend task.
+
+**Page outline (routes, inputs/outputs, actions — no design details):** [`docs/prototype-pages.md`](../../../../docs/prototype-pages.md)
+
+---
+
 ## File Changes Map
 
 | File / Directory | Action | Description |
