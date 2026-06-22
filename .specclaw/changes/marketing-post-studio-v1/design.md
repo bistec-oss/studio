@@ -50,6 +50,7 @@ No external design services are required at runtime.
 │    copy/openai.ts            ← GPT-4o mini (Path A default) │
 │    image/openai.ts           ← gpt-image-2                  │
 │    orchestrator/claude-html.ts ← Claude agent + Puppeteer   │
+│    orchestrator/claude-cli.ts  ← CLI proxy (test/no API key)│
 │    [future: copy/anthropic.ts, image/stability.ts, ...]     │
 │                                                              │
 │  registry.ts   ← resolves active provider from config       │
@@ -196,6 +197,67 @@ async function renderHtmlToPng(html: string, width: number, height: number): Pro
 
 `src/providers/implementations/orchestrator/claude-html.ts` — `DesignOrchestrator`
 implementation that wraps `runDesignAgent`. Called by `POST /api/design/assemble`.
+
+### Test mode — `DESIGN_PROVIDER=cli`
+
+When `DESIGN_PROVIDER=cli` is set in `.env`, the provider registry resolves
+`ClaudeCliOrchestrator` (`src/providers/implementations/orchestrator/claude-cli.ts`)
+instead of the production `ClaudeHtmlOrchestrator`. This allows the full
+app stack to be exercised without an Anthropic API key — using the authenticated
+Claude Code CLI session on the host machine instead.
+
+**How it works:**
+
+```typescript
+// claude-cli.ts — implements DesignOrchestrator
+import { execFile } from "child_process"
+import { promisify } from "util"
+
+const exec = promisify(execFile)
+
+export class ClaudeCliOrchestrator implements DesignOrchestrator {
+  async orchestrate(brief: Brief, brandKitId: string) {
+    const prompt = buildCliPrompt(brief, brandKitId)
+    const { stdout } = await exec("claude", ["-p", prompt])
+    const html = extractHtmlBlock(stdout)  // parse first ```html...``` block
+    return {
+      htmlContent: html,
+      exportUrl: "",   // Puppeteer skipped in CLI mode — no PNG rendered
+    }
+  }
+}
+```
+
+**What works in CLI mode vs. production:**
+
+| Capability | Production (`claude-html`) | CLI proxy (`claude-cli`) |
+|---|---|---|
+| Claude generates HTML | Yes | Yes |
+| Tool-use loop (up to 15 calls) | Yes | No — single-shot call |
+| `renderHtml` → Puppeteer → PNG | Yes | No — `exportUrl` is empty |
+| `generateImage` tool | Yes | No |
+| Brand kit context passed | Yes | Yes (in prompt string) |
+| MinIO upload | Yes | No |
+| API key required | Yes (`sk-ant-*`) | No |
+| Good for testing | Full pipeline | UI flow + copy/HTML output |
+
+**Env var:** `DESIGN_PROVIDER=cli` in `.env` (or `.env.local` for local dev).
+The registry checks this only for the orchestrator slot — copy and image providers
+are unaffected and still require their respective keys.
+
+**`.env.example` entry:**
+```
+# Set to "cli" to use Claude Code CLI proxy for design generation (no API key required).
+# Omit or set to "claude-html" for production.
+DESIGN_PROVIDER=claude-html
+```
+
+**Limitation — no PNG preview:** in CLI mode `exportUrl` is empty, so the draft
+page preview will show a placeholder. The generated `htmlContent` is still saved to
+the DB and can be inspected directly. Puppeteer rendering can be layered back in
+separately if needed for local testing without a MinIO instance.
+
+---
 
 ### AGUI refinement
 
@@ -561,7 +623,8 @@ A working prototype covering all pages exists at `bistec-studio-proto/` in this 
 | `src/providers/interfaces/` | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces |
 | `src/providers/implementations/copy/openai.ts` | create | GPT copy provider |
 | `src/providers/implementations/image/openai.ts` | create | gpt-image-2 provider |
-| `src/providers/implementations/orchestrator/claude-html.ts` | create | DesignOrchestrator impl wrapping designAgent |
+| `src/providers/implementations/orchestrator/claude-html.ts` | create | DesignOrchestrator impl wrapping designAgent (production) |
+| `src/providers/implementations/orchestrator/claude-cli.ts` | create | DesignOrchestrator CLI proxy for test mode — no API key, no Puppeteer |
 | `src/providers/registry.ts` | create | Provider resolution from env config |
 | `src/lib/agent/designAgent.ts` | create | Claude tool-use agent loop (Anthropic SDK) |
 | `src/lib/agent/tools.ts` | create | Tool implementations: generateImage, renderHtml, getBrandKitContext |
@@ -736,6 +799,15 @@ The design agent uses different Claude models depending on the generation mode:
 The model is configured per-mode in `src/lib/agent/designAgent.ts` — no env var or
 admin setting needed. A future update can promote Path A to Sonnet if output quality
 requires it without any API contract changes.
+
+**4b-testmode. CLI proxy for development without an API key**
+Setting `DESIGN_PROVIDER=cli` in `.env` swaps in `ClaudeCliOrchestrator` —
+a single-shot `execFile("claude", ["-p", prompt])` call that piggybacks on the
+developer's Claude Code CLI session. The tool-use loop, Puppeteer rendering, and
+MinIO upload are all bypassed; the orchestrator returns the HTML Claude produces
+directly. This lets the full app (auth, brief wizard, DB writes, draft page) be
+tested without an `sk-ant-*` key. The production path is restored by removing the
+env var or setting `DESIGN_PROVIDER=claude-html`.
 
 **4b-edit. Edit brand kit as a distinct, always-available flow**
 The settings UI separates brand kit *creation* from brand kit *editing*. An Edit

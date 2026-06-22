@@ -70,6 +70,14 @@ Define the stable AI provider interfaces and wire up the initial OpenAI implemen
 
   Throws if the resolved key has no registered implementation. **This is the only file that needs updating when a new model is registered** — add a new implementation in `implementations/`, register its key here, admin enables it in settings.
 
+  **Orchestrator resolution** (separate from copy/image — env-only, not user-selectable):
+  - `DESIGN_PROVIDER=cli` → `ClaudeCliOrchestrator` (test mode, no API key)
+  - `DESIGN_PROVIDER=claude-html` or unset → `ClaudeHtmlOrchestrator` (production)
+
+  Register both orchestrator implementations in `registry.ts` so the factory
+  can resolve either. The `DesignOrchestrator` slot is never exposed to users —
+  this switch is purely for the deployment/dev environment.
+
 ---
 
 ## Parallelism within Wave 2
@@ -91,6 +99,26 @@ T06 and T07 run in parallel once T05 is done.
 2. Register it in `registry.ts` under its key
 3. Admin enables it in the settings UI (`AvailableProvider` row) → appears in brief UI immediately
 4. No frontend changes, no API contract changes
+
+---
+
+## Test mode — no API key required
+
+`ClaudeCliOrchestrator` (`src/providers/implementations/orchestrator/claude-cli.ts`)
+is a minimal `DesignOrchestrator` implementation for local development and testing
+when no Anthropic API key is available.
+
+It calls the Claude Code CLI via subprocess (`claude -p "<prompt>"`) and parses the
+first ` ```html ` block from stdout as the design output. The tool-use loop, Puppeteer
+rendering, and MinIO upload are all skipped — `exportUrl` is returned as an empty
+string. The generated `htmlContent` is still saved to the DB so the rest of the app
+flow (draft page, library, publish) can be exercised.
+
+**Enable:** set `DESIGN_PROVIDER=cli` in `.env` or `.env.local`.
+**Disable:** remove the var or set `DESIGN_PROVIDER=claude-html`.
+
+This is a development convenience only — it must not be set in any production
+environment. Document it in `.env.example` with a clear comment.
 
 ---
 

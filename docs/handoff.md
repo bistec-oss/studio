@@ -1,9 +1,31 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-18
+**Date:** 2026-06-23
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
-**Branch:** `html-designer` — clean, all work pushed (latest commit `01b4d92`)
+**Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## Current status
+
+**Wave 1 — complete ✅**
+
+All 5 Wave 1 tasks done and running:
+
+| Task | Status | Notes |
+|---|---|---|
+| T01 — Next.js 14 init | ✅ | `package.json`, TypeScript strict, Tailwind, Husky |
+| T02 — Docker Compose infra | ✅ | postgres + minio containers up; `docker run` workaround for WSL2 |
+| T03 — Prisma schema + migration | ✅ | `20260622191018_better_auth_swap` applied; 18 tables created |
+| T04 — better-auth + role middleware | ✅ | Login page, session cookie middleware, `requireRole`/`getCurrentUser` helpers |
+| T25 — Design system foundation | ✅ | Frozen Light theme, AppShell, Button/GlassPanel/GlassInput/Select/StatusChip/SegmentedToggle |
+
+Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
+
+Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
+
+**Next:** Wave 2 (T05–T08 — provider abstraction layer). Requires `OPENAI_API_KEY` in `.env` before testing.
 
 ---
 
@@ -28,7 +50,7 @@ publish-now or schedule-for-later.
 |---|---|---|
 | Framework | Next.js 14 (App Router) + TypeScript | Requested |
 | Hosting | VPS — Docker Compose | Removed all Azure dependencies |
-| Auth | Clerk (admin + editor roles) | Avoids blocking on Entra ID setup |
+| Auth | better-auth (self-hosted, email + password) | No SaaS dependency; sessions in PostgreSQL |
 | Database | PostgreSQL (Docker container) + Prisma ORM | Type-safe, migration tooling, PG arrays |
 | Object storage | MinIO (Docker container, S3-compatible) | Self-hosted, replaces Azure Blob Storage |
 | Secrets | `.env` file on VPS (`chmod 600`, never in git) | Replaces Azure Key Vault |
@@ -176,7 +198,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 > Visual ERD: [`docs/erd.svg`](docs/erd.svg)
 
 
-- `User` — clerkId, role (ADMIN | EDITOR)
+- `User` — id, name, email, emailVerified, image, role (ADMIN | EDITOR), sessions[], accounts[]
 - `Project` — name, defaultBrandKitId, defaultTone, isDeleted, deletedAt
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt
 - `ProjectCampaign` — M2M join (project ↔ campaign)
@@ -211,7 +233,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
-**Current specclaw phase:** plan complete → ready for `/specclaw:build marketing-post-studio-v1`
+**Current specclaw phase:** Wave 1 complete → Wave 2 ready to begin
 
 ---
 
@@ -219,7 +241,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 | Wave | Focus | Tasks |
 |---|---|---|
-| 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
+| 1 ✅ | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation |
 | 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
 | 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
@@ -355,6 +377,29 @@ Exposes bistec-studio as a peer agent in multi-agent systems. Where MCP makes bi
 
 ---
 
+## Testing without an Anthropic API key
+
+Set `DESIGN_PROVIDER=cli` in `.env` (or `.env.local`) to use the **Claude Code CLI proxy** instead of the production design agent. This routes all `DesignOrchestrator` calls through a subprocess call to `claude -p "<prompt>"`, using the developer's authenticated Claude Code session on the host machine.
+
+**File:** `src/providers/implementations/orchestrator/claude-cli.ts`
+
+**What still works in CLI mode:**
+- Full brief wizard flow, DB writes, draft page, library, publish UI
+- Real Claude-generated HTML/CSS design output
+- Brand kit context is included in the prompt (colors, fonts, voice)
+
+**What is skipped:**
+- Tool-use loop — single-shot call only
+- Puppeteer rendering — `exportUrl` returns empty string; draft preview shows a placeholder
+- `generateImage` tool — no raster image generation
+- MinIO upload
+
+**How to switch back to production:** remove `DESIGN_PROVIDER` or set it to `claude-html`.
+
+This is a dev-only convenience — never set `DESIGN_PROVIDER=cli` in production.
+
+---
+
 ## Architecture decisions
 
 - All AI calls are **server-side only** — the browser never calls an AI API or Puppeteer directly
@@ -367,7 +412,7 @@ Exposes bistec-studio as a peer agent in multi-agent systems. Where MCP makes bi
 - **AGUI:** natural language → Claude agent updates HTML → Puppeteer re-renders → `DraftRevision(htmlSnapshot)`
 - **Brand kit data** (colors, fonts, logoUrl) stored directly in DB — no external brand kit IDs
 - **Claude models by mode:** Path A (template fill) → `claude-haiku-4-5-20251001` (~10× cheaper, sufficient for constrained task); Path B (freeform design) → `claude-sonnet-4-6` (stronger reasoning for layout decisions); AGUI refinement → same model as originating path; brand voice prompt assistance → Sonnet (infrequent admin operation)
-- **Anthropic API required** — the design agent uses `api.anthropic.com` with a registered `sk-ant-` API key. The claude.ai subscription (Claude Code) is a separate product and cannot be used for programmatic backend calls.
+- **Anthropic API required in production** — the design agent uses `api.anthropic.com` with a registered `sk-ant-` API key. For local testing without a key, set `DESIGN_PROVIDER=cli` to use the Claude Code CLI proxy (see "Testing without an Anthropic API key" section above). The claude.ai subscription cannot be used for multi-turn tool-use in production.
 
 ---
 

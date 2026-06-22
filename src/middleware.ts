@@ -1,11 +1,25 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import { NextRequest, NextResponse } from "next/server"
 
-const isPublicRoute = createRouteMatcher(['/login(.*)', '/'])
+const PUBLIC_PREFIXES = ["/login", "/api/auth"]
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) await auth.protect()
-})
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+
+  if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) {
+    return NextResponse.next()
+  }
+
+  // better-auth sets this cookie on successful sign-in
+  const session = req.cookies.get("better-auth.session_token")
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", req.url))
+  }
+
+  return NextResponse.next()
+}
 
 export const config = {
-  matcher: ['/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)', '/(api|trpc)(.*)'],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|woff2?|ttf|ico)).*)",
+  ],
 }

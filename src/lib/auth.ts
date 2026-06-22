@@ -1,23 +1,36 @@
-import { auth } from '@clerk/nextjs/server'
-import { NextResponse } from 'next/server'
+import { betterAuth } from "better-auth"
+import { prismaAdapter } from "better-auth/adapters/prisma"
+import { prisma } from "@/lib/prisma"
+import { headers } from "next/headers"
+import { NextResponse } from "next/server"
 
-export type Role = 'admin' | 'editor'
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, { provider: "postgresql" }),
+  emailAndPassword: { enabled: true },
+  user: {
+    additionalFields: {
+      role: { type: "string", required: false, defaultValue: "editor", input: false },
+    },
+  },
+})
+
+export type Role = "admin" | "editor"
 
 export async function requireRole(role: Role): Promise<{ userId: string } | NextResponse> {
-  const { userId, sessionClaims } = await auth()
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userRole = (sessionClaims?.metadata as { role?: string })?.role
-  if (role === 'admin' && userRole !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const userRole = (session.user as { role?: string }).role ?? "editor"
+  if (role === "admin" && userRole !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
-  return { userId }
+  return { userId: session.user.id }
 }
 
 export async function getCurrentUser() {
-  const { userId, sessionClaims } = await auth()
-  if (!userId) return null
+  const session = await auth.api.getSession({ headers: headers() })
+  if (!session) return null
   return {
-    userId,
-    role: ((sessionClaims?.metadata as { role?: string })?.role ?? 'editor') as Role,
+    userId: session.user.id,
+    role: ((session.user as { role?: string }).role ?? "editor") as Role,
   }
 }

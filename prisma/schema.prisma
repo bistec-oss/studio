@@ -7,22 +7,109 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { ADMIN EDITOR }
-enum DesignMode { TEMPLATE GENERATE }
-enum DraftStatus { IN_PROGRESS EXPORTED PUBLISHED FAILED }
-enum Channel { INSTAGRAM LINKEDIN }
-enum PostStatus { PENDING SCHEDULED PUBLISHED FAILED CANCELLED }
-enum ProviderSlot { COPY IMAGE }
-enum ArtifactType { LOGO FONT COLOR REFERENCE_IMAGE EXAMPLE_POST OTHER }
+enum Role {
+  ADMIN
+  EDITOR
+}
+
+enum DesignMode {
+  TEMPLATE
+  GENERATE
+}
+
+enum DraftStatus {
+  IN_PROGRESS
+  EXPORTED
+  PUBLISHED
+  FAILED
+}
+
+enum Channel {
+  INSTAGRAM
+  LINKEDIN
+}
+
+enum PostStatus {
+  PENDING
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderSlot {
+  COPY
+  IMAGE
+}
+
+enum ArtifactType {
+  LOGO
+  FONT
+  COLOR
+  REFERENCE_IMAGE
+  EXAMPLE_POST
+  OTHER
+}
+
+// ── better-auth models ────────────────────────────────────────────────────
 
 model User {
-  id        String    @id @default(cuid())
-  clerkId   String    @unique
-  role      Role      @default(EDITOR)
-  briefs    Brief[]
-  posts     Post[]
-  createdAt DateTime  @default(now())
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  // app-level role (managed server-side only — never writable via sign-up)
+  role          Role      @default(EDITOR)
+  // better-auth relations
+  sessions      Session[]
+  accounts      Account[]
+  // app relations
+  briefs        Brief[]
+  posts         Post[]
 }
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+}
+
+// ── App models ────────────────────────────────────────────────────────────
 
 model Project {
   id                String            @id @default(cuid())

@@ -26,31 +26,31 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 1 — Project scaffold & infrastructure
 
-- [ ] `T01` — Initialize Next.js 14 + TypeScript project
+- [x] `T01` — Initialize Next.js 14 + TypeScript project
   - Files: `package.json`, `tsconfig.json`, `next.config.ts`, `.env.example`, `Dockerfile`
   - Estimate: small
   - Depends: —
-  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
+  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
 
-- [ ] `T02` — VPS infrastructure setup (Docker Compose)
+- [x] `T02` — VPS infrastructure setup (Docker Compose)
   - Files: `docker-compose.yml`, `.env.example`, `.gitignore`
   - Estimate: medium
   - Depends: T01
   - Notes: `docker-compose.yml` defines four services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only). All services use `env_file: .env` — no secrets in compose file. `.env.example` documents every variable. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
 
-- [ ] `T03` — Prisma schema + initial migration
+- [x] `T03` — Prisma schema + initial migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
   - Estimate: small
   - Depends: T02
   - Notes: Full schema as defined in design.md: User, Project, Campaign, ProjectCampaign (M2M), CampaignDraft (M2M), Brief (campaignId nullable), Draft, Post, BrandKit, BrandKitPrompt (versioned), BrandKitArtifact, BrandKitTemplate, AvailableProvider + enums (Role, DesignMode, DraftStatus, Channel, PostStatus, ProviderSlot, ArtifactType). Project.defaultBrandKitId and Campaign.brandKitId are FKs → BrandKit. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
 
-- [ ] `T04` — Clerk auth integration + role middleware
-  - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
+- [x] `T04` — better-auth integration + role middleware
+  - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`, `src/lib/auth-client.ts`, `src/lib/prisma.ts`, `src/app/api/auth/[...all]/route.ts`
   - Estimate: small
   - Depends: T01
-  - Notes: Clerk middleware protects all `/(app)/**` and `/api/**` routes. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` helper used in route handlers. Roles stored as Clerk public metadata.
+  - Notes: Self-hosted auth via better-auth (email + password). Session stored in PostgreSQL via Prisma adapter. Middleware checks `better-auth.session_token` cookie; unauthenticated requests redirect to `/login`. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` and `getCurrentUser()` helpers used in API route handlers. `role` field lives on the User DB row (server-managed only — not writable at sign-up). Login page is a custom Frozen Light–themed form (`GlassPanel` + `GlassInput`). No external auth SaaS required. Env vars: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 
-- [ ] `T25` — Design system foundation (Frozen Light theme + base components)
+- [x] `T25` — Design system foundation (Frozen Light theme + base components)
   - Files: `tailwind.config.ts`, `src/app/globals.css`, `src/components/theme/ThemeProvider.tsx`, `src/components/theme/ThemeToggle.tsx`, `src/components/layout/AppShell.tsx`, `src/components/ui/` (Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip), `src/app/layout.tsx`
   - Estimate: medium
   - Depends: T01
@@ -84,6 +84,8 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Depends: T06, T07
   - Notes: Resolves the active provider for a given slot using this order: (1) providerKey passed from the Brief record (user's choice), (2) `AvailableProvider` row with `isDefault=true` for that slot, (3) env var fallback. Throws if the resolved key has no registered implementation. This is the only file that needs updating when a new model is registered.
 
+    **Orchestrator resolution** (env-only, not user-selectable): check `DESIGN_PROVIDER` env var — `"cli"` → `ClaudeCliOrchestrator` (test mode, no API key); `"claude-html"` or unset → `ClaudeHtmlOrchestrator` (production). Both implementations must be registered. Also add `claude-cli.ts` to the File Changes Map.
+
 ---
 
 ### Wave 3 — HTML renderer + Claude design agent + MinIO storage
@@ -108,6 +110,8 @@ Within a wave, tasks without inter-dependencies can run in parallel.
     - `getBrandKitContext(briefId)` — resolves the brand kit using campaign → project → system default precedence; returns `{ colors, fonts, logoUrl, voicePrompt, artifactUrls }`
 
     On any tool error: agent is halted, error returned to caller, brief record preserved.
+
+    When `DESIGN_PROVIDER=cli` is set, `runDesignAgent` is not invoked — the CLI proxy (`ClaudeCliOrchestrator`, registered in T08) handles the request entirely. T09 has no CLI-specific code; the dispatch happens at the registry level.
 
 - [ ] `T10` — MinIO storage client
   - Files: `src/lib/storage/minio.ts`
@@ -246,6 +250,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/(app)/draft/[id]/page.tsx`, `src/components/draft/RefinementPanel.tsx`, `src/app/api/drafts/[id]/refine/route.ts`, `src/app/api/drafts/[id]/revisions/route.ts`, `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts`
   - Estimate: large
   - Depends: T13, T14, T15, T25, T03
+  - **⚠️ MODEL PROMPT — stop before starting this task and ask the user:**
+    > "T21 (Draft refinement + AGUI backend) is the most stateful task in the build —
+    > it covers the brand-kit conflict/override flow, `pendingConflict` state, undo stack,
+    > and Puppeteer re-render on restore. Recommended: **claude-opus-4-8** with **medium effort**.
+    > Switch to Opus for this task? (yes / no, continue with current model)"
   - Notes: Two deliverables. (1) **Draft page UI** — generated copy (editable textarea), generated image ("Regenerate" button), template selector (Path A only), design preview (rendered PNG from `Draft.exportUrl`), "Export" button. No external design editor embed (FR-16). (2) **AGUI refinement panel** — chat input + AI reply area + undo history list, positioned alongside the design preview.
 
     **Backend — `POST /api/drafts/[id]/refine`:**

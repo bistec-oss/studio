@@ -76,6 +76,12 @@ Build the two infrastructure modules that everything else depends on: the HTML r
 
   On any tool error: agent halted immediately, `DesignAgentResult` is not returned — caller receives the error with brief record preserved.
 
+  **CLI proxy path:** when `DESIGN_PROVIDER=cli`, `runDesignAgent` is never called —
+  `ClaudeCliOrchestrator` handles the request entirely via a single CLI subprocess
+  call. T09 does not need to implement CLI mode; it only needs to ensure
+  `runDesignAgent` is not imported/executed in that path. The registry in T08 handles
+  the dispatch before the orchestrator layer reaches `designAgent.ts`.
+
 ---
 
 ### T10 — MinIO storage client
@@ -125,3 +131,4 @@ T10 ──── T09
 - [ ] `generateImage` tool uploads generated image to MinIO and returns a valid pre-signed URL
 - [ ] `uploadObject` successfully uploads a buffer to MinIO and returns a valid pre-signed URL
 - [ ] MinIO buckets are auto-created on cold start
+- [ ] `DESIGN_PROVIDER=cli` causes `ClaudeCliOrchestrator` to be resolved instead of `ClaudeHtmlOrchestrator` (no API call, no Puppeteer, returns `htmlContent` + empty `exportUrl`)

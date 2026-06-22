@@ -13,7 +13,7 @@
     "next": "14",
     "react": "18",
     "react-dom": "18",
-    "@clerk/nextjs": "^5.0.0",
+    "better-auth": "^1.0.0",
     "prisma": "^5.0.0",
     "@prisma/client": "^5.0.0",
     "@anthropic-ai/sdk": "^0.30.0",
@@ -40,6 +40,12 @@
     "eslint-config-next": "14"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": ["eslint --fix"]
+    "*.{js,ts,jsx,tsx}": [
+      "eslint --fix"
+    ]
+  },
+  "allowScripts": {
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true
   }
 }
