@@ -15,11 +15,10 @@ dist/
 # Environment variables — block all .env* variants except the example template
 .env*
 !.env.example
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+
+# Testing (Playwright output — regenerable, never commit)
+playwright-report/
+test-results/
 
 # Misc
 .DS_Store
