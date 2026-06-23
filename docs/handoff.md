@@ -37,6 +37,12 @@
 | T18 — Scheduler worker | ✅ | `src/scheduler/worker.ts` + `src/lib/scheduler/jobRunner.ts`; 60s poll; sequential per tick |
 | T19 — Asset library UI | ✅ | `GET /api/library`; `/library` page; `PostCard` + `PublishHistoryDrawer` components |
 
+**Cold-start testing fixes — 2026-06-23 (post-Wave-6, on `main`):**
+- `next.config.ts` → **`next.config.mjs`** — Next 14 does not support a TypeScript config file; `next dev` crashed on boot (`Configuring Next.js via 'next.config.ts' is not supported`).
+- **`requireRole`** (`src/lib/auth.ts`) now compares the role **case-insensitively**. The Prisma `Role` enum and the admin seed store uppercase `ADMIN`/`EDITOR`, but the check compared against lowercase `"admin"`, so every `/api/admin/*` route returned **403** for the admin (the UI already used `.toLowerCase()`).
+- **`docker-compose.override.yml`** (new) — publishes MinIO `:9000` to the host so a host-side `npm run dev` can reach it (the committed compose only `expose`s it internally; see `docs/cold-start.md` gotcha #2).
+- **Dashboard page added** (`src/app/(app)/page.tsx`) — the `/` route was specced (`docs/prototype-pages.md §1`) but **never implemented**, so post-login `router.push("/")` and the "Dashboard" nav item both **404'd**. New server component: KPIs (Drafts Ready = `EXPORTED` / Posts Published / Active Campaigns / AI Providers), Recent Drafts table (rows → `/drafts/[id]`), Quick Actions (`/brief`, `/library`, `/admin/brandkits`), and a merged activity feed. Uses the **real** routes (`/brief`, `/drafts/[id]`), not the spec's stale `/brief/new` / `/draft/[id]`.
+
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
@@ -62,6 +68,38 @@
 Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
+
+**Seeding:**
+- `scripts/seed-admin.mjs` — creates the admin user via better-auth `auth.api.signUpEmail()` (writes the hashed-password `Account` row), then promotes role to ADMIN. **Must** go through better-auth — a directly-created `User` has no credential `Account` and cannot log in.
+- `scripts/seed-brandkit.mjs` — seeds the default **"Bistec"** brand kit (Glacier palette, Inter + JetBrains Mono as Google Fonts, brand-voice prompt v1 active). Idempotent (skips if a non-deleted default kit exists); mirrors the admin API's single-default invariant; sets `BrandKitPrompt.createdBy` to the seeded admin's id. The brand-voice prompt is **provisional** (inferred from Bistec Global's public positioning) — replace once the official style guide is available.
+- `scripts/seed-hearts-talk.mjs` — seeds the **"Hearts Talk"** brand kit (NOT default): navy/cyan/green palette, Orbitron + Poppins + Montserrat (Google Fonts), provisional voice prompt v1, a 1080×1080 HTML template, and LOGO artifacts. Reads assets from `scripts/seed-assets/` at runtime (`hearts-talk-1080x1080.html` required; `hearts-academy-logo.png` + `bistec-global-logo.png` optional). Logos are embedded as **`data:` URIs** (never expire, no MinIO needed). ⚠️ `hearts-academy-logo.png` is not yet present and `bistec-global-logo.png` is a best-guess copy — see `scripts/seed-assets/README.md`.
+- Run all via `npm run db:seed` (admin → Bistec → Hearts Talk; admin first so `createdBy` resolves) or individually with `node --env-file=.env scripts/<file>.mjs`. Requires `.env` with `DATABASE_URL` + `BETTER_AUTH_SECRET` and a running Postgres container.
+
+> **Known latent bug (not introduced by seeds):** the admin UI's logo/artifact upload routes (`/api/admin/brandkits/[id]/upload` + `/artifacts`) store **7-day presigned MinIO URLs** directly in `BrandKit.logoUrl` / `BrandKitArtifact.url`, so UI-uploaded logos break after ~7 days. Fix: regenerate presigned URLs on read, or store stable object keys. The Hearts Talk seed sidesteps this by embedding logos as `data:` URIs.
+
+### Testing kickoff prompt
+
+Paste this to start a testing session. It works **whether or not the brand kits already exist** — `npm run db:seed` is idempotent, so it creates them on a fresh DB and skips them if present (covers both the before- and after-seeding cases in one run).
+
+```
+Before testing, verify the working environment is ready — do not assume it is. Run the docs/cold-start.md §0 preflight: confirm .env exists, Postgres + MinIO containers are Up (MinIO port 9000 published to the host), and migrations are applied (npx prisma migrate status). Fix any gap using the matching section of docs/cold-start.md before continuing.
+
+Then seed the database (idempotent — safe whether or not the brand kits already exist):
+  npm run db:seed
+This ensures the admin user, the default "Bistec" brand kit, and the "Hearts Talk" brand kit. Existing rows are skipped.
+
+Then start the dev server and smoke-test:
+  npm run dev
+- Log in at http://localhost:3000 as admin@bisteccare.lk / BistecStudio2026!
+- Open /admin/brandkits and confirm BOTH "Bistec" (system default) and "Hearts Talk" show their colors, fonts, and — for Hearts Talk — the 1080x1080 HTML template and logo artifact(s).
+- If ANTHROPIC_API_KEY + OPENAI_API_KEY are set, create a brief and generate a design end-to-end. Otherwise set DESIGN_PROVIDER=cli in .env to exercise the flow without API keys (no Puppeteer render / MinIO upload).
+
+Report any preflight failures or smoke-test errors with the exact command output.
+```
+
+**⚠️ Before testing — verify the working environment.** A fresh machine / clean clone needs `.env` created, Postgres + MinIO containers up (MinIO 9000 published to host), migrations applied, and seed run **before** `npm run dev`. Follow the preflight + steps in **[`docs/cold-start.md`](docs/cold-start.md)**. Do not assume the environment is ready — run the §0 preflight check first; most "it doesn't work" reports trace to a missing `.env`, a stopped container, or un-applied migrations.
+
+**Fonts:** brand fonts use **Google Fonts** (open-source, no licensing) — stored in `BrandKit.fonts` as `{name, url}[]` with auto-built `css2?family=…` URLs. The `/admin/brandkits` Fonts editor is a searchable picker over the top-100 Google Fonts (admins never paste URLs). The design agent embeds them via `@import` in generated HTML; Puppeteer fetches them at render (`waitUntil: "networkidle0"`).
 
 **Wave 5 details:**
 - `src/lib/social/instagram.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping Instagram Graph API two-step flow (create container → publish container). Reads `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID` from env. Throws `PublishError("INSTAGRAM", reason)` on API error.
@@ -321,7 +359,7 @@ Start the Meta Business app registration **before** Wave 1 code begins — it bl
 0. Which OpenAI model drives copy generation? (GPT-4o recommended)
 1. **Social API access** (highest risk): who owns obtaining Meta Business app approval and LinkedIn app permissions, and what is the timeline?
 2. **HTML template authoring** — who creates the initial HTML/CSS brand templates and what is the process?
-3. **Font licensing** — are brand fonts self-hostable? What format (woff2)?
+3. ~~**Font licensing** — are brand fonts self-hostable?~~ **Resolved** — brand kits use Google Fonts (open-source, no licensing); admins pick from a searchable list in `/admin/brandkits`, URLs auto-built. App UI fonts (Inter + JetBrains Mono) remain self-hosted via `next/font`.
 4. Cost/rate controls: per-user or per-period generation limits for AI calls
 5. Which additional AI models (beyond OpenAI) should be registered at launch for user-selectable copy/image generation?
 
