@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23 (updated after Wave 5)
+**Date:** 2026-06-23 (updated after Wave 5; security review pass added)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
 **Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
@@ -86,6 +86,19 @@
 > Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails: `Prompt too large for CLI mode (1899849 chars > 600000)`. The template is **1.81 MB (~475k tokens)** because its assets are inlined as `data:` URIs — too large for a single-shot prompt (also exceeds the Anthropic API's ~200k context, so this is **not** CLI-specific). The 600k guard in `src/lib/agent/claudeCli.ts` is working as intended; the data is the problem.
 > **Workaround:** use the small **"Simple Gradient Card"** template (Bistec kit) for Path A, or use **Path B** (no template embedded).
 > **Fix:** re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO-hosted asset URLs instead of inlined `data:` URIs. Tracked in `docs/code-review-findings.md` → Known Issue.
+
+**Security review — 2026-06-23 (on `main`):** After all 6 waves + the code-review remediation, a focused security review (`/security-review`) was run over the full remediation changeset (the 9 commits ahead of `origin`: H7, H9, H10, H11, H12, L2 + prototype removal). Method: one discovery pass over all modified files, then independent false-positive verification of each candidate, reporting only findings at **confidence ≥ 8/10**.
+- **Outcome: no high-confidence vulnerabilities found — no security fixes required.** All high-risk areas were examined and cleared:
+  - **`jobRunner.ts` `$queryRaw` (`FOR UPDATE SKIP LOCKED`)** — safe; Prisma tagged-template parameterization, and interpolated values (`leaseUntil`, `CLAIM_BATCH`) are server-computed constants, not user input. No SQL injection.
+  - **H7 `$transaction`** (refine, prompts, posts) — safe; `forbiddenIfNotOwner` / `requireRole('admin')` run **before** the transaction. No authz gap, no injection.
+  - **H10 read-signing refactor** (library, posts, drafts, revisions) — safe; `resolveExportUrl` mapping was added *after* the access-controlled queries, so every pre-existing ownership/role filter is preserved. EXPORTS stays private.
+  - **`resolveExportUrl` legacy `^https?://` passthrough** — not exploitable; `exportUrl` is only ever written server-side, no route accepts a user-supplied value.
+  - **Upload key construction** (briefs/images, brandkit upload/artifacts) — safe; filenames sanitized with `replace(/[^a-zA-Z0-9._-]/g, '_')`, neutralizing `/` and `..`. No path traversal.
+  - **H11 Puppeteer singleton** — no security-relevant change (the `setContent`/`networkidle0` SSRF surface is pre-existing, not introduced here).
+  - **Migrations** (H9 indexes, H12 columns/enum) — no security impact.
+- **One informational note (confidence 3/10, below threshold — not a vulnerability):** H10's **public-read bucket policy** on the `generated-images` + `brand-kits` buckets (`src/lib/storage/minio.ts`) is a real downgrade of the documented "MinIO served via pre-signed URLs only" control, but **not** a concrete vulnerability under the actual deployment: the committed `docker-compose.yml` does not publish MinIO's port (internal `expose` only; console on `127.0.0.1:9001`; host publishing lives only in the dev `docker-compose.override.yml`), so anonymous reads are reachable only from inside the trusted network. The policy grants no `ListBucket` (no enumeration), keys are unguessable (`{userId}/{Date.now()}-{filename}`), and users are trusted internal staff.
+  - **⚠️ Deploy invariant to preserve:** this stays safe **only while MinIO's port 9000 is never publicly exposed**. If production ever exposes MinIO directly to browsers/CDN, those buckets become world-readable across users — switch to app-mediated signed reads (as EXPORTS already does) before doing so.
+  - **Optional hardening (not required, ~2 lines):** add a `randomUUID()` segment to brief-image keys (`briefs/{userId}/{uuid}-{filename}`) for parity with the unguessable generated-image keys.
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
