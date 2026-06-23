@@ -1,21 +1,25 @@
 import { PublishError } from "./types"
+import { prisma } from "@/lib/prisma"
+import { decrypt } from "@/lib/crypto"
 
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${name}. Set it before calling the Instagram publisher.`,
-    )
+async function resolveCredentials(): Promise<{ accessToken: string; businessAccountId: string }> {
+  const row = await prisma.channelToken.findUnique({ where: { channel: "INSTAGRAM" } })
+  if (row) {
+    return { accessToken: decrypt(row.encryptedToken), businessAccountId: decrypt(row.encryptedMetadata) }
   }
-  return value
+  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN
+  const businessAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID
+  if (!accessToken || !businessAccountId) {
+    throw new Error("Instagram credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
+  }
+  return { accessToken, businessAccountId }
 }
 
 export async function publish(
   exportUrl: string,
   copyText: string,
 ): Promise<{ platformId: string }> {
-  const accessToken = requireEnv("INSTAGRAM_ACCESS_TOKEN")
-  const businessAccountId = requireEnv("INSTAGRAM_BUSINESS_ACCOUNT_ID")
+  const { accessToken, businessAccountId } = await resolveCredentials()
 
   const baseUrl = `https://graph.facebook.com/v19.0/${businessAccountId}`
 

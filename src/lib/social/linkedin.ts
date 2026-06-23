@@ -1,13 +1,18 @@
 import { PublishError } from "./types"
+import { prisma } from "@/lib/prisma"
+import { decrypt } from "@/lib/crypto"
 
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(
-      `Missing required environment variable: ${name}. Set it before calling the LinkedIn publisher.`,
-    )
+async function resolveCredentials(): Promise<{ accessToken: string; organizationId: string }> {
+  const row = await prisma.channelToken.findUnique({ where: { channel: "LINKEDIN" } })
+  if (row) {
+    return { accessToken: decrypt(row.encryptedToken), organizationId: decrypt(row.encryptedMetadata) }
   }
-  return value
+  const accessToken = process.env.LINKEDIN_ACCESS_TOKEN
+  const organizationId = process.env.LINKEDIN_ORGANIZATION_ID
+  if (!accessToken || !organizationId) {
+    throw new Error("LinkedIn credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
+  }
+  return { accessToken, organizationId }
 }
 
 interface RegisterUploadResponse {
@@ -26,8 +31,7 @@ export async function publish(
   exportUrl: string,
   copyText: string,
 ): Promise<{ platformId: string }> {
-  const accessToken = requireEnv("LINKEDIN_ACCESS_TOKEN")
-  const organizationId = requireEnv("LINKEDIN_ORGANIZATION_ID")
+  const { accessToken, organizationId } = await resolveCredentials()
 
   const organizationUrn = `urn:li:organization:${organizationId}`
 
