@@ -2,6 +2,7 @@ import { prisma } from "../prisma"
 import * as instagramPublisher from "../social/instagram"
 import * as linkedinPublisher from "../social/linkedin"
 import { PublishError } from "../social/types"
+import { resolveExportUrl } from "../storage/minio"
 
 const publishers = {
   INSTAGRAM: instagramPublisher,
@@ -76,8 +77,10 @@ export async function runScheduledJobs(): Promise<void> {
     const publisher = publishers[post.channel]
 
     try {
+      // Sign the stored export key for the publisher's one-off image fetch.
+      const signedExportUrl = (await resolveExportUrl(post.draft.exportUrl))!
       const { platformId } = await publisher.publish(
-        post.draft.exportUrl!,
+        signedExportUrl,
         post.draft.copyText
       )
 

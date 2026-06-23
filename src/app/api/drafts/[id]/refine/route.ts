@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
+import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { AgentToolLimitError } from '@/lib/agent/types'
 
@@ -129,13 +130,15 @@ async function commitRevision(
   newHtml: string,
   exportUrl?: string
 ) {
-  // The override path has no fresh render — re-render the pending HTML to produce a PNG.
+  // finalExportUrl is an EXPORTS object key (from runDesignAgent's renderHtml).
+  // The override path has no fresh render — render the pending HTML now to get a key.
   let finalExportUrl = exportUrl
   if (!finalExportUrl) {
     const { renderHtmlToPng } = await import('@/lib/renderer/puppeteer')
     const { uploadObject, BUCKET_EXPORTS } = await import('@/lib/storage/minio')
     const buffer = await renderHtmlToPng(newHtml, 1080, 1080)
-    finalExportUrl = await uploadObject(buffer, BUCKET_EXPORTS, `refine-${draftId}-${Date.now()}.png`, 'image/png')
+    finalExportUrl = `refine-${draftId}-${Date.now()}.png`
+    await uploadObject(buffer, BUCKET_EXPORTS, finalExportUrl, 'image/png')
   }
 
   // Allocate the revision number, write the revision, and update the draft
@@ -189,5 +192,9 @@ async function commitRevision(
     }
   }
 
-  return NextResponse.json({ reply: 'Design updated', revisionId: revision!.id, exportUrl: finalExportUrl })
+  return NextResponse.json({
+    reply: 'Design updated',
+    revisionId: revision!.id,
+    exportUrl: await resolveExportUrl(finalExportUrl),
+  })
 }

@@ -4,6 +4,7 @@ import { getCurrentUser, requireRole } from '@/lib/auth'
 import * as instagramPublisher from '@/lib/social/instagram'
 import * as linkedinPublisher from '@/lib/social/linkedin'
 import { PublishError } from '@/lib/social/types'
+import { resolveExportUrl } from '@/lib/storage/minio'
 import { Channel } from '@prisma/client'
 
 const publishers = {
@@ -69,9 +70,12 @@ export async function POST(req: NextRequest) {
     },
   })
 
+  // Sign the stored export key for the publisher's one-off image fetch.
+  const signedExportUrl = (await resolveExportUrl(draft.exportUrl))!
+
   try {
     const { platformId } = await publishers[channel as keyof typeof publishers].publish(
-      draft.exportUrl,
+      signedExportUrl,
       draft.copyText ?? '',
     )
     const updated = await prisma.post.update({
@@ -121,5 +125,13 @@ export async function GET(req: NextRequest) {
     prisma.post.count({ where }),
   ])
 
-  return NextResponse.json({ posts, total, page, pageSize })
+  // draft.exportUrl is stored as an EXPORTS object key — sign for the browser.
+  const signedPosts = await Promise.all(
+    posts.map(async (p) => ({
+      ...p,
+      draft: { ...p.draft, exportUrl: await resolveExportUrl(p.draft.exportUrl) },
+    }))
+  )
+
+  return NextResponse.json({ posts: signedPosts, total, page, pageSize })
 }

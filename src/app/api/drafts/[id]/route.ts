@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { resolveExportUrl } from '@/lib/storage/minio'
 
 async function loadDraft(id: string) {
   const draft = await prisma.draft.findUnique({
@@ -33,7 +34,8 @@ async function loadDraft(id: string) {
     copyText: draft.copyText,
     imageUrl: draft.imageUrl,
     htmlContent: draft.htmlContent,
-    exportUrl: draft.exportUrl,
+    // exportUrl is stored as an EXPORTS object key — sign it for the browser.
+    exportUrl: await resolveExportUrl(draft.exportUrl),
     status: draft.status,
     createdAt: draft.createdAt,
     revisionCount: draft._count.revisions,

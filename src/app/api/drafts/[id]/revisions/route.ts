@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
+import { resolveExportUrl } from '@/lib/storage/minio'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser()
@@ -23,5 +24,10 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     },
   })
 
-  return NextResponse.json(revisions)
+  // exportUrl is stored as an EXPORTS object key — sign each for the browser.
+  const signed = await Promise.all(
+    revisions.map(async (r) => ({ ...r, exportUrl: await resolveExportUrl(r.exportUrl) }))
+  )
+
+  return NextResponse.json(signed)
 }

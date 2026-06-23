@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
+import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -90,12 +91,13 @@ Fill the template with this content. Replace all placeholder text with the copy.
         copyText,
         htmlContent: result.htmlContent,
         templateId,
+        // result.exportUrl is an EXPORTS object key; stored as-is, signed per read.
         exportUrl: result.exportUrl,
         status: 'EXPORTED',
       },
     })
 
-    return NextResponse.json({ draftId: draft.id, exportUrl: draft.exportUrl })
+    return NextResponse.json({ draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl) })
   } catch (err) {
     if (err instanceof AgentToolLimitError) {
       return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })

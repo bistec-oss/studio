@@ -4,6 +4,7 @@ import { requireRole } from '@/lib/auth'
 import * as instagramPublisher from '@/lib/social/instagram'
 import * as linkedinPublisher from '@/lib/social/linkedin'
 import { PublishError } from '@/lib/social/types'
+import { resolveExportUrl } from '@/lib/storage/minio'
 
 const publishers = {
   INSTAGRAM: instagramPublisher,
@@ -31,10 +32,12 @@ export async function POST(
   }
 
   const { draft } = post
+  // Sign the stored export key for the publisher's one-off image fetch.
+  const signedExportUrl = (await resolveExportUrl(draft.exportUrl)) ?? ''
 
   try {
     const { platformId } = await publishers[post.channel].publish(
-      draft.exportUrl ?? '',
+      signedExportUrl,
       draft.copyText ?? '',
     )
     const updated = await prisma.post.update({

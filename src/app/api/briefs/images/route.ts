@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { uploadObject, BUCKET_IMAGES, validateUpload, RASTER_IMAGE_TYPES } from '@/lib/storage/minio'
+import { uploadObject, publicUrl, BUCKET_IMAGES, validateUpload, RASTER_IMAGE_TYPES } from '@/lib/storage/minio'
 
 // Accepts a multipart image upload from the brief wizard (Images step) and
 // returns a MinIO URL. Runs before the Brief exists, so it is not scoped to a
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
   const key = `briefs/${user.userId}/${Date.now()}-${safeName}`
 
-  const url = await uploadObject(buffer, BUCKET_IMAGES, key, file.type || 'application/octet-stream')
+  await uploadObject(buffer, BUCKET_IMAGES, key, file.type || 'application/octet-stream')
 
-  return NextResponse.json({ url, filename: file.name })
+  return NextResponse.json({ url: publicUrl(BUCKET_IMAGES, key), filename: file.name })
 }

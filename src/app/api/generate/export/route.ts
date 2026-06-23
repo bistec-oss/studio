@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
-import { uploadObject, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
   if (forbidden) return forbidden
 
   if (draft.exportUrl) {
-    return NextResponse.json({ exportUrl: draft.exportUrl })
+    // Stored value is an object key — sign it for read.
+    return NextResponse.json({ exportUrl: await resolveExportUrl(draft.exportUrl) })
   }
 
   if (!draft.htmlContent) {
@@ -28,12 +29,13 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = await renderHtmlToPng(draft.htmlContent, 1080, 1080)
-  const exportUrl = await uploadObject(buffer, BUCKET_EXPORTS, `exports/${draftId}.png`, 'image/png')
+  const key = `exports/${draftId}.png`
+  await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 
   await prisma.draft.update({
     where: { id: draftId },
-    data: { exportUrl, status: 'EXPORTED' },
+    data: { exportUrl: key, status: 'EXPORTED' },
   })
 
-  return NextResponse.json({ exportUrl })
+  return NextResponse.json({ exportUrl: await resolveExportUrl(key) })
 }

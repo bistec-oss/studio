@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
-import { uploadObject, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
 
 export const maxDuration = 120
 
@@ -27,21 +27,17 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   if (!revision) return NextResponse.json({ error: 'Revision not found' }, { status: 404 })
 
   const buffer = await renderHtmlToPng(revision.htmlSnapshot, 1080, 1080)
-  const exportUrl = await uploadObject(
-    buffer,
-    BUCKET_EXPORTS,
-    `restore-${params.id}-${Date.now()}.png`,
-    'image/png'
-  )
+  const key = `restore-${params.id}-${Date.now()}.png`
+  await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 
   await prisma.draft.update({
     where: { id: params.id },
     data: {
       htmlContent: revision.htmlSnapshot,
-      exportUrl,
+      exportUrl: key,
       pendingConflict: Prisma.JsonNull,
     },
   })
 
-  return NextResponse.json({ exportUrl })
+  return NextResponse.json({ exportUrl: await resolveExportUrl(key) })
 }

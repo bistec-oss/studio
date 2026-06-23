@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
-import { uploadObject, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
+import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 import type { ArtifactType } from '@prisma/client'
 
 const VALID_TYPES: ArtifactType[] = ['LOGO', 'FONT', 'COLOR', 'REFERENCE_IMAGE', 'EXAMPLE_POST', 'OTHER']
@@ -41,7 +41,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
   const key = `${params.id}/artifacts/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-  const url = await uploadObject(buffer, BUCKET_BRANDKITS, key, file.type || 'application/octet-stream')
+  await uploadObject(buffer, BUCKET_BRANDKITS, key, file.type || 'application/octet-stream')
+  const url = publicUrl(BUCKET_BRANDKITS, key)
 
   const artifact = await prisma.brandKitArtifact.create({
     data: {

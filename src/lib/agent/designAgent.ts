@@ -134,7 +134,8 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
 
         if (block.name === "renderHtml") {
           lastHtml = (block.input as { html: string }).html
-          lastExportUrl = (result as { url: string }).url
+          // Persist the object KEY (signed per read), not the transient URL.
+          lastExportUrl = (result as { key: string }).key
         }
 
         toolResults.push({

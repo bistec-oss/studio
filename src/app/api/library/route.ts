@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getCurrentUser } from "@/lib/auth"
+import { resolveExportUrl } from "@/lib/storage/minio"
 import { PostStatus } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
@@ -106,5 +107,11 @@ export async function GET(req: NextRequest) {
     prisma.draft.count({ where }),
   ])
 
-  return NextResponse.json({ drafts, total, page, pageSize })
+  // exportUrl is stored as an EXPORTS object key — sign each for the browser
+  // (thumbnails). Signing is local (no network round-trip), so mapping is cheap.
+  const signedDrafts = await Promise.all(
+    drafts.map(async (d) => ({ ...d, exportUrl: await resolveExportUrl(d.exportUrl) }))
+  )
+
+  return NextResponse.json({ drafts: signedDrafts, total, page, pageSize })
 }

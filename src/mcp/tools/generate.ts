@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { resolveCopyProvider, resolveDesignOrchestrator } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
+import { resolveExportUrl } from '@/lib/storage/minio'
 import { getSystemUserId } from '@/mcp/systemUser'
 
 interface GeneratePostArgs {
@@ -54,12 +55,14 @@ export async function generatePost(args: GeneratePostArgs) {
       briefId: brief.id,
       copyText,
       htmlContent,
+      // exportUrl from the orchestrator is an EXPORTS object key (or "" in CLI
+      // mode); stored as-is and signed for the response.
       exportUrl,
       status: 'EXPORTED',
     },
   })
 
-  return { draftId: draft.id, exportUrl, htmlContent }
+  return { draftId: draft.id, exportUrl: await resolveExportUrl(exportUrl), htmlContent }
 }
 
 export async function getDraft(args: { id: string }) {
@@ -68,5 +71,6 @@ export async function getDraft(args: { id: string }) {
     select: { copyText: true, imageUrl: true, exportUrl: true, status: true },
   })
   if (!draft) throw new Error(`Draft ${args.id} not found`)
-  return draft
+  // exportUrl is stored as an EXPORTS object key — sign it for the caller.
+  return { ...draft, exportUrl: await resolveExportUrl(draft.exportUrl) }
 }

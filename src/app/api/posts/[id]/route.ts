@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, requireRole } from '@/lib/auth'
+import { resolveExportUrl } from '@/lib/storage/minio'
 
 export async function GET(
   _: NextRequest,
@@ -22,7 +23,11 @@ export async function GET(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  return NextResponse.json(post)
+  // draft.exportUrl is stored as an EXPORTS object key — sign for the browser.
+  return NextResponse.json({
+    ...post,
+    draft: { ...post.draft, exportUrl: await resolveExportUrl(post.draft.exportUrl) },
+  })
 }
 
 export async function DELETE(

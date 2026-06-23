@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveImageProvider } from '@/providers/registry'
-import { uploadObject, BUCKET_IMAGES } from '@/lib/storage/minio'
+import { uploadObject, publicUrl, BUCKET_IMAGES } from '@/lib/storage/minio'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
       const base64data = rawUrl.slice(commaIdx + 1)
       const buffer = Buffer.from(base64data, 'base64')
       const key = `images/${briefId}-${Date.now()}.png`
-      const imageUrl = await uploadObject(buffer, BUCKET_IMAGES, key, 'image/png')
-      return NextResponse.json({ imageUrl })
+      await uploadObject(buffer, BUCKET_IMAGES, key, 'image/png')
+      return NextResponse.json({ imageUrl: publicUrl(BUCKET_IMAGES, key) })
     }
 
     // Already a real URL — return as-is

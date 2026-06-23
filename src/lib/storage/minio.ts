@@ -4,16 +4,29 @@ import {
   HeadBucketCommand,
   PutObjectCommand,
   GetObjectCommand,
+  PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 const endpoint = process.env.MINIO_ENDPOINT ?? "http://localhost:9000"
+// Browser-facing base URL for public objects. Defaults to the internal endpoint
+// (correct for local dev where both are localhost:9000); set explicitly in prod
+// when MinIO is reached internally (e.g. http://minio:9000) but served publicly
+// from a different host. Trailing slash trimmed so publicUrl() joins cleanly.
+const publicEndpoint = (process.env.MINIO_PUBLIC_ENDPOINT ?? endpoint).replace(/\/+$/, "")
 const accessKeyId = process.env.MINIO_ACCESS_KEY ?? "minioadmin"
 const secretAccessKey = process.env.MINIO_SECRET_KEY ?? "minioadmin"
 
 export const BUCKET_IMAGES = process.env.MINIO_BUCKET_IMAGES ?? "generated-images"
 export const BUCKET_EXPORTS = process.env.MINIO_BUCKET_EXPORTS ?? "exported-designs"
 export const BUCKET_BRANDKITS = process.env.MINIO_BUCKET_BRANDKITS ?? "brand-kits"
+
+// Public-read buckets: objects are served via a stable, non-expiring URL. These
+// hold assets embedded into stored HTML (generated images, brief uploads,
+// logos/artifacts) so a saved design re-renders correctly indefinitely. The
+// EXPORTS bucket is intentionally NOT here — final PNGs stay private and are
+// signed per read (see resolveExportUrl).
+const PUBLIC_BUCKETS = [BUCKET_IMAGES, BUCKET_BRANDKITS]
 
 const s3 = new S3Client({
   endpoint,
@@ -51,27 +64,49 @@ async function ensureBucket(bucket: string): Promise<void> {
   }
 }
 
+// Grant anonymous read on a bucket so its objects are fetchable via a stable URL
+// without signing. Idempotent — safe to re-apply on every cold start.
+async function setPublicReadPolicy(bucket: string): Promise<void> {
+  const policy = {
+    Version: "2012-10-17",
+    Statement: [
+      {
+        Effect: "Allow",
+        Principal: { AWS: ["*"] },
+        Action: ["s3:GetObject"],
+        Resource: [`arn:aws:s3:::${bucket}/*`],
+      },
+    ],
+  }
+  await s3.send(new PutBucketPolicyCommand({ Bucket: bucket, Policy: JSON.stringify(policy) }))
+}
+
 // Cache the in-flight promise (not a boolean) so concurrent first-callers on a
 // cold start share one initialization instead of racing duplicate bucket creates.
 let bucketInit: Promise<void> | null = null
 
 export async function initBuckets(): Promise<void> {
   if (!bucketInit) {
-    bucketInit = Promise.all([
-      ensureBucket(BUCKET_IMAGES),
-      ensureBucket(BUCKET_EXPORTS),
-      ensureBucket(BUCKET_BRANDKITS),
-    ])
-      .then(() => undefined)
-      .catch((err) => {
-        // Reset so a later call can retry after a transient failure.
-        bucketInit = null
-        throw err
-      })
+    bucketInit = (async () => {
+      await Promise.all([
+        ensureBucket(BUCKET_IMAGES),
+        ensureBucket(BUCKET_EXPORTS),
+        ensureBucket(BUCKET_BRANDKITS),
+      ])
+      // Buckets must exist before a policy can be attached.
+      await Promise.all(PUBLIC_BUCKETS.map(setPublicReadPolicy))
+    })().catch((err) => {
+      // Reset so a later call can retry after a transient failure.
+      bucketInit = null
+      throw err
+    })
   }
   return bucketInit
 }
 
+// Uploads bytes and returns the object KEY. Callers decide how to expose it:
+// public-bucket assets → publicUrl(bucket, key) (stored/embedded directly);
+// private EXPORTS → store the key, sign per read via resolveExportUrl(key).
 export async function uploadObject(
   buffer: Buffer,
   bucket: string,
@@ -87,7 +122,24 @@ export async function uploadObject(
       ContentType: contentType,
     })
   )
-  return getPresignedUrl(bucket, key)
+  return key
+}
+
+// Stable, non-expiring URL for an object in a public-read bucket. Safe to embed
+// in stored HTML.
+export function publicUrl(bucket: string, key: string): string {
+  return `${publicEndpoint}/${bucket}/${key}`
+}
+
+// Resolve a stored EXPORTS reference to a fetchable URL: signs the object key
+// for short-lived read access. Null-safe. Tolerates legacy rows that stored a
+// full presigned URL before the object-key migration (passes them through).
+export async function resolveExportUrl(
+  keyOrUrl: string | null | undefined
+): Promise<string | null> {
+  if (!keyOrUrl) return null
+  if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl
+  return getPresignedUrl(BUCKET_EXPORTS, keyOrUrl)
 }
 
 export async function getPresignedUrl(

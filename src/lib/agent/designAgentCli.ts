@@ -38,7 +38,8 @@ export async function runDesignAgentCli(
   // Render HTML → PNG → MinIO (same pipeline as the export route).
   const png = await renderHtmlToPng(html, 1080, 1080)
   const key = `exports/cli-${briefId}-${Date.now()}.png`
-  const exportUrl = await uploadObject(png, BUCKET_EXPORTS, key, "image/png")
+  await uploadObject(png, BUCKET_EXPORTS, key, "image/png")
 
-  return { htmlContent: html, exportUrl, toolCallCount: 0 }
+  // Persist the object key; it is signed per read.
+  return { htmlContent: html, exportUrl: key, toolCallCount: 0 }
 }
