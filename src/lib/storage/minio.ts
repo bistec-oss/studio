@@ -32,16 +32,25 @@ async function ensureBucket(bucket: string): Promise<void> {
   }
 }
 
-let bucketsInitialized = false
+// Cache the in-flight promise (not a boolean) so concurrent first-callers on a
+// cold start share one initialization instead of racing duplicate bucket creates.
+let bucketInit: Promise<void> | null = null
 
 export async function initBuckets(): Promise<void> {
-  if (bucketsInitialized) return
-  await Promise.all([
-    ensureBucket(BUCKET_IMAGES),
-    ensureBucket(BUCKET_EXPORTS),
-    ensureBucket(BUCKET_BRANDKITS),
-  ])
-  bucketsInitialized = true
+  if (!bucketInit) {
+    bucketInit = Promise.all([
+      ensureBucket(BUCKET_IMAGES),
+      ensureBucket(BUCKET_EXPORTS),
+      ensureBucket(BUCKET_BRANDKITS),
+    ])
+      .then(() => undefined)
+      .catch((err) => {
+        // Reset so a later call can retry after a transient failure.
+        bucketInit = null
+        throw err
+      })
+  }
+  return bucketInit
 }
 
 export async function uploadObject(

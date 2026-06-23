@@ -4,7 +4,15 @@ import { prisma } from "@/lib/prisma"
 import { headers } from "next/headers"
 import { NextResponse } from "next/server"
 
+const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET
+if (!BETTER_AUTH_SECRET || BETTER_AUTH_SECRET === "your-32-byte-hex-secret") {
+  throw new Error(
+    "BETTER_AUTH_SECRET is not set or still uses the placeholder value — set a real 32-byte hex secret",
+  )
+}
+
 export const auth = betterAuth({
+  secret: BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: { enabled: true },
   user: {

@@ -1,12 +1,9 @@
-import { execFile } from "child_process"
-import { promisify } from "util"
 import type { DesignOrchestrator } from "@/providers/interfaces/DesignOrchestrator"
 import type { BriefInput } from "@/providers/interfaces/CopyProvider"
+import { runClaudeCli, stripCodeFences } from "@/lib/agent/claudeCli"
 
-const execFileAsync = promisify(execFile)
-
-// Dev-mode only — routes DesignOrchestrator calls through the local Claude Code CLI session.
-// Set DESIGN_PROVIDER=cli in .env to activate. Never use in production.
+// Dev-mode only — routes DesignOrchestrator calls through the local Claude Code CLI
+// session. Set DESIGN_PROVIDER=cli to activate. Never use in production.
 export class ClaudeCliOrchestrator implements DesignOrchestrator {
   async orchestrate(
     brief: BriefInput,
@@ -27,11 +24,10 @@ export class ClaudeCliOrchestrator implements DesignOrchestrator {
       `- Brand kit ID: ${brandKitId}`,
     ].join("\n")
 
-    const { stdout } = await execFileAsync("claude", ["-p", prompt], {
-      timeout: 120_000,
-      maxBuffer: 10 * 1024 * 1024,
-    })
+    // Pipe via stdin (shared helper) — argv would truncate at the Windows
+    // command-line length limit for large prompts.
+    const stdout = await runClaudeCli(prompt, { timeoutMs: 120_000 })
 
-    return { htmlContent: stdout.trim(), exportUrl: "" }
+    return { htmlContent: stripCodeFences(stdout), exportUrl: "" }
   }
 }

@@ -27,10 +27,19 @@ export function encrypt(plaintext: string): string {
 export function decrypt(encryptedBase64: string): string {
   const key = getKey()
   const buf = Buffer.from(encryptedBase64, 'base64')
-  const iv = buf.subarray(0, 12)
-  const tag = buf.subarray(12, 28)
-  const ciphertext = buf.subarray(28)
-  const decipher = createDecipheriv(ALG, key, iv)
-  decipher.setAuthTag(tag)
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
+  // iv(12) + authTag(16) = 28 bytes of framing before any ciphertext.
+  if (buf.length < 28) {
+    throw new Error('Failed to decrypt value')
+  }
+  try {
+    const iv = buf.subarray(0, 12)
+    const tag = buf.subarray(12, 28)
+    const ciphertext = buf.subarray(28)
+    const decipher = createDecipheriv(ALG, key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
+  } catch {
+    // Don't leak the underlying GCM/auth-tag error to callers.
+    throw new Error('Failed to decrypt value')
+  }
 }

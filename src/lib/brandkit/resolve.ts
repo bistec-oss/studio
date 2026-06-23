@@ -34,8 +34,8 @@ export async function resolveBrandKit(
   campaignId?: string | null
 ): Promise<ResolvedBrandKit | null> {
   if (campaignId) {
-    const campaign = await prisma.campaign.findUnique({
-      where: { id: campaignId },
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: campaignId, isDeleted: false },
       include: {
         brandKit: { include: PROMPT_INCLUDE },
         projects: {
@@ -47,10 +47,13 @@ export async function resolveBrandKit(
       },
     })
 
-    if (campaign?.brandKit) return normalise(campaign.brandKit, 'campaign')
+    // Skip soft-deleted brand kits at each tier.
+    if (campaign?.brandKit && !campaign.brandKit.isDeleted) {
+      return normalise(campaign.brandKit, 'campaign')
+    }
 
     const projectKit = campaign?.projects[0]?.project?.defaultBrandKit
-    if (projectKit) return normalise(projectKit, 'project')
+    if (projectKit && !projectKit.isDeleted) return normalise(projectKit, 'project')
   }
 
   const systemKit = await prisma.brandKit.findFirst({

@@ -363,6 +363,7 @@ export default function DraftDetailPage() {
   const [exporting, setExporting] = useState(false)
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   const fetchDraft = useCallback(async () => {
     try {
@@ -389,11 +390,9 @@ export default function DraftDetailPage() {
   }, [fetchDraft, fetchRevisions])
 
   useEffect(() => {
-    fetch('/api/auth/session')
-      .then((r) => r.json())
-      .then((d) => {
-        const role = d?.user?.role ?? d?.session?.user?.role ?? ''
-        setIsAdmin(typeof role === 'string' && role.toLowerCase() === 'admin')
+    apiFetch('/api/me')
+      .then((d: { role?: string }) => {
+        setIsAdmin(typeof d?.role === 'string' && d.role.toLowerCase() === 'admin')
       })
       .catch(() => {})
   }, [])
@@ -416,6 +415,34 @@ export default function DraftDetailPage() {
       alert(e instanceof Error ? e.message : 'Error')
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handlePublish() {
+    if (!draft) return
+    const channels = (draft.brief.channels ?? [])
+      .map((c) => c.toUpperCase())
+      .filter((c) => c === 'INSTAGRAM' || c === 'LINKEDIN')
+    if (channels.length === 0) {
+      alert('This brief has no Instagram/LinkedIn channel to publish to.')
+      return
+    }
+    if (!confirm(`Publish this design to ${channels.join(' and ')}?`)) return
+    setPublishing(true)
+    try {
+      for (const channel of channels) {
+        await apiFetch('/api/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draftId, channel }),
+        })
+      }
+      await fetchDraft()
+      alert(`Published to ${channels.join(', ')}.`)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Publish failed')
+    } finally {
+      setPublishing(false)
     }
   }
 
@@ -524,11 +551,16 @@ export default function DraftDetailPage() {
                 {draft.exportUrl ? 'Re-export' : 'Export'}
               </Button>
               {isAdmin && (
-                <Link href="/library" className="flex-1">
-                  <Button variant="primary" size="sm" className="w-full" disabled={!draft.exportUrl}>
-                    Publish
-                  </Button>
-                </Link>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="flex-1"
+                  disabled={!draft.exportUrl || publishing}
+                  onClick={handlePublish}
+                >
+                  {publishing ? <Loader2 size={13} className="animate-spin" /> : null}
+                  Publish
+                </Button>
               )}
             </div>
           </GlassPanel>
