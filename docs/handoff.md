@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23 (updated after Wave 3)
+**Date:** 2026-06-23 (updated after Wave 3b)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
 **Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
@@ -9,7 +9,7 @@
 
 ## Current status
 
-**Wave 3 — complete ✅**
+**Wave 3b — complete ✅**
 
 | Task | Status | Notes |
 |---|---|---|
@@ -21,9 +21,12 @@
 | T05 — Provider interfaces | ✅ | `CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces + `BriefInput` type |
 | T06 — OpenAI copy provider | ✅ | `OpenAICopyProvider` — GPT-4o chat completions |
 | T07 — OpenAI image provider | ✅ | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL |
-| T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` — DB → default → env fallback |
+| T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` / `resolveDesignOrchestrator` |
 | T10 — MinIO storage client | ✅ | `uploadObject` / `getPresignedUrl`; auto-creates buckets on cold start |
 | T09 — Puppeteer renderer + design agent | ✅ | `renderHtmlToPng` (2× DPI); `runDesignAgent` tool-use loop; 15-call hard limit |
+| T26 — BrandKit management (API + admin UI) | ✅ | 11 API routes; admin UI at `/admin/brandkits`; AI prompt assist |
+| T23 — Project & Campaign API routes | ✅ | CRUD + soft delete; brand kit resolution endpoint |
+| T24 — Projects & Campaigns UI | ✅ | List + detail pages; resolved brand kit badge with source label |
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
@@ -39,11 +42,19 @@
 - `src/providers/implementations/orchestrator/claude-cli.ts` — `ClaudeCliOrchestrator` (dev mode; `DESIGN_PROVIDER=cli`; single-shot `claude -p`, no Puppeteer, `exportUrl=""`)
 - `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → stub that throws until T14 (Wave 4)
 
+**Wave 3b details:**
+- `src/lib/brandkit/resolve.ts` — `resolveBrandKit(campaignId?)`: campaign→project→system default; returns `ResolvedBrandKit` + source label; shared by tools.ts and API routes
+- `src/app/api/admin/brandkits/` — 11 routes: CRUD, file upload helper (`/upload` → MinIO URL), template CRUD, prompt versioning + activate/rollback, AI generate + improve (Sonnet; returns draft for admin review — not auto-saved), artifact upload with feedToAI toggle; LOGO/FONT artifacts sync to `BrandKit.logoUrl`/`fonts`
+- `src/app/(app)/admin/brandkits/page.tsx` — Frozen Light admin UI: kit list sidebar, detail panel with color palette editor, logo upload, font list, HTML template editor, prompt version history + AI assist panel, artifact manager with feedToAI toggle
+- `src/app/api/projects/`, `src/app/api/campaigns/` — CRUD + soft delete for both; campaign reassignment admin-gated; `GET /api/campaigns/[id]/brandkit` returns resolved kit + source label
+- `src/app/(app)/projects/`, `src/app/(app)/campaigns/` — list + detail pages; inline create forms; soft-delete/restore; campaign detail shows resolved brand kit with "Campaign override / Inherited from project / System default" label
+- `AppShell` — added Campaigns + Admin nav items
+
 Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
-**Next:** Wave 3b — T26 (BrandKit management: API + admin UI), T23 (Projects/Campaigns API routes), T24 (Projects/Campaigns UI). T26 must complete before T23 (FK dependency). T23 must complete before T24.
+**Next:** Wave 4 — T11 (Brief UI + API), T12 (copy/image routes), T13 (Path A assembly), T14 (Path B orchestrator + `ClaudeHtmlOrchestrator`), T15 (export route). T14 will unblock `resolveDesignOrchestrator` for production mode. ⚠️ Stop before T21 (Wave 6) and ask about model swap — see tasks.md note.
 
 ---
 
@@ -251,7 +262,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
-**Current specclaw phase:** Wave 3 complete → Wave 3b ready to begin
+**Current specclaw phase:** Wave 3b complete → Wave 4 ready to begin
 
 ---
 
