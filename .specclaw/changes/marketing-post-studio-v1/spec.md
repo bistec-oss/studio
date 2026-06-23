@@ -415,9 +415,7 @@ Each criterion must pass for the change to be considered complete.
 
 ## UI Reference
 
-A working prototype covering all pages exists at `bistec-studio-proto/` in this repo. Use it as a reference for page layouts, user flows, and interaction patterns when implementing each wave.
-
-**Page outline (routes, functionality, data, actions — no design details):** [`docs/prototype-pages.md`](../../../../docs/prototype-pages.md)
+A static prototype (`bistec-studio-proto/`) and its page outline (`docs/prototype-pages.md`) guided the original frontend build and were **removed 2026-06-23** once every page shipped. The implemented app under `src/app/(app)/` is now the reference for page layouts and flows; the design system lives in `docs/ui-reference/`.
 
 ---
 
