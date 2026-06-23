@@ -4,7 +4,7 @@
     {
       "name": "bistec-studio",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "D:\\Bistec\\bistec-studio-proto", "run", "dev"],
+      "runtimeArgs": ["--prefix", "D:\\Bistec\\designer\\bistec-studio-proto", "run", "dev"],
       "port": 3000
     }
   ]

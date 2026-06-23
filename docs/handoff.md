@@ -1,9 +1,95 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-18
+**Date:** 2026-06-23 (updated after Wave 5)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
-**Branch:** `html-designer` — clean, all work pushed (latest commit `01b4d92`)
+**Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## Current status
+
+**Wave 5 — complete ✅**
+
+| Task | Status | Notes |
+|---|---|---|
+| T01 — Next.js 14 init | ✅ | `package.json`, TypeScript strict, Tailwind, Husky |
+| T02 — Docker Compose infra | ✅ | postgres + minio containers up; `docker run` workaround for WSL2 |
+| T03 — Prisma schema + migration | ✅ | `20260622191018_better_auth_swap` applied; 18 tables created |
+| T04 — better-auth + role middleware | ✅ | Login page, session cookie middleware, `requireRole`/`getCurrentUser` helpers |
+| T25 — Design system foundation | ✅ | Frozen Light theme, AppShell, Button/GlassPanel/GlassInput/Select/StatusChip/SegmentedToggle |
+| T05 — Provider interfaces | ✅ | `CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces + `BriefInput` type |
+| T06 — OpenAI copy provider | ✅ | `OpenAICopyProvider` — GPT-4o chat completions |
+| T07 — OpenAI image provider | ✅ | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL |
+| T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` / `resolveDesignOrchestrator` |
+| T10 — MinIO storage client | ✅ | `uploadObject` / `getPresignedUrl`; auto-creates buckets on cold start |
+| T09 — Puppeteer renderer + design agent | ✅ | `renderHtmlToPng` (2× DPI); `runDesignAgent` tool-use loop; 15-call hard limit |
+| T26 — BrandKit management (API + admin UI) | ✅ | 11 API routes; admin UI at `/admin/brandkits`; AI prompt assist |
+| T23 — Project & Campaign API routes | ✅ | CRUD + soft delete; brand kit resolution endpoint |
+| T24 — Projects & Campaigns UI | ✅ | List + detail pages; resolved brand kit badge with source label |
+| T11 — Brief creation (DB + API + UI) | ✅ | 3-step wizard; `POST /api/briefs`; `GET /api/providers/available` |
+| T12 — Copy + image generation routes | ✅ | `POST /api/generate/copy`; `POST /api/generate/image` (base64 → MinIO) |
+| T13 — Path A assembly route | ✅ | `POST /api/generate/assemble-a`; Haiku fills template → Puppeteer PNG |
+| T14 — Path B orchestrator | ✅ | `POST /api/generate/assemble-b`; `ClaudeHtmlOrchestrator`; registry wired |
+| T15 — Export route | ✅ | `POST /api/generate/export`; re-render path for copy edits |
+| T16 — Social publishers | ✅ | `src/lib/social/instagram.ts` + `linkedin.ts`; Graph API + UGC Posts API; `PublishError` typed |
+| T17 — Publish + schedule API routes | ✅ | `POST/GET /api/posts`; GET/DELETE `/api/posts/[id]`; retry at `/api/posts/[id]/publish` |
+| T18 — Scheduler worker | ✅ | `src/scheduler/worker.ts` + `src/lib/scheduler/jobRunner.ts`; 60s poll; sequential per tick |
+| T19 — Asset library UI | ✅ | `GET /api/library`; `/library` page; `PostCard` + `PublishHistoryDrawer` components |
+
+**Post-Wave-2 addition (out of band):**
+- `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
+- Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
+- `src/lib/crypto.ts` stub created (throws — to be implemented in Wave 6)
+
+**Wave 3 details:**
+- `src/lib/storage/minio.ts` — S3-compatible client wrapping `@aws-sdk/client-s3`; `BUCKET_IMAGES` (7-day pre-signed URLs) / `BUCKET_EXPORTS` / `BUCKET_BRANDKITS`; `initBuckets()` idempotent
+- `src/lib/renderer/puppeteer.ts` — `renderHtmlToPng(html, w, h): Promise<Buffer>`; `deviceScaleFactor: 2`; `waitUntil: "networkidle0"`; resolves Chromium from `PUPPETEER_EXECUTABLE_PATH` → common Linux paths
+- `src/lib/agent/types.ts` — `DesignAgentOptions`, `DesignAgentResult`, `BrandKitContext`, `AgentToolLimitError`
+- `src/lib/agent/tools.ts` — `toolGenerateImage` (handles base64 data URL → MinIO), `toolRenderHtml` (Puppeteer → MinIO), `toolGetBrandKitContext` (campaign→project→system default chain)
+- `src/lib/agent/designAgent.ts` — `runDesignAgent`: standard Anthropic SDK tool-use loop; throws `AgentToolLimitError` at 15 calls; halts on any tool error
+- `src/providers/implementations/orchestrator/claude-cli.ts` — `ClaudeCliOrchestrator` (dev mode; `DESIGN_PROVIDER=cli`; single-shot `claude -p`, no Puppeteer, `exportUrl=""`)
+- `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → `ClaudeHtmlOrchestrator` (wired in T14)
+
+**Wave 3b details:**
+- `src/lib/brandkit/resolve.ts` — `resolveBrandKit(campaignId?)`: campaign→project→system default; returns `ResolvedBrandKit` + source label; shared by tools.ts and API routes
+- `src/app/api/admin/brandkits/` — 11 routes: CRUD, file upload helper (`/upload` → MinIO URL), template CRUD, prompt versioning + activate/rollback, AI generate + improve (Sonnet; returns draft for admin review — not auto-saved), artifact upload with feedToAI toggle; LOGO/FONT artifacts sync to `BrandKit.logoUrl`/`fonts`
+- `src/app/(app)/admin/brandkits/page.tsx` — Frozen Light admin UI: kit list sidebar, detail panel with color palette editor, logo upload, font list, HTML template editor, prompt version history + AI assist panel, artifact manager with feedToAI toggle
+- `src/app/api/projects/`, `src/app/api/campaigns/` — CRUD + soft delete for both; campaign reassignment admin-gated; `GET /api/campaigns/[id]/brandkit` returns resolved kit + source label
+- `src/app/(app)/projects/`, `src/app/(app)/campaigns/` — list + detail pages; inline create forms; soft-delete/restore; campaign detail shows resolved brand kit with "Campaign override / Inherited from project / System default" label
+- `AppShell` — added Campaigns + Admin nav items
+
+Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
+
+Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
+
+**Wave 5 details:**
+- `src/lib/social/instagram.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping Instagram Graph API two-step flow (create container → publish container). Reads `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID` from env. Throws `PublishError("INSTAGRAM", reason)` on API error.
+- `src/lib/social/linkedin.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping LinkedIn Marketing API (register asset → upload bytes → create UGC post). Reads `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_ORGANIZATION_ID`. `platformId` from `x-restli-id` header.
+- `src/lib/social/types.ts` — `PublishError extends Error` with `channel` + `reason` fields; shared by both publishers.
+- `src/app/api/posts/route.ts` — `POST /api/posts` (admin-only, create + immediate publish or schedule); `GET /api/posts` (paginated, admins see all, editors see own).
+- `src/app/api/posts/[id]/route.ts` — `GET` (single post + draft); `DELETE` (cancel SCHEDULED → 409 if not scheduled).
+- `src/app/api/posts/[id]/publish/route.ts` — `POST` retry for FAILED posts (admin-only).
+- `src/scheduler/worker.ts` — entry point for the `scheduler` Docker service; 60s poll loop; catches tick errors without crashing.
+- `src/lib/scheduler/jobRunner.ts` — `runScheduledJobs()`: queries `Post WHERE status=SCHEDULED AND scheduledAt<=now`, dispatches sequentially to Instagram/LinkedIn publishers, updates status → PUBLISHED or FAILED + errorReason. Uses `new PrismaClient()` directly (standalone Node.js process).
+- `src/app/api/library/route.ts` — `GET /api/library?page&pageSize&status&search`: returns paginated drafts with brief, posts, and resolved brand kit name. Status filter: ALL / READY (EXPORTED + no posts) / SCHEDULED / PUBLISHED / FAILED.
+- `src/app/(app)/library/page.tsx` — library page: status tabs, search, 3-col draft grid, load-more pagination, publish dialog modal (admin), `PublishHistoryDrawer` wired with retry.
+- `src/components/library/PostCard.tsx` — draft card: thumbnail, topic, channel pills, brand kit name, status chip, Publish (admin) + History buttons.
+- `src/components/library/PublishHistoryDrawer.tsx` — slide-in drawer showing all Post rows for a draft: channel, status, dates, platform link, errorReason, retry button.
+
+**Wave 4 details:**
+- `src/app/api/briefs/route.ts` — `POST /api/briefs`: creates Brief with full validation (topic, goal, tone, channels, designMode, copyProviderKey required; FK checks for campaign, template, providers)
+- `src/app/api/providers/available/route.ts` — `GET /api/providers/available?slot=COPY|IMAGE`: lists enabled providers ordered defaults-first
+- `src/app/(app)/brief/page.tsx` — 3-step wizard: Step 1 content (topic/desc/goal/tone), Step 2 brand+design (campaign selector with brand-kit badge, design mode toggle, template/image pickers), Step 3 channels+providers (channel toggles, copy provider select, advanced image provider disclosure)
+- `src/app/api/generate/copy/route.ts` — `POST /api/generate/copy { briefId }`: resolves copy provider, builds BriefInput, returns `{ copyText }`
+- `src/app/api/generate/image/route.ts` — `POST /api/generate/image { briefId, prompt }`: resolves image provider, handles base64 data URL → MinIO upload, returns `{ imageUrl }`; 422 on moderation error
+- `src/app/api/generate/assemble-a/route.ts` — `POST /api/generate/assemble-a { briefId, templateId }`: Path A full pipeline — copy generation → `runDesignAgent` (Haiku, template-fill mode) → Draft created with `status: EXPORTED`
+- `src/app/api/generate/assemble-b/route.ts` — `POST /api/generate/assemble-b { briefId }`: Path B full pipeline — brand kit resolution (required) → feed-to-AI artifacts → optional style reference → copy generation → `runDesignAgent` (Sonnet, freeform mode) → Draft created
+- `src/providers/implementations/orchestrator/claude-html.ts` — `ClaudeHtmlOrchestrator` implementing `DesignOrchestrator`; wraps `runDesignAgent` with brand-aware system prompt; used by `resolveDesignOrchestrator()` in production
+- `src/providers/registry.ts` — `resolveDesignOrchestrator()` now returns `ClaudeHtmlOrchestrator` for `DESIGN_PROVIDER=claude-html` (default); Wave 3 stub removed
+- `src/app/api/generate/export/route.ts` — `POST /api/generate/export { draftId }`: short-circuits if `exportUrl` already set; otherwise re-renders `htmlContent` via Puppeteer → MinIO → updates `Draft.exportUrl` + `status: EXPORTED`
+
+**Next:** Wave 6 — T20 (admin provider settings UI), T21 (draft refinement UI + AGUI backend), T22 (E2E Playwright), T27 (Prisma migration), T28 (MCP server), T29 (ACP server). ⚠️ Stop before T21 and ask about model swap — see tasks.md note.
 
 ---
 
@@ -28,7 +114,7 @@ publish-now or schedule-for-later.
 |---|---|---|
 | Framework | Next.js 14 (App Router) + TypeScript | Requested |
 | Hosting | VPS — Docker Compose | Removed all Azure dependencies |
-| Auth | Clerk (admin + editor roles) | Avoids blocking on Entra ID setup |
+| Auth | better-auth (self-hosted, email + password) | No SaaS dependency; sessions in PostgreSQL |
 | Database | PostgreSQL (Docker container) + Prisma ORM | Type-safe, migration tooling, PG arrays |
 | Object storage | MinIO (Docker container, S3-compatible) | Self-hosted, replaces Azure Blob Storage |
 | Secrets | `.env` file on VPS (`chmod 600`, never in git) | Replaces Azure Key Vault |
@@ -176,7 +262,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 > Visual ERD: [`docs/erd.svg`](docs/erd.svg)
 
 
-- `User` — clerkId, role (ADMIN | EDITOR)
+- `User` — id, name, email, emailVerified, image, role (ADMIN | EDITOR), sessions[], accounts[]
 - `Project` — name, defaultBrandKitId, defaultTone, isDeleted, deletedAt
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt
 - `ProjectCampaign` — M2M join (project ↔ campaign)
@@ -211,7 +297,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
-**Current specclaw phase:** plan complete → ready for `/specclaw:build marketing-post-studio-v1`
+**Current specclaw phase:** Wave 3b complete → Wave 4 ready to begin
 
 ---
 
@@ -219,12 +305,12 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 | Wave | Focus | Tasks |
 |---|---|---|
-| 1 | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 Clerk auth, T25 Design system foundation |
-| 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
+| 1 ✅ | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation |
+| 2 ✅ | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
 | 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
 | 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
-| 5 | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
+| 5 ✅ | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
 | 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).
@@ -355,6 +441,39 @@ Exposes bistec-studio as a peer agent in multi-agent systems. Where MCP makes bi
 
 ---
 
+## Testing without an Anthropic API key
+
+Set `DESIGN_PROVIDER=cli` in `.env` (or `.env.local`) to use the **Claude Code CLI proxy** instead of the production design agent. This routes all `DesignOrchestrator` calls through a subprocess call to `claude -p "<prompt>"`, using the developer's authenticated Claude Code session on the host machine.
+
+**File:** `src/providers/implementations/orchestrator/claude-cli.ts`
+
+**What still works in CLI mode:**
+- Full brief wizard flow, DB writes, draft page, library, publish UI
+- Real Claude-generated HTML/CSS design output
+- Brand kit context is included in the prompt (colors, fonts, voice)
+
+**What is skipped:**
+- Tool-use loop — single-shot call only
+- Puppeteer rendering — `exportUrl` returns empty string; draft preview shows a placeholder
+- `generateImage` tool — no raster image generation
+- MinIO upload
+
+**How to switch back to production:** remove `DESIGN_PROVIDER` or set it to `claude-html`.
+
+This is a dev-only convenience — never set `DESIGN_PROVIDER=cli` in production.
+
+---
+
+## Wave 3 prerequisites note
+
+- All npm deps present: `@anthropic-ai/sdk`, `puppeteer-core`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`
+- `ANTHROPIC_API_KEY` must be set in `.env` — required by design agent
+- MinIO env vars already set; buckets auto-created on cold start
+- **Chromium (Windows local dev):** `puppeteer-core` does not bundle Chromium. Set `PUPPETEER_EXECUTABLE_PATH` in `.env` pointing to a local Chrome/Chromium install (e.g. `C:\Program Files\Google\Chrome\Application\chrome.exe`). On the VPS Docker image, Chromium is baked in — no extra config needed.
+- `DESIGN_PROVIDER=cli` bypasses both Anthropic API and Puppeteer for local testing without burning tokens
+
+---
+
 ## Architecture decisions
 
 - All AI calls are **server-side only** — the browser never calls an AI API or Puppeteer directly
@@ -367,7 +486,7 @@ Exposes bistec-studio as a peer agent in multi-agent systems. Where MCP makes bi
 - **AGUI:** natural language → Claude agent updates HTML → Puppeteer re-renders → `DraftRevision(htmlSnapshot)`
 - **Brand kit data** (colors, fonts, logoUrl) stored directly in DB — no external brand kit IDs
 - **Claude models by mode:** Path A (template fill) → `claude-haiku-4-5-20251001` (~10× cheaper, sufficient for constrained task); Path B (freeform design) → `claude-sonnet-4-6` (stronger reasoning for layout decisions); AGUI refinement → same model as originating path; brand voice prompt assistance → Sonnet (infrequent admin operation)
-- **Anthropic API required** — the design agent uses `api.anthropic.com` with a registered `sk-ant-` API key. The claude.ai subscription (Claude Code) is a separate product and cannot be used for programmatic backend calls.
+- **Anthropic API required in production** — the design agent uses `api.anthropic.com` with a registered `sk-ant-` API key. For local testing without a key, set `DESIGN_PROVIDER=cli` to use the Claude Code CLI proxy (see "Testing without an Anthropic API key" section above). The claude.ai subscription cannot be used for multi-turn tool-use in production.
 
 ---
 

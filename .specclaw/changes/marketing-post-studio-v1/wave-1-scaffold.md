@@ -8,7 +8,7 @@
 
 ## Objective
 
-Stand up the complete project skeleton: Next.js app, Docker Compose services, Prisma schema, Clerk auth, and the Frozen Light design system. Every subsequent wave depends on this foundation being in place.
+Stand up the complete project skeleton: Next.js app, Docker Compose services, Prisma schema, better-auth (self-hosted email/password auth), and the Frozen Light design system. Every subsequent wave depends on this foundation being in place.
 
 ---
 
@@ -19,7 +19,7 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
 - **Files:** `package.json`, `tsconfig.json`, `next.config.ts`, `.env.example`, `Dockerfile`
 - **Estimate:** small
 - **Depends:** —
-- **Notes:** App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
+- **Notes:** App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
 
 ---
 
@@ -44,7 +44,8 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
 - **Estimate:** small
 - **Depends:** T02
 - **Notes:** Full schema as defined in `design.md`. Models:
-  - `User` — clerkId, role (ADMIN | EDITOR)
+  - `User` — name, email, emailVerified, image, role (ADMIN | EDITOR) — better-auth managed
+  - `Session`, `Account`, `Verification` — better-auth session tables
   - `Project` — name, defaultBrandKitId (FK → BrandKit), defaultTone, isDeleted, deletedAt
   - `Campaign` — name, brandKitId (FK → BrandKit, override), defaultTone, isDeleted, deletedAt
   - `ProjectCampaign` — M2M join
@@ -62,12 +63,12 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
 
 ---
 
-### T04 — Clerk auth integration + role middleware
+### T04 — better-auth integration + role middleware
 
-- **Files:** `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
+- **Files:** `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`, `src/lib/auth-client.ts`, `src/lib/prisma.ts`, `src/app/api/auth/[...all]/route.ts`
 - **Estimate:** small
 - **Depends:** T01
-- **Notes:** Clerk middleware protects all `/(app)/**` and `/api/**` routes. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` helper used in route handlers. Roles stored as Clerk public metadata.
+- **Notes:** Self-hosted auth via better-auth (email + password). Session stored in PostgreSQL via `prismaAdapter`. Middleware checks `better-auth.session_token` cookie; redirects to `/login` when absent. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` and `getCurrentUser()` used in route handlers. `role` field lives on the User DB row — server-managed only, not writable via sign-up. Login page is a Frozen Light–themed custom form. No external auth SaaS. Env vars: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 
 ---
 
@@ -94,7 +95,7 @@ Stand up the complete project skeleton: Next.js app, Docker Compose services, Pr
 ```
 T01 (init)
   ├── T02 (Docker) → T03 (Prisma)
-  ├── T04 (Clerk)
+  ├── T04 (better-auth)
   └── T25 (Design system)
 ```
 

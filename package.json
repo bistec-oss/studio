@@ -1,0 +1,51 @@
+{
+  "name": "bistec-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "next": "14",
+    "react": "18",
+    "react-dom": "18",
+    "better-auth": "^1.0.0",
+    "prisma": "^5.0.0",
+    "@prisma/client": "^5.0.0",
+    "@anthropic-ai/sdk": "^0.30.0",
+    "openai": "^4.0.0",
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0",
+    "puppeteer-core": "^22.0.0",
+    "@sparticuz/chromium-min": "^123.0.0",
+    "lucide-react": "^0.400.0",
+    "clsx": "^2.0.0",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "tailwindcss": "3",
+    "postcss": "^8.0.0",
+    "autoprefixer": "^10.0.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "14"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx}": [
+      "eslint --fix"
+    ]
+  },
+  "allowScripts": {
+    "@prisma/engines@5.22.0": true,
+    "prisma@5.22.0": true
+  }
+}

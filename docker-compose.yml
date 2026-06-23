@@ -1,0 +1,56 @@
+# Never hard-code secrets here — all credentials come from .env (chmod 600)
+
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - postgres
+      - minio
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "src/scheduler/worker.js"]
+    env_file: .env
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "127.0.0.1:9001:9001"
+    expose:
+      - "9000"
+    volumes:
+      - minio_data:/data
+      - minio_config:/root/.minio
+    env_file: .env
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:
+  minio_config:

@@ -49,6 +49,12 @@ Ship the remaining admin surface (provider settings with API key registration + 
 
 ### T21 — Draft refinement UI + AGUI backend
 
+> **⚠️ MODEL PROMPT** — Stop before starting this task and ask the user:
+> _"T21 (Draft refinement + AGUI backend) is the most stateful task in the build —
+> brand-kit conflict/override flow, `pendingConflict` state, undo stack, and Puppeteer
+> re-render on restore. Recommended: **claude-opus-4-8** with **medium effort**.
+> Switch to Opus for this task? (yes / no, continue with current model)"_
+
 - **Files:** `src/app/(app)/drafts/[id]/page.tsx`, `src/components/draft/CopyEditor.tsx`, `src/components/draft/ImagePanel.tsx`, `src/components/draft/TemplateSwapper.tsx`, `src/components/draft/RefinementPanel.tsx`, `src/app/api/drafts/[id]/refine/route.ts`, `src/app/api/drafts/[id]/revisions/route.ts`, `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts`
 - **Estimate:** large
 - **Depends:** T13, T14, T15, T25, T27

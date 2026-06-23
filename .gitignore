@@ -12,7 +12,9 @@ out/
 build/
 dist/
 
-# Environment variables
+# Environment variables — block all .env* variants except the example template
+.env*
+!.env.example
 .env
 .env.local
 .env.development.local

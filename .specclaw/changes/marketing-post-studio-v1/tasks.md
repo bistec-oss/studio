@@ -26,31 +26,31 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 1 — Project scaffold & infrastructure
 
-- [ ] `T01` — Initialize Next.js 14 + TypeScript project
+- [x] `T01` — Initialize Next.js 14 + TypeScript project
   - Files: `package.json`, `tsconfig.json`, `next.config.ts`, `.env.example`, `Dockerfile`
   - Estimate: small
   - Depends: —
-  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, Clerk keys, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
+  - Notes: App Router, TypeScript strict mode, Tailwind CSS. `.env.example` documents every required env var (Anthropic key, OpenAI key, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, DB URL, MinIO endpoint/keys, social API tokens, `TOKEN_ENCRYPTION_KEY`). Husky pre-commit hook added to block accidental `.env` commits.
 
-- [ ] `T02` — VPS infrastructure setup (Docker Compose)
+- [x] `T02` — VPS infrastructure setup (Docker Compose)
   - Files: `docker-compose.yml`, `.env.example`, `.gitignore`
   - Estimate: medium
   - Depends: T01
   - Notes: `docker-compose.yml` defines four services: `app` (Next.js, port 3000), `scheduler` (same image, runs `worker.ts`), `postgres` (official PG image, named volume), `minio` (MinIO image, two named volumes for data + config, console port 9001 bound to 127.0.0.1 only). All services use `env_file: .env` — no secrets in compose file. `.env.example` documents every variable. `.gitignore` includes `.env*` except `.env.example`. Pre-commit hook (husky) blocks committing any `.env` file.
 
-- [ ] `T03` — Prisma schema + initial migration
+- [x] `T03` — Prisma schema + initial migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/`
   - Estimate: small
   - Depends: T02
   - Notes: Full schema as defined in design.md: User, Project, Campaign, ProjectCampaign (M2M), CampaignDraft (M2M), Brief (campaignId nullable), Draft, Post, BrandKit, BrandKitPrompt (versioned), BrandKitArtifact, BrandKitTemplate, AvailableProvider + enums (Role, DesignMode, DraftStatus, Channel, PostStatus, ProviderSlot, ArtifactType). Project.defaultBrandKitId and Campaign.brandKitId are FKs → BrandKit. `DATABASE_URL` points to the `postgres` Docker service. Run `prisma migrate dev` to generate migration files.
 
-- [ ] `T04` — Clerk auth integration + role middleware
-  - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`
+- [x] `T04` — better-auth integration + role middleware
+  - Files: `src/middleware.ts`, `src/app/(auth)/login/page.tsx`, `src/lib/auth.ts`, `src/lib/auth-client.ts`, `src/lib/prisma.ts`, `src/app/api/auth/[...all]/route.ts`
   - Estimate: small
   - Depends: T01
-  - Notes: Clerk middleware protects all `/(app)/**` and `/api/**` routes. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` helper used in route handlers. Roles stored as Clerk public metadata.
+  - Notes: Self-hosted auth via better-auth (email + password). Session stored in PostgreSQL via Prisma adapter. Middleware checks `better-auth.session_token` cookie; unauthenticated requests redirect to `/login`. `src/lib/auth.ts` exports `requireRole('admin' | 'editor')` and `getCurrentUser()` helpers used in API route handlers. `role` field lives on the User DB row (server-managed only — not writable at sign-up). Login page is a custom Frozen Light–themed form (`GlassPanel` + `GlassInput`). No external auth SaaS required. Env vars: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 
-- [ ] `T25` — Design system foundation (Frozen Light theme + base components)
+- [x] `T25` — Design system foundation (Frozen Light theme + base components)
   - Files: `tailwind.config.ts`, `src/app/globals.css`, `src/components/theme/ThemeProvider.tsx`, `src/components/theme/ThemeToggle.tsx`, `src/components/layout/AppShell.tsx`, `src/components/ui/` (Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip), `src/app/layout.tsx`
   - Estimate: medium
   - Depends: T01
@@ -60,29 +60,31 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 2 — Provider abstraction layer
 
-- [ ] `T05` — Define provider interfaces
+- [x] `T05` — Define provider interfaces
   - Files: `src/providers/interfaces/CopyProvider.ts`, `src/providers/interfaces/ImageProvider.ts`, `src/providers/interfaces/DesignOrchestrator.ts`
   - Estimate: small
   - Depends: T01
   - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string): Promise<{ exportUrl: string, htmlContent: string }>`. These interfaces are the stable contract — all future AI models plug in here.
 
-- [ ] `T06` — OpenAI copy provider implementation
+- [x] `T06` — OpenAI copy provider implementation
   - Files: `src/providers/implementations/copy/openai.ts`
   - Estimate: small
   - Depends: T05
   - Notes: Implements `CopyProvider`. Calls OpenAI Chat Completions (GPT-4o mini). Channel-aware system prompt (Instagram caption vs LinkedIn post format per FR-8). Returns copy string.
 
-- [ ] `T07` — OpenAI image provider implementation
+- [x] `T07` — OpenAI image provider implementation
   - Files: `src/providers/implementations/image/openai.ts`
   - Estimate: small
   - Depends: T05
   - Notes: Implements `ImageProvider`. Calls gpt-image-2 via OpenAI Images API. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`.
 
-- [ ] `T08` — Provider registry
+- [x] `T08` — Provider registry
   - Files: `src/providers/registry.ts`
   - Estimate: small
   - Depends: T06, T07
   - Notes: Resolves the active provider for a given slot using this order: (1) providerKey passed from the Brief record (user's choice), (2) `AvailableProvider` row with `isDefault=true` for that slot, (3) env var fallback. Throws if the resolved key has no registered implementation. This is the only file that needs updating when a new model is registered.
+
+    **Orchestrator resolution** (env-only, not user-selectable): check `DESIGN_PROVIDER` env var — `"cli"` → `ClaudeCliOrchestrator` (test mode, no API key); `"claude-html"` or unset → `ClaudeHtmlOrchestrator` (production). Both implementations must be registered. Also add `claude-cli.ts` to the File Changes Map.
 
 ---
 
@@ -108,6 +110,8 @@ Within a wave, tasks without inter-dependencies can run in parallel.
     - `getBrandKitContext(briefId)` — resolves the brand kit using campaign → project → system default precedence; returns `{ colors, fonts, logoUrl, voicePrompt, artifactUrls }`
 
     On any tool error: agent is halted, error returned to caller, brief record preserved.
+
+    When `DESIGN_PROVIDER=cli` is set, `runDesignAgent` is not invoked — the CLI proxy (`ClaudeCliOrchestrator`, registered in T08) handles the request entirely. T09 has no CLI-specific code; the dispatch happens at the registry level.
 
 - [ ] `T10` — MinIO storage client
   - Files: `src/lib/storage/minio.ts`
@@ -155,19 +159,19 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 4 — Core generation + design assembly API routes
 
-- [ ] `T11` — Brief creation (DB + API route)
+- [x] `T11` — Brief creation (DB + API route)
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
   - Depends: T03, T04, T08, T23, T25, T26
   - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Copy model dropdown populates from `GET /api/providers/available`. Design mode radio (Path A / Path B). **Image uploads differ by path:** Path A shows a single "Additional Image" upload (stored as `additionalImageUrl` in Brief — passed into the HTML template by the Claude design agent). Path B shows a multi-image upload where each image is tagged with an **intent**: "Embed in design" (Claude places this image in the HTML layout) or "Style reference only" (Claude uses it for compositional inspiration only). Stored as `briefImages: { url, intent }[]` (JSON) in Brief. Path B also shows an optional **template reference** picker (same thumbnail list as Path A's picker) — user can choose a template from the resolved brand kit as style inspiration; stored as `referenceTemplateId` FK on Brief. **Image provider selector is hidden by default** — system default is used when Claude calls `generateImage`. An "Advanced" disclosure exposes it for users who want to override. FR-5, FR-5a, FR-5b, FR-6, FR-18c, FR-18d, FR-28–FR-30, AC-13, AC-16, AC-17.
 
-- [ ] `T12` — Copy generation API route + image tool handler
+- [x] `T12` — Copy generation API route + image tool handler
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
   - Estimate: small
   - Depends: T08, T10, T11
   - Notes: `POST /api/generate/copy` is called by the assembly pipeline; `POST /api/generate/image` is called internally by the `generateImage` agent tool implementation (not directly by the pipeline orchestrator). Copy route reads brief + brand kit prompt → calls registry copy provider → returns `{ copyText }`. Image route accepts `{ briefId, prompt? }` → calls registry image provider → uploads buffer to MinIO `generated-images` bucket → returns `{ imageUrl }`. `ModerationError` → 422 `{ code: 'MODERATION' }` (EC-2). FR-7–FR-11, AC-4.
 
-- [ ] `T13` — Path A: design assembly API route (preset template)
+- [x] `T13` — Path A: design assembly API route (preset template)
   - Files: `src/app/api/generate/assemble-a/route.ts`
   - Estimate: medium
   - Depends: T09, T12
@@ -181,7 +185,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
     On agent error: return 422 with `{ code: 'AGENT_ERROR', message }` — surface to user as a recoverable error.
 
-- [ ] `T14` — Path B: Claude HTML design agent orchestrator
+- [x] `T14` — Path B: Claude HTML design agent orchestrator
   - Files: `src/app/api/generate/assemble-b/route.ts`, `src/providers/implementations/orchestrator/claude-html.ts`
   - Estimate: large
   - Depends: T09, T12, T08, T26
@@ -198,7 +202,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
     Hard limit: 15 tool calls (EC-12). On tool error: agent halted, error returned to caller with brief preserved.
 
-- [ ] `T15` — Export route
+- [x] `T15` — Export route
   - Files: `src/app/api/generate/export/route.ts`
   - Estimate: small
   - Depends: T09, T10
@@ -208,25 +212,25 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 5 — Publishing, scheduling, library
 
-- [ ] `T16` — Social publisher: Instagram + LinkedIn
+- [x] `T16` — Social publisher: Instagram + LinkedIn
   - Files: `src/lib/social/instagram.ts`, `src/lib/social/linkedin.ts`
   - Estimate: medium
   - Depends: T03
   - Notes: Each module exports `publish(exportUrl, copy, channel): Promise<{ platformId }>`. Instagram uses the Graph API (media container → publish). LinkedIn uses the UGC Posts API. Failures throw typed errors with reason strings. Per-channel failure does not block the other (EC-10). FR-18, FR-20.
 
-- [ ] `T17` — Publish + schedule API routes
+- [x] `T17` — Publish + schedule API routes
   - Files: `src/app/api/publish/route.ts`, `src/app/api/schedule/route.ts`, `src/app/api/posts/[id]/route.ts`
   - Estimate: medium
   - Depends: T15, T16, T04
   - Notes: Publish route: role-check (admin only), calls publisher, writes Post records with outcome. Schedule route: role-check, sets `scheduledAt`, status=SCHEDULED. DELETE `/api/posts/[id]`: cancel (status=CANCELLED) only if status=SCHEDULED. FR-18–FR-21, AC-2, AC-3, AC-9, AC-10.
 
-- [ ] `T18` — Scheduler worker (Docker container)
+- [x] `T18` — Scheduler worker (Docker container)
   - Files: `src/scheduler/worker.ts`
   - Estimate: medium
   - Depends: T17
   - Notes: Runs as the `scheduler` service in `docker-compose.yml` (same Docker image as `app`, different entrypoint). Polls every 60 seconds via `setInterval`. Queries `Post WHERE status=SCHEDULED AND scheduledAt <= now()`. Sets IN_FLIGHT before publish (idempotency). Calls `instagram.publish` or `linkedin.publish`. Updates to PUBLISHED or FAILED. Docker Compose `restart: unless-stopped` ensures catch-up after VPS reboot (EC-7). AC-8.
 
-- [ ] `T19` — Asset library + publish history API + UI
+- [x] `T19` — Asset library + publish history API + UI
   - Files: `src/app/api/library/route.ts`, `src/app/(app)/library/page.tsx`
   - Estimate: medium
   - Depends: T17, T23, T25
@@ -246,6 +250,11 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Files: `src/app/(app)/draft/[id]/page.tsx`, `src/components/draft/RefinementPanel.tsx`, `src/app/api/drafts/[id]/refine/route.ts`, `src/app/api/drafts/[id]/revisions/route.ts`, `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts`
   - Estimate: large
   - Depends: T13, T14, T15, T25, T03
+  - **⚠️ MODEL PROMPT — stop before starting this task and ask the user:**
+    > "T21 (Draft refinement + AGUI backend) is the most stateful task in the build —
+    > it covers the brand-kit conflict/override flow, `pendingConflict` state, undo stack,
+    > and Puppeteer re-render on restore. Recommended: **claude-opus-4-8** with **medium effort**.
+    > Switch to Opus for this task? (yes / no, continue with current model)"
   - Notes: Two deliverables. (1) **Draft page UI** — generated copy (editable textarea), generated image ("Regenerate" button), template selector (Path A only), design preview (rendered PNG from `Draft.exportUrl`), "Export" button. No external design editor embed (FR-16). (2) **AGUI refinement panel** — chat input + AI reply area + undo history list, positioned alongside the design preview.
 
     **Backend — `POST /api/drafts/[id]/refine`:**

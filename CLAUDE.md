@@ -8,7 +8,7 @@ A Next.js 14 + TypeScript web app that turns a brief into a finished, on-brand, 
 - **Path A** — HTML/CSS brand template (stored in DB), Claude agent fills it → Puppeteer renders PNG
 - **Path B** — Claude agent generates freeform HTML/CSS design → Puppeteer renders PNG
 
-Stack: Next.js 14, TypeScript, Prisma, PostgreSQL, MinIO, Clerk auth, Docker Compose. Puppeteer (headless Chromium) for HTML→PNG rendering. Claude agent harness (Anthropic SDK tool-use loop) drives design generation.
+Stack: Next.js 14, TypeScript, Prisma, PostgreSQL, MinIO, better-auth (self-hosted), Docker Compose. Puppeteer (headless Chromium) for HTML→PNG rendering. Claude agent harness (Anthropic SDK tool-use loop) drives design generation.
 
 ## Key reference documents
 
@@ -21,7 +21,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 - **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — authoritative source for the Prisma schema, all API route contracts, the AI provider abstraction layer (`CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces), the Claude design agent harness, the Puppeteer renderer, MinIO integration, AGUI backend flow, provider registration encryption, and the full file/folder structure of the real app. Any implementation that touches data models, API routes, or provider logic must align with this document.
 
 ### Specification & planning
-- **[`handoff.md`](handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, and v2 interoperability target
+- **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, and v2 interoperability target
 - **[`.specclaw/changes/marketing-post-studio-v1/spec.md`](.specclaw/changes/marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements
 - **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — architecture, Prisma schema, API routes, provider abstraction layer, file tree
 - **[`.specclaw/changes/marketing-post-studio-v1/tasks.md`](.specclaw/changes/marketing-post-studio-v1/tasks.md)** — 28 tasks across 6 waves with estimates and dependencies
