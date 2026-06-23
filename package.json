@@ -9,6 +9,7 @@
     "lint": "next lint",
     "prepare": "husky install",
     "mcp": "tsx src/mcp/server.ts",
+    "db:seed": "node --env-file=.env scripts/seed-admin.mjs && node --env-file=.env scripts/seed-brandkit.mjs && node --env-file=.env scripts/seed-hearts-talk.mjs",
     "test:e2e": "playwright test",
     "test:e2e:mock": "cross-env MOCK_AI=true MOCK_PUPPETEER=true MOCK_SOCIAL=true playwright test"
   },
