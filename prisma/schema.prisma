@@ -275,6 +275,15 @@ model AvailableProvider {
   @@unique([slot, providerKey])
 }
 
+model ChannelToken {
+  id                String   @id @default(cuid())
+  channel           Channel  @unique
+  encryptedToken    String
+  encryptedMetadata String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 model DraftRevision {
   id             String   @id @default(cuid())
   draftId        String
