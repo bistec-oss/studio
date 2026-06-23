@@ -2,6 +2,25 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
+## ⏳ Outstanding work — START HERE (updated 2026-06-23)
+
+A code review was completed and **22 of 28 remediation fixes are done** (pushed to `main`). **6 tasks remain** — full details, file refs, and rationale in **[`docs/code-review-findings.md`](docs/code-review-findings.md) → Remediation Status**.
+
+| ID | Remaining task | Model · Effort | Needs migration |
+|---|---|---|---|
+| H7 | Transaction atomicity (refine revision #, prompt version, posts) + `@@unique([draftId,revisionNumber])` | Opus · high | ✅ yes |
+| H9 | Prisma indexes: `Post(status,scheduledAt)`, FKs, `BrandKit(isDefault,isDeleted)` | Sonnet · medium | ✅ yes |
+| H12 | Scheduler atomic claim (`SKIP LOCKED`) + retry/backoff | Opus · high | ✅ yes |
+| H10 | Presigned-URL → store object key, sign at read time | Opus · high | architectural (~10 files) |
+| H11 | Puppeteer singleton browser + concurrency cap | Opus · high | no |
+| L2 | Extract shared `apiFetch` + `buildBrandKitSystemContext` | Sonnet · medium | no |
+
+**Recommended order:** migration trio **H7 + H9 + H12** first (best value/credit, one migration) → **H11** → **H10** (most expensive) → **L2**.
+
+**🐛 Known bug:** Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails (`Prompt too large … 1899849 chars > 600000`) — the template inlines assets as `data:` URIs (1.81 MB). Workaround: use the **"Simple Gradient Card"** template (Bistec kit) or **Path B**. Fix: re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO URLs. (See findings doc → Known Issue.)
+
+> Before testing/running, follow `docs/cold-start.md` §0 preflight. Dev server runs on `http://localhost:3000`; CLI-mode generation (`DESIGN_PROVIDER=cli`) needs the seeded `cli` provider (`node --env-file=.env scripts/seed-cli-provider.mjs`).
+
 ## What this project is
 
 A Next.js 14 + TypeScript web app that turns a brief into a finished, on-brand, ready-to-publish social media post (Instagram + LinkedIn). Two generation paths:
