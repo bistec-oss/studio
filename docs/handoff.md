@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23 (updated after Wave 4)
+**Date:** 2026-06-23 (updated after Wave 5)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
 **Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
@@ -9,7 +9,7 @@
 
 ## Current status
 
-**Wave 4 — complete ✅**
+**Wave 5 — complete ✅**
 
 | Task | Status | Notes |
 |---|---|---|
@@ -32,6 +32,10 @@
 | T13 — Path A assembly route | ✅ | `POST /api/generate/assemble-a`; Haiku fills template → Puppeteer PNG |
 | T14 — Path B orchestrator | ✅ | `POST /api/generate/assemble-b`; `ClaudeHtmlOrchestrator`; registry wired |
 | T15 — Export route | ✅ | `POST /api/generate/export`; re-render path for copy edits |
+| T16 — Social publishers | ✅ | `src/lib/social/instagram.ts` + `linkedin.ts`; Graph API + UGC Posts API; `PublishError` typed |
+| T17 — Publish + schedule API routes | ✅ | `POST/GET /api/posts`; GET/DELETE `/api/posts/[id]`; retry at `/api/posts/[id]/publish` |
+| T18 — Scheduler worker | ✅ | `src/scheduler/worker.ts` + `src/lib/scheduler/jobRunner.ts`; 60s poll; sequential per tick |
+| T19 — Asset library UI | ✅ | `GET /api/library`; `/library` page; `PostCard` + `PublishHistoryDrawer` components |
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
@@ -59,6 +63,20 @@ Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStud
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
+**Wave 5 details:**
+- `src/lib/social/instagram.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping Instagram Graph API two-step flow (create container → publish container). Reads `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID` from env. Throws `PublishError("INSTAGRAM", reason)` on API error.
+- `src/lib/social/linkedin.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping LinkedIn Marketing API (register asset → upload bytes → create UGC post). Reads `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_ORGANIZATION_ID`. `platformId` from `x-restli-id` header.
+- `src/lib/social/types.ts` — `PublishError extends Error` with `channel` + `reason` fields; shared by both publishers.
+- `src/app/api/posts/route.ts` — `POST /api/posts` (admin-only, create + immediate publish or schedule); `GET /api/posts` (paginated, admins see all, editors see own).
+- `src/app/api/posts/[id]/route.ts` — `GET` (single post + draft); `DELETE` (cancel SCHEDULED → 409 if not scheduled).
+- `src/app/api/posts/[id]/publish/route.ts` — `POST` retry for FAILED posts (admin-only).
+- `src/scheduler/worker.ts` — entry point for the `scheduler` Docker service; 60s poll loop; catches tick errors without crashing.
+- `src/lib/scheduler/jobRunner.ts` — `runScheduledJobs()`: queries `Post WHERE status=SCHEDULED AND scheduledAt<=now`, dispatches sequentially to Instagram/LinkedIn publishers, updates status → PUBLISHED or FAILED + errorReason. Uses `new PrismaClient()` directly (standalone Node.js process).
+- `src/app/api/library/route.ts` — `GET /api/library?page&pageSize&status&search`: returns paginated drafts with brief, posts, and resolved brand kit name. Status filter: ALL / READY (EXPORTED + no posts) / SCHEDULED / PUBLISHED / FAILED.
+- `src/app/(app)/library/page.tsx` — library page: status tabs, search, 3-col draft grid, load-more pagination, publish dialog modal (admin), `PublishHistoryDrawer` wired with retry.
+- `src/components/library/PostCard.tsx` — draft card: thumbnail, topic, channel pills, brand kit name, status chip, Publish (admin) + History buttons.
+- `src/components/library/PublishHistoryDrawer.tsx` — slide-in drawer showing all Post rows for a draft: channel, status, dates, platform link, errorReason, retry button.
+
 **Wave 4 details:**
 - `src/app/api/briefs/route.ts` — `POST /api/briefs`: creates Brief with full validation (topic, goal, tone, channels, designMode, copyProviderKey required; FK checks for campaign, template, providers)
 - `src/app/api/providers/available/route.ts` — `GET /api/providers/available?slot=COPY|IMAGE`: lists enabled providers ordered defaults-first
@@ -71,7 +89,7 @@ Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 - `src/providers/registry.ts` — `resolveDesignOrchestrator()` now returns `ClaudeHtmlOrchestrator` for `DESIGN_PROVIDER=claude-html` (default); Wave 3 stub removed
 - `src/app/api/generate/export/route.ts` — `POST /api/generate/export { draftId }`: short-circuits if `exportUrl` already set; otherwise re-renders `htmlContent` via Puppeteer → MinIO → updates `Draft.exportUrl` + `status: EXPORTED`
 
-**Next:** Wave 5 — T16 (Instagram + LinkedIn publishers), T17 (publish/schedule routes), T18 (scheduler worker), T19 (library UI). ⚠️ Stop before T21 (Wave 6) and ask about model swap — see tasks.md note.
+**Next:** Wave 6 — T20 (admin provider settings UI), T21 (draft refinement UI + AGUI backend), T22 (E2E Playwright), T27 (Prisma migration), T28 (MCP server), T29 (ACP server). ⚠️ Stop before T21 and ask about model swap — see tasks.md note.
 
 ---
 
@@ -292,7 +310,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 | 3 | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
 | 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
 | 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
-| 5 | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
+| 5 ✅ | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
 | 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).

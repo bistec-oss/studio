@@ -212,25 +212,25 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 5 — Publishing, scheduling, library
 
-- [ ] `T16` — Social publisher: Instagram + LinkedIn
+- [x] `T16` — Social publisher: Instagram + LinkedIn
   - Files: `src/lib/social/instagram.ts`, `src/lib/social/linkedin.ts`
   - Estimate: medium
   - Depends: T03
   - Notes: Each module exports `publish(exportUrl, copy, channel): Promise<{ platformId }>`. Instagram uses the Graph API (media container → publish). LinkedIn uses the UGC Posts API. Failures throw typed errors with reason strings. Per-channel failure does not block the other (EC-10). FR-18, FR-20.
 
-- [ ] `T17` — Publish + schedule API routes
+- [x] `T17` — Publish + schedule API routes
   - Files: `src/app/api/publish/route.ts`, `src/app/api/schedule/route.ts`, `src/app/api/posts/[id]/route.ts`
   - Estimate: medium
   - Depends: T15, T16, T04
   - Notes: Publish route: role-check (admin only), calls publisher, writes Post records with outcome. Schedule route: role-check, sets `scheduledAt`, status=SCHEDULED. DELETE `/api/posts/[id]`: cancel (status=CANCELLED) only if status=SCHEDULED. FR-18–FR-21, AC-2, AC-3, AC-9, AC-10.
 
-- [ ] `T18` — Scheduler worker (Docker container)
+- [x] `T18` — Scheduler worker (Docker container)
   - Files: `src/scheduler/worker.ts`
   - Estimate: medium
   - Depends: T17
   - Notes: Runs as the `scheduler` service in `docker-compose.yml` (same Docker image as `app`, different entrypoint). Polls every 60 seconds via `setInterval`. Queries `Post WHERE status=SCHEDULED AND scheduledAt <= now()`. Sets IN_FLIGHT before publish (idempotency). Calls `instagram.publish` or `linkedin.publish`. Updates to PUBLISHED or FAILED. Docker Compose `restart: unless-stopped` ensures catch-up after VPS reboot (EC-7). AC-8.
 
-- [ ] `T19` — Asset library + publish history API + UI
+- [x] `T19` — Asset library + publish history API + UI
   - Files: `src/app/api/library/route.ts`, `src/app/(app)/library/page.tsx`
   - Estimate: medium
   - Depends: T17, T23, T25
