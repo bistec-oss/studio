@@ -2,9 +2,11 @@ import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import type { CopyProvider } from "./interfaces/CopyProvider"
 import type { ImageProvider } from "./interfaces/ImageProvider"
+import type { DesignOrchestrator } from "./interfaces/DesignOrchestrator"
 import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
 import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
+import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -80,4 +82,17 @@ export async function resolveImageProvider(providerKey?: string): Promise<ImageP
     throw new Error("No IMAGE provider found and OPENAI_API_KEY env var is not set")
   }
   return new OpenAIImageProvider(envKey)
+}
+
+// Orchestrator is not user-selectable — resolved from DESIGN_PROVIDER env var only.
+// "cli"         → ClaudeCliOrchestrator (dev mode, no API key, no Puppeteer)
+// "claude-html" → ClaudeHtmlOrchestrator (production, implemented in T14 / Wave 4)
+export function resolveDesignOrchestrator(): DesignOrchestrator {
+  const provider = process.env.DESIGN_PROVIDER ?? "claude-html"
+  if (provider === "cli") return new ClaudeCliOrchestrator()
+  // ClaudeHtmlOrchestrator is implemented in Wave 4 (T14)
+  throw new Error(
+    `DESIGN_PROVIDER="${provider}" requires ClaudeHtmlOrchestrator which is not yet implemented. ` +
+      'Set DESIGN_PROVIDER=cli for dev mode.'
+  )
 }
