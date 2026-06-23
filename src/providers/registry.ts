@@ -9,6 +9,7 @@ import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 import { ClaudeCliCopyProvider } from "./implementations/copy/claude-cli"
 import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
 import { ClaudeHtmlOrchestrator } from "./implementations/orchestrator/claude-html"
+import { MOCK_AI, MOCK_COPY_TEXT } from "@/lib/testHooks"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -40,6 +41,13 @@ function instantiateImageProvider(providerName: string, apiKey: string): ImagePr
 }
 
 export async function resolveCopyProvider(providerKey?: string): Promise<CopyProvider> {
+  // Test seam: deterministic copy with no provider API call. The brief's
+  // copyProviderKey must still reference a real enabled COPY provider (validated
+  // at brief creation) — only the generation call is stubbed here.
+  if (MOCK_AI) {
+    return { generateCopy: async () => MOCK_COPY_TEXT }
+  }
+
   if (providerKey) {
     const record = await prisma.availableProvider.findFirst({
       where: { slot: "COPY", providerKey, isEnabled: true },

@@ -1,113 +1,100 @@
 import { test, expect } from '@playwright/test'
-import { login, post, get } from '../helpers/api'
+import type { APIRequestContext } from '@playwright/test'
+import { login, post, get, del } from '../helpers/api'
 
-// These tests require MOCK_SOCIAL=true in the test environment.
-// The mock publishers return a deterministic platformId without calling the real API.
+// Requires MOCK_SOCIAL=true (and MOCK_AI/MOCK_PUPPETEER to mint a draft) in the
+// APP's environment + seeded 'cli' COPY provider.
+//
+// Real contract (src/app/api/posts/route.ts):
+//   POST /api/posts {draftId, channel, scheduledAt?}  (admin-only)
+//     → 201 {postId, status}  — SINGULAR channel; PUBLISHED | SCHEDULED | FAILED
+//   The response is an object (NOT an array) and does not echo platformId/scheduledAt.
+
+const MOCKED = () => !!(process.env.MOCK_AI && process.env.MOCK_PUPPETEER && process.env.MOCK_SOCIAL)
+
+async function createExportedDraft(request: APIRequestContext): Promise<string> {
+  const kitRes = await post(request, '/api/admin/brandkits', { name: 'Publish Test Kit', colors: ['#0284c7'] })
+  const kit = await kitRes.json()
+  const campRes = await post(request, '/api/campaigns', { name: 'Publish Campaign', brandKitId: kit.id })
+  const camp = await campRes.json()
+  const briefRes = await post(request, '/api/briefs', {
+    topic: 'E2E Publish Test',
+    goal: 'Test publishing',
+    tone: 'professional',
+    channels: ['INSTAGRAM'],
+    designMode: 'GENERATE',
+    copyProviderKey: 'cli',
+    campaignId: camp.id,
+  })
+  const brief = await briefRes.json()
+  const assembleRes = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+  expect(assembleRes.status()).toBe(200)
+  const { draftId } = await assembleRes.json()
+  return draftId
+}
 
 test.describe('Publishing flow', () => {
   test.beforeEach(async ({ request }) => { await login(request) })
 
-  async function createMinimalDraft(request: import('@playwright/test').APIRequestContext) {
-    // Create a brand kit
-    const kitRes = await post(request, '/api/admin/brandkits', {
-      name: 'Publish Test Kit',
-      colors: ['#0284c7'],
-    })
-    const kit = await kitRes.json()
+  test('immediate publish creates a PUBLISHED post', async ({ request }) => {
+    if (!MOCKED()) { test.skip(); return }
+    const draftId = await createExportedDraft(request)
 
-    // Create a campaign with this kit
-    const campRes = await post(request, '/api/campaigns', { name: 'Publish Campaign', brandKitId: kit.id })
-    const camp = await campRes.json()
-
-    // Create a brief
-    const briefRes = await post(request, '/api/briefs', {
-      topic: 'E2E Publish Test',
-      goal: 'Test publishing',
-      tone: 'professional',
-      channels: ['INSTAGRAM'],
-      designMode: 'GENERATE',
-      copyProviderKey: 'env-default',
-      campaignId: camp.id,
-    })
-    expect(briefRes.status()).toBe(201)
-    const brief = await briefRes.json()
-
-    // Create a draft directly (bypassing generation for speed)
-    return { brief, camp, kit }
-  }
-
-  test('immediate publish creates PUBLISHED post', async ({ request }) => {
-    if (!process.env.MOCK_SOCIAL) {
-      test.skip()
-      return
-    }
-    const { brief } = await createMinimalDraft(request)
-
-    // We need a draft with exportUrl — in mock mode, assemble-b sets exportUrl
-    const assembleRes = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
-    if (assembleRes.status() !== 201) {
-      test.skip() // Generation requires working AI + Puppeteer
-      return
-    }
-    const draft = await assembleRes.json()
-
-    const postRes = await post(request, '/api/posts', {
-      draftId: draft.id,
-      channels: ['INSTAGRAM'],
-    })
+    const postRes = await post(request, '/api/posts', { draftId, channel: 'INSTAGRAM' })
     expect(postRes.status()).toBe(201)
-    const posts = await postRes.json()
-    expect(posts.length).toBeGreaterThan(0)
-    expect(posts[0].status).toBe('PUBLISHED')
-    expect(posts[0].platformId).toBeTruthy()
+    const body = await postRes.json()
+    expect(body.postId).toBeTruthy()
+    expect(body.status).toBe('PUBLISHED')
+
+    // platformId is persisted (not in the create response) — verify via GET.
+    const single = await get(request, `/api/posts/${body.postId}`)
+    const fetched = await single.json()
+    expect(fetched.platformId).toBeTruthy()
   })
 
-  test('scheduled publish creates SCHEDULED post', async ({ request }) => {
-    if (!process.env.MOCK_SOCIAL) {
-      test.skip()
-      return
-    }
-
-    // Simulate a pre-existing draft with exportUrl via direct DB route (test endpoint)
-    const draftRes = await get(request, '/api/library?page=1&pageSize=1')
-    const library = await draftRes.json()
-    if (!library.drafts?.length || !library.drafts[0].exportUrl) {
-      test.skip()
-      return
-    }
-    const draft = library.drafts[0]
+  test('scheduled publish creates a SCHEDULED post', async ({ request }) => {
+    if (!MOCKED()) { test.skip(); return }
+    const draftId = await createExportedDraft(request)
 
     const futureDate = new Date(Date.now() + 1000 * 60 * 60).toISOString()
     const postRes = await post(request, '/api/posts', {
-      draftId: draft.id,
-      channels: ['LINKEDIN'],
+      draftId,
+      channel: 'LINKEDIN',
       scheduledAt: futureDate,
     })
     expect(postRes.status()).toBe(201)
-    const posts = await postRes.json()
-    expect(posts[0].status).toBe('SCHEDULED')
-    expect(posts[0].scheduledAt).toBeTruthy()
+    const body = await postRes.json()
+    expect(body.postId).toBeTruthy()
+    expect(body.status).toBe('SCHEDULED')
+
+    // H7: no transient PENDING row — the persisted status is SCHEDULED.
+    const single = await get(request, `/api/posts/${body.postId}`)
+    const fetched = await single.json()
+    expect(fetched.status).toBe('SCHEDULED')
+    expect(fetched.scheduledAt).toBeTruthy()
   })
 
-  test('retry FAILED post via publish endpoint', async ({ request }) => {
-    if (!process.env.MOCK_SOCIAL) {
-      test.skip()
-      return
-    }
+  test('cancel a SCHEDULED post', async ({ request }) => {
+    if (!MOCKED()) { test.skip(); return }
+    const draftId = await createExportedDraft(request)
+    const futureDate = new Date(Date.now() + 1000 * 60 * 60).toISOString()
+    const created = await (await post(request, '/api/posts', { draftId, channel: 'INSTAGRAM', scheduledAt: futureDate })).json()
 
-    // Find a FAILED post to retry — skip if none exist
-    const postsRes = await get(request, '/api/posts?status=FAILED&pageSize=1')
-    if (!postsRes.ok()) {
-      test.skip()
-      return
-    }
-    const { posts } = await postsRes.json()
-    if (!posts?.length) {
-      test.skip()
-      return
-    }
-    const failedPost = posts[0]
-    const retryRes = await post(request, `/api/posts/${failedPost.id}/publish`, {})
-    expect([200, 201]).toContain(retryRes.status())
+    const delRes = await del(request, `/api/posts/${created.postId}`)
+    expect(delRes.status()).toBe(200)
+    const cancelled = await delRes.json()
+    expect(cancelled.status).toBe('CANCELLED')
+  })
+
+  test('retry endpoint requires a FAILED post (409 otherwise)', async ({ request }) => {
+    if (!MOCKED()) { test.skip(); return }
+    // In MOCK_SOCIAL success mode no FAILED rows are created, so publishing-then
+    // -retrying a freshly PUBLISHED post must 409 (not in FAILED state).
+    const draftId = await createExportedDraft(request)
+    const published = await (await post(request, '/api/posts', { draftId, channel: 'INSTAGRAM' })).json()
+    expect(published.status).toBe('PUBLISHED')
+
+    const retryRes = await post(request, `/api/posts/${published.postId}/publish`, {})
+    expect(retryRes.status()).toBe(409)
   })
 })

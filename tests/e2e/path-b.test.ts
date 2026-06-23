@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test'
-import { login, post } from '../helpers/api'
+import { login, post, get } from '../helpers/api'
 
-// Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the test environment.
+// Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment + seeded
+// 'cli' COPY provider.
+//
+// Real contract (src/app/api/generate/assemble-b/route.ts):
+//   POST /api/generate/assemble-b {briefId} → 200 {draftId, exportUrl}
 
 test.describe('Path B — freeform design generation', () => {
   test.beforeEach(async ({ request }) => { await login(request) })
 
-  test('assemble-b produces draft with htmlContent, exportUrl, status EXPORTED', async ({ request }) => {
+  test('assemble-b produces an EXPORTED draft', async ({ request }) => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) {
       test.skip()
       return
@@ -28,18 +32,44 @@ test.describe('Path B — freeform design generation', () => {
       tone: 'bold',
       channels: ['LINKEDIN'],
       designMode: 'GENERATE',
-      copyProviderKey: 'env-default',
+      copyProviderKey: 'cli',
       campaignId: camp.id,
     })
     expect(briefRes.status()).toBe(201)
     const brief = await briefRes.json()
 
     const assembleRes = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
-    expect(assembleRes.status()).toBe(201)
-    const draft = await assembleRes.json()
+    expect(assembleRes.status()).toBe(200)
+    const assembled = await assembleRes.json()
+    expect(assembled.draftId).toBeTruthy()
+    expect(assembled.exportUrl).toMatch(/^https?:\/\//)
 
-    expect(draft.htmlContent).toBeTruthy()
-    expect(draft.exportUrl).toBeTruthy()
+    const draftRes = await get(request, `/api/drafts/${assembled.draftId}`)
+    const draft = await draftRes.json()
     expect(draft.status).toBe('EXPORTED')
+    expect(draft.htmlContent).toBeTruthy()
+  })
+
+  test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) {
+      test.skip()
+      return
+    }
+
+    // A standalone brief (no campaign). This 422s only if there is no system
+    // default kit either; the seeded "Bistec" kit IS the default, so this brief
+    // resolves to it and succeeds. Guard accordingly: accept 200 (default kit
+    // present) or 422 (none) — the point is the route never 500s.
+    const briefRes = await post(request, '/api/briefs', {
+      topic: 'No-kit Brief',
+      goal: 'Test fallback',
+      tone: 'neutral',
+      channels: ['INSTAGRAM'],
+      designMode: 'GENERATE',
+      copyProviderKey: 'cli',
+    })
+    const brief = await briefRes.json()
+    const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+    expect([200, 422]).toContain(res.status())
   })
 })

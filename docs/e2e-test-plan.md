@@ -1,7 +1,7 @@
 # bistec-studio — E2E Test Plan
 
 **Created:** 2026-06-23
-**Status:** Design — to be executed later (no test code written yet beyond the existing skeleton)
+**Status:** ✅ Skeleton implemented & green — the 6 existing spec files (19 tests) now run and pass against a dedicated test DB with the mock seams (2026-06-23). The broader catalog (§6 cases not yet written) remains as future work.
 **Owner:** _unassigned_
 **Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
 
@@ -11,17 +11,26 @@ This document is the authoritative test design. Implement the cases below as Pla
 
 ## 0. Why this plan exists — current suite assessment
 
-A Playwright skeleton already exists under `tests/e2e/`, but it is **not currently functional as written**. Before adding new tests, the issues below must be fixed (tracked as task **T22**, which is still open in `tasks.md`).
+A Playwright skeleton existed under `tests/e2e/` but was **not functional as written**. All five blockers below are now **RESOLVED** (2026-06-23) — the 6 spec files (19 tests) run and pass. History kept for traceability.
 
-| # | Problem | Evidence | Action |
-|---|---|---|---|
-| 1 | **Mock hooks never implemented.** Tests gate on `MOCK_AI`, `MOCK_PUPPETEER`, `MOCK_SOCIAL`, but none of these env vars are read anywhere in `src/`. Every generation/publish test therefore `test.skip()`s permanently. | `grep MOCK_ src/` → no matches; fixtures `tests/fixtures/mockHtml.ts` are unused | Implement the three mock hooks (see §3) **or** drive generation through `DESIGN_PROVIDER=cli`. |
-| 2 | **Contract drift — `/api/posts`.** `publish.test.ts` posts `{ channels: ['INSTAGRAM'] }` and expects an **array** response (`posts[0].status`). The real route reads a singular `channel` and returns `{ postId, status }`. | `src/app/api/posts/route.ts` | Rewrite the spec to the real contract (§5). |
-| 3 | **Contract drift — `/api/generate/assemble-a`.** `path-a.test.ts` asserts `draft.htmlContent`, `draft.status`, `draft.imageUrl`. The route returns only `{ draftId, exportUrl }`. | `src/app/api/generate/assemble-a/route.ts` | Assert the real shape; fetch `GET /api/drafts/[id]` for the rest. |
-| 4 | **Port mismatch.** `playwright.config.ts` and `helpers/api.ts` default to `:3001`; the dev server runs on `:3000` (per `CLAUDE.md`). | config vs cold-start docs | Set `TEST_BASE_URL`, or run the test server on 3001 (recommended — isolation). |
-| 5 | **No DB isolation / teardown.** Tests create kits, campaigns, providers against the dev DB and mostly don't clean up. | specs | Use a dedicated test DB + per-run reset (see §2). |
+| # | Problem (original) | Resolution |
+|---|---|---|
+| 1 | **Mock hooks never implemented.** Tests gated on `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL` but nothing in `src/` read them. | ✅ Implemented in **`src/lib/testHooks.ts`** + 5 seam points (see §3). Dormant unless the flag is `true`. |
+| 2 | **Contract drift — `/api/posts`.** Spec sent `{channels:[…]}`, expected an array. | ✅ Spec rewritten to singular `channel`, expects `{postId,status}` (201). |
+| 3 | **Contract drift — `/api/generate/assemble-a/-b`.** Spec asserted `draft.htmlContent/status/imageUrl` and **201**. Route returns **200 `{draftId,exportUrl}`**. | ✅ Spec asserts `{draftId,exportUrl}` at 200, then `GET /api/drafts/[id]` for status/htmlContent/imageUrl. |
+| 4 | **Port mismatch** (config `:3001` vs dev `:3000`). | ✅ Test app runs on **`:3001`** (`npm run test:e2e:serve`), matching the config default. |
+| 5 | **No DB isolation / teardown.** | ✅ Dedicated **`bistec_studio_test`** DB (`npm run test:e2e:db`); the dev DB is never touched. (Per-run truncation between runs still TODO — see §2.) |
 
-> **Bottom line:** the existing files (`path-a`, `path-b`, `agui-refinement`, `publish`, `provider-registration`, `brand-kit`) are a useful starting structure, but treat them as drafts to be corrected against §5, not as passing coverage.
+> **Bottom line:** the 6 spec files are now green coverage, not drafts. The much larger §6 catalog (RBAC/IDOR, the §K remediation regression suite, §L browser flows) is still to be written.
+
+### Reproducing the green run
+
+```bash
+# 0. Containers up (postgres + minio:9000 published) — docs/cold-start.md §0
+npm run test:e2e:db        # create + migrate + seed the bistec_studio_test DB
+npm run test:e2e:serve     # terminal A: app on :3001 with .env.test (mocks on)
+npm run test:e2e:mock      # terminal B: run the suite (sets MOCK_* + TEST_BASE_URL)
+```
 
 ---
 
@@ -68,17 +77,19 @@ Add a global setup that truncates app tables (keep `User`/`Account`/`Session` fo
 
 ## 3. Mock strategy (must be built before generation tests run)
 
-The deterministic path requires three small, test-only seams. Implement each behind its env flag so production is untouched.
+The deterministic path uses small, test-only seams, all centralized in **`src/lib/testHooks.ts`** and each gated behind its env flag so production is untouched. **Implemented (2026-06-23):**
 
-| Flag | Insert at | Behavior when set |
+| Flag | Seam point (file) | Behavior when set |
 |---|---|---|
-| `MOCK_AI` | `resolveCopyProvider` / `resolveDesignOrchestrator` in `src/providers/registry.ts` | Return a stub copy provider (`generateCopy` → fixed string) and a stub orchestrator whose `orchestrate()` returns `{ htmlContent: MOCK_HTML, exportUrl: <key> }` after uploading `MOCK_PNG_BUFFER` to EXPORTS. Also stub `runDesignAgent` for refine. |
-| `MOCK_PUPPETEER` | `renderHtmlToPng` in `src/lib/renderer/puppeteer.ts` | Skip Chromium; return `MOCK_PNG_BUFFER`. Lets export/restore/refine run with no browser. |
-| `MOCK_SOCIAL` | `publish()` in `src/lib/social/instagram.ts` + `linkedin.ts` | Return `{ platformId: 'mock-<channel>-<rand>' }` without an HTTP call. Add a `MOCK_SOCIAL_FAIL=true` variant that throws `PublishError` — needed for retry/backoff tests (§K, H12). |
+| `MOCK_AI` | `resolveCopyProvider` (`src/providers/registry.ts`) → stub copy provider; `runDesignAgent` (`src/lib/agent/designAgent.ts`) → emits `buildMockHtml()` (echoes the brand kit's first hex colour from the prompt) then renders via the mocked Puppeteer path to get a **real EXPORTS key**; returns `buildMockConflict()` JSON when the refine instruction contains `conflict_test`. Also short-circuits the admin brand-voice `prompts/generate` route. | No Anthropic/OpenAI calls. |
+| `MOCK_PUPPETEER` | `renderHtmlToPng` (`src/lib/renderer/puppeteer.ts`) | Skip Chromium; return `MOCK_PNG_BUFFER`. The MinIO upload still happens, so export keys remain real and signable (exercises H10). |
+| `MOCK_SOCIAL` | `publish()` in `src/lib/social/instagram.ts` + `linkedin.ts` | Return `{ platformId: 'mock-<channel>-<ts>' }` with no HTTP call. `MOCK_SOCIAL_FAIL=true` makes them throw `PublishError` — for the FAILED/retry/backoff cases (§G, §K). |
 
-> **Alternative (no new code):** run with `DESIGN_PROVIDER=cli` + real Puppeteer (needs `PUPPETEER_EXECUTABLE_PATH` + Claude CLI auth) + `MOCK_SOCIAL`. Slower and non-deterministic copy, but exercises the real render path. Use the mock hooks for CI; CLI mode for local "does it really render" checks.
+> The brief's `copyProviderKey` must still reference a real enabled COPY provider (brief creation validates it) — the seed registers the keyless `cli` provider, and the specs pass `copyProviderKey: 'cli'`. `MOCK_AI` only stubs the *generation call*, not the validation.
 
-Fixtures already present: `tests/fixtures/mockHtml.ts` (`MOCK_HTML`, `MOCK_PNG_BUFFER`).
+> **Alternative (no mock flags):** run with `DESIGN_PROVIDER=cli` + real Puppeteer (`PUPPETEER_EXECUTABLE_PATH` + Claude CLI auth) + `MOCK_SOCIAL`. Slower, non-deterministic copy, but exercises the real render path.
+
+> Note: the unused `tests/fixtures/mockHtml.ts` is superseded by `src/lib/testHooks.ts` (the seams need the constants server-side, where the app can't import from `tests/`).
 
 ---
 
@@ -106,8 +117,8 @@ Fixtures already present: `tests/fixtures/mockHtml.ts` (`MOCK_HTML`, `MOCK_PNG_B
 | `/api/campaigns` | POST | `{name,brandKitId?}` | campaign `{id}` | any role |
 | `/api/briefs` | POST | `{topic,goal,tone,channels[],designMode,copyProviderKey,campaignId?}` | **201** brief `{id}` | validation |
 | `/api/briefs/images` | POST | multipart | `{url,filename}` | `url` **public** (H10) |
-| `/api/generate/assemble-a` | POST | `{briefId,templateId}` | **201** `{draftId,exportUrl}` | `exportUrl` signed (H10) |
-| `/api/generate/assemble-b` | POST | `{briefId}` | **201** `{draftId,exportUrl}` | signed |
+| `/api/generate/assemble-a` | POST | `{briefId,templateId}` | **200** `{draftId,exportUrl}` | `exportUrl` signed (H10). NOTE: 200, not 201 (verified in route). |
+| `/api/generate/assemble-b` | POST | `{briefId}` | **200** `{draftId,exportUrl}` | signed; 200 not 201. |
 | `/api/generate/export` | POST | `{draftId}` | `{exportUrl}` | signed; short-circuits if set |
 | `/api/drafts/[id]` | GET | — | draft detail, `exportUrl` signed | ownership |
 | `/api/drafts/[id]` | PATCH | `{copyText}` | updated draft | EXPORTED→IN_PROGRESS |
@@ -270,19 +281,21 @@ A thin layer of real-browser tests for the highest-risk UI regressions (the rest
 
 ## 8. Execution
 
+Mock hooks (§3) are now built, and `.env.test` + the npm scripts below wire everything together. `.env.test` carries the test `DATABASE_URL`, `MINIO_*`, secrets, and `MOCK_AI/MOCK_PUPPETEER/MOCK_SOCIAL=true`; it is loaded explicitly via `node --env-file=.env.test` because `next dev` does not auto-load it.
+
 ```bash
-# 1. infra
+# 1. infra — postgres + minio (:9000 published). See docs/cold-start.md §0.
 docker compose up -d
-# 2. test DB + migrations + seed
-DATABASE_URL=...test npx prisma migrate deploy
-npm run db:seed
-# 3. build mock hooks (§3) — one-time dev task
-# 4. start the app against the test env on 3001
-PORT=3001 npm run dev   # (or `next start` against a prod build)
-# 5. run
-npx playwright test
+# 2. test DB: create + migrate + seed (admin, Bistec kit, Hearts Talk, cli provider)
+npm run test:e2e:db
+# 3. start the app on :3001 with .env.test (mock seams active) — leave running
+npm run test:e2e:serve
+# 4. run the suite (sets MOCK_* + TEST_BASE_URL for the runner)
+npm run test:e2e:mock
 npx playwright show-report
 ```
+
+Last green run: **19/19 passed** (~16s) on 2026-06-23.
 
 CI gate (recommended): run §A–K with mocks on every PR; §L (browser) + CLI-mode smoke nightly. Block merge on §K (remediation regressions) failing.
 

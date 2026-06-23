@@ -45,7 +45,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 - **[`docs/code-review-findings.md`](docs/code-review-findings.md)** — full code review (42 findings) + **Remediation Status** (✅ all 28 fixed as of 2026-06-23) plus the one open known issue (oversized "Hearts Talk" template breaks Path A). **Read this before picking up review/remediation work.**
 
 ### Testing
-- **[`docs/e2e-test-plan.md`](docs/e2e-test-plan.md)** — the authoritative E2E test design (to execute later, task T22). Catalogs every flow + a regression suite for all 28 remediation fixes, documents the real API contracts, and flags that the existing `tests/e2e/` skeleton is non-functional (unimplemented `MOCK_*` hooks + contract drift). Read before writing/running E2E tests.
+- **[`docs/e2e-test-plan.md`](docs/e2e-test-plan.md)** — the authoritative E2E test design + catalog. **The 6-file skeleton (19 tests) is now implemented & green** (2026-06-23): mock seams live in `src/lib/testHooks.ts` (gated by `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL`, dormant in prod), specs corrected to the real route contracts, run against a dedicated `bistec_studio_test` DB. Reproduce: `npm run test:e2e:db` → `npm run test:e2e:serve` → `npm run test:e2e:mock` (plan §0 "Reproducing the green run"). The broader §6 catalog (RBAC/IDOR, §K remediation regressions, §L browser flows) is still to be written.
 
 ### Specification & planning
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary

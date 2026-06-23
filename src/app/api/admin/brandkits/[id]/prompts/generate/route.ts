@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import Anthropic from '@anthropic-ai/sdk'
+import { MOCK_AI } from '@/lib/testHooks'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole('admin')
@@ -19,6 +20,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     include: { artifacts: { where: { feedToAI: true }, select: { name: true, type: true } } },
   })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Test seam: deterministic draft with no Anthropic call.
+  if (MOCK_AI) {
+    return NextResponse.json({
+      draft: `You are the brand voice for ${kit.name}. [MOCK generated brand voice prompt for E2E tests — deterministic. Covers visual style, tone of voice, colour usage, typography guidance, and what to avoid.]`,
+    })
+  }
 
   const colors = Array.isArray(kit.colors) ? (kit.colors as string[]).join(', ') : 'none specified'
   const fonts = Array.isArray(kit.fonts)

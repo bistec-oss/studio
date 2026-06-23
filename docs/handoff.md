@@ -100,6 +100,17 @@
   - **⚠️ Deploy invariant to preserve:** this stays safe **only while MinIO's port 9000 is never publicly exposed**. If production ever exposes MinIO directly to browsers/CDN, those buckets become world-readable across users — switch to app-mediated signed reads (as EXPORTS already does) before doing so.
   - **Optional hardening (not required, ~2 lines):** add a `randomUUID()` segment to brief-image keys (`briefs/{userId}/{uuid}-{filename}`) for parity with the unguessable generated-image keys.
 
+**E2E tests (T22) — implemented & green — 2026-06-23 (on `main`):** The `tests/e2e/` skeleton was non-functional (the `MOCK_*` hooks the specs gated on were never built, and the specs had drifted from the real route contracts). It is now **runnable and passing: 19/19 tests (~16s)**. Full design + reproduction steps in **[`docs/e2e-test-plan.md`](e2e-test-plan.md)** (§0 "Reproducing the green run").
+- **Mock seams — `src/lib/testHooks.ts`** (env-gated; dormant unless the flag is `true`, so production is untouched). Wired into 5 points:
+  - `MOCK_AI` → stub copy provider in `resolveCopyProvider` (`providers/registry.ts`) + short-circuit `runDesignAgent` (`lib/agent/designAgent.ts`) to emit deterministic HTML (echoes the kit's first hex colour from the prompt) and a conflict marker when the refine instruction contains `conflict_test`; also short-circuits the admin brand-voice `prompts/generate` route.
+  - `MOCK_PUPPETEER` → `renderHtmlToPng` (`lib/renderer/puppeteer.ts`) returns a fixed 1×1 PNG, skipping Chromium. The MinIO upload still runs, so EXPORTS keys stay real and signable (exercises H10).
+  - `MOCK_SOCIAL` (+ `MOCK_SOCIAL_FAIL`) → `publish()` in `lib/social/instagram.ts` + `linkedin.ts` returns a fake `platformId` (or throws `PublishError`), no HTTP call.
+- **Contract corrections** to the drifted specs (asserted against route code, which differed from the test-plan's original table): `assemble-a/-b` return **200 `{draftId,exportUrl}`** (not 201, not `{htmlContent,…}`); `/api/posts` POST takes **singular `channel`** → 201 `{postId,status}`; `/api/drafts/[id]/revisions` is a **bare array**; brief creation **validates `copyProviderKey`** against a real enabled COPY provider — so specs use `copyProviderKey:'cli'` and the run seeds the keyless `cli` provider.
+- **Helper:** added `loginAs()` with isolated cookie jars (`tests/helpers/api.ts`) for future RBAC/IDOR tests; the existing module-level `login`/`post`/… kept.
+- **Isolation:** runs against a dedicated **`bistec_studio_test`** DB via `.env.test` (gitignored) loaded with `node --env-file=.env.test` (Next doesn't auto-load it under `next dev`). The dev DB is never touched.
+- **Repro scripts** (new): `npm run test:e2e:db` (create + migrate + seed test DB, via `scripts/setup-test-db.mjs`) → `npm run test:e2e:serve` (app on `:3001` with mocks) → `npm run test:e2e:mock` (run suite).
+- **Still open:** the broader `docs/e2e-test-plan.md` §6 catalog is unwritten — §A RBAC/IDOR (now unblocked by `loginAs`), the §K remediation regression suite (H7 concurrency, H9 index plans, H10 anonymous-bucket reads, H11 Chromium singleton, H12 atomic scheduler claim), and §L browser flows.
+
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`

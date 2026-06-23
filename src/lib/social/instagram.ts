@@ -1,6 +1,7 @@
 import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
+import { MOCK_SOCIAL, MOCK_SOCIAL_FAIL } from "@/lib/testHooks"
 
 async function resolveCredentials(): Promise<{ accessToken: string; businessAccountId: string }> {
   const row = await prisma.channelToken.findUnique({ where: { channel: "INSTAGRAM" } })
@@ -19,6 +20,13 @@ export async function publish(
   exportUrl: string,
   copyText: string,
 ): Promise<{ platformId: string }> {
+  // Test seam: skip the Graph API round-trip. MOCK_SOCIAL_FAIL forces the
+  // failure path for FAILED/retry coverage.
+  if (MOCK_SOCIAL) {
+    if (MOCK_SOCIAL_FAIL) throw new PublishError("INSTAGRAM", "Mock Instagram publish failure")
+    return { platformId: `mock-instagram-${Date.now()}` }
+  }
+
   const { accessToken, businessAccountId } = await resolveCredentials()
 
   const baseUrl = `https://graph.facebook.com/v19.0/${businessAccountId}`

@@ -3,6 +3,7 @@ import type { MessageParam, ToolUseBlock, ToolResultBlockParam, Tool } from "@an
 import type { DesignAgentOptions, DesignAgentResult } from "./types"
 import { AgentToolLimitError } from "./types"
 import { toolGenerateImage, toolRenderHtml, toolGetBrandKitContext } from "./tools"
+import { MOCK_AI, buildMockHtml, buildMockConflict } from "@/lib/testHooks"
 
 const TOOL_DEFINITIONS: Tool[] = [
   {
@@ -87,6 +88,18 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     model = "claude-sonnet-4-6",
     maxToolCalls = 15,
   } = options
+
+  // Test seam: skip the Anthropic tool-use loop entirely. Emits deterministic
+  // HTML and a real EXPORTS object key (rendered via the mocked Puppeteer path),
+  // or a conflict marker when a refine instruction contains "conflict_test".
+  if (MOCK_AI) {
+    if (userMessage.includes("conflict_test")) {
+      return { htmlContent: buildMockConflict(), exportUrl: "", toolCallCount: 0 }
+    }
+    const html = buildMockHtml(`${systemPrompt}\n${userMessage}`)
+    const { key } = await toolRenderHtml(html, 1080, 1080)
+    return { htmlContent: html, exportUrl: key, toolCallCount: 1 }
+  }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 

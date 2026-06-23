@@ -1,6 +1,7 @@
 import puppeteer, { type Browser } from "puppeteer-core"
 import { existsSync } from "fs"
 import pLimit from "p-limit"
+import { MOCK_PUPPETEER, MOCK_PNG_BUFFER } from "@/lib/testHooks"
 
 const COMMON_LINUX_PATHS = [
   "/usr/bin/chromium-browser",
@@ -92,5 +93,7 @@ export async function renderHtmlToPng(
   width: number,
   height: number
 ): Promise<Buffer> {
+  // Test seam: skip Chromium entirely and return a fixed PNG.
+  if (MOCK_PUPPETEER) return MOCK_PNG_BUFFER
   return limit(() => renderOnce(html, width, height))
 }
