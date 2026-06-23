@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23
+**Date:** 2026-06-23 (updated after Wave 3)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
 **Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
@@ -9,7 +9,7 @@
 
 ## Current status
 
-**Wave 2 — complete ✅**
+**Wave 3 — complete ✅**
 
 | Task | Status | Notes |
 |---|---|---|
@@ -22,17 +22,28 @@
 | T06 — OpenAI copy provider | ✅ | `OpenAICopyProvider` — GPT-4o chat completions |
 | T07 — OpenAI image provider | ✅ | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL |
 | T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` — DB → default → env fallback |
+| T10 — MinIO storage client | ✅ | `uploadObject` / `getPresignedUrl`; auto-creates buckets on cold start |
+| T09 — Puppeteer renderer + design agent | ✅ | `renderHtmlToPng` (2× DPI); `runDesignAgent` tool-use loop; 15-call hard limit |
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
 - `src/lib/crypto.ts` stub created (throws — to be implemented in Wave 6)
 
+**Wave 3 details:**
+- `src/lib/storage/minio.ts` — S3-compatible client wrapping `@aws-sdk/client-s3`; `BUCKET_IMAGES` (7-day pre-signed URLs) / `BUCKET_EXPORTS` / `BUCKET_BRANDKITS`; `initBuckets()` idempotent
+- `src/lib/renderer/puppeteer.ts` — `renderHtmlToPng(html, w, h): Promise<Buffer>`; `deviceScaleFactor: 2`; `waitUntil: "networkidle0"`; resolves Chromium from `PUPPETEER_EXECUTABLE_PATH` → common Linux paths
+- `src/lib/agent/types.ts` — `DesignAgentOptions`, `DesignAgentResult`, `BrandKitContext`, `AgentToolLimitError`
+- `src/lib/agent/tools.ts` — `toolGenerateImage` (handles base64 data URL → MinIO), `toolRenderHtml` (Puppeteer → MinIO), `toolGetBrandKitContext` (campaign→project→system default chain)
+- `src/lib/agent/designAgent.ts` — `runDesignAgent`: standard Anthropic SDK tool-use loop; throws `AgentToolLimitError` at 15 calls; halts on any tool error
+- `src/providers/implementations/orchestrator/claude-cli.ts` — `ClaudeCliOrchestrator` (dev mode; `DESIGN_PROVIDER=cli`; single-shot `claude -p`, no Puppeteer, `exportUrl=""`)
+- `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → stub that throws until T14 (Wave 4)
+
 Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
-**Next:** Wave 3 (T09 — Puppeteer renderer + Claude design agent, T10 — MinIO client). No missing npm deps. Requires `ANTHROPIC_API_KEY` in `.env`. See Chromium note below.
+**Next:** Wave 3b — T26 (BrandKit management: API + admin UI), T23 (Projects/Campaigns API routes), T24 (Projects/Campaigns UI). T26 must complete before T23 (FK dependency). T23 must complete before T24.
 
 ---
 
@@ -240,7 +251,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
-**Current specclaw phase:** Wave 1 complete → Wave 2 ready to begin
+**Current specclaw phase:** Wave 3 complete → Wave 3b ready to begin
 
 ---
 
