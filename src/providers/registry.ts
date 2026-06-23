@@ -7,6 +7,7 @@ import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
 import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
+import { ClaudeHtmlOrchestrator } from "./implementations/orchestrator/claude-html"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -90,9 +91,5 @@ export async function resolveImageProvider(providerKey?: string): Promise<ImageP
 export function resolveDesignOrchestrator(): DesignOrchestrator {
   const provider = process.env.DESIGN_PROVIDER ?? "claude-html"
   if (provider === "cli") return new ClaudeCliOrchestrator()
-  // ClaudeHtmlOrchestrator is implemented in Wave 4 (T14)
-  throw new Error(
-    `DESIGN_PROVIDER="${provider}" requires ClaudeHtmlOrchestrator which is not yet implemented. ` +
-      'Set DESIGN_PROVIDER=cli for dev mode.'
-  )
+  return new ClaudeHtmlOrchestrator()
 }
