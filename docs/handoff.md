@@ -9,9 +9,7 @@
 
 ## Current status
 
-**Wave 1 — complete ✅**
-
-All 5 Wave 1 tasks done and running:
+**Wave 2 — complete ✅**
 
 | Task | Status | Notes |
 |---|---|---|
@@ -20,12 +18,21 @@ All 5 Wave 1 tasks done and running:
 | T03 — Prisma schema + migration | ✅ | `20260622191018_better_auth_swap` applied; 18 tables created |
 | T04 — better-auth + role middleware | ✅ | Login page, session cookie middleware, `requireRole`/`getCurrentUser` helpers |
 | T25 — Design system foundation | ✅ | Frozen Light theme, AppShell, Button/GlassPanel/GlassInput/Select/StatusChip/SegmentedToggle |
+| T05 — Provider interfaces | ✅ | `CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces + `BriefInput` type |
+| T06 — OpenAI copy provider | ✅ | `OpenAICopyProvider` — GPT-4o chat completions |
+| T07 — OpenAI image provider | ✅ | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL |
+| T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` — DB → default → env fallback |
+
+**Post-Wave-2 addition (out of band):**
+- `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
+- Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
+- `src/lib/crypto.ts` stub created (throws — to be implemented in Wave 6)
 
 Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
-**Next:** Wave 2 (T05–T08 — provider abstraction layer). Requires `OPENAI_API_KEY` in `.env` before testing.
+**Next:** Wave 3 (T09 — Puppeteer renderer + Claude design agent, T10 — MinIO client). No missing npm deps. Requires `ANTHROPIC_API_KEY` in `.env`. See Chromium note below.
 
 ---
 
@@ -242,7 +249,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 | Wave | Focus | Tasks |
 |---|---|---|
 | 1 ✅ | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation |
-| 2 | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
+| 2 ✅ | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
 | 3 | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
 | 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
 | 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
@@ -397,6 +404,16 @@ Set `DESIGN_PROVIDER=cli` in `.env` (or `.env.local`) to use the **Claude Code C
 **How to switch back to production:** remove `DESIGN_PROVIDER` or set it to `claude-html`.
 
 This is a dev-only convenience — never set `DESIGN_PROVIDER=cli` in production.
+
+---
+
+## Wave 3 prerequisites note
+
+- All npm deps present: `@anthropic-ai/sdk`, `puppeteer-core`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`
+- `ANTHROPIC_API_KEY` must be set in `.env` — required by design agent
+- MinIO env vars already set; buckets auto-created on cold start
+- **Chromium (Windows local dev):** `puppeteer-core` does not bundle Chromium. Set `PUPPETEER_EXECUTABLE_PATH` in `.env` pointing to a local Chrome/Chromium install (e.g. `C:\Program Files\Google\Chrome\Application\chrome.exe`). On the VPS Docker image, Chromium is baked in — no extra config needed.
+- `DESIGN_PROVIDER=cli` bypasses both Anthropic API and Puppeteer for local testing without burning tokens
 
 ---
 
