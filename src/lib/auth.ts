@@ -19,7 +19,7 @@ export type Role = "admin" | "editor"
 export async function requireRole(role: Role): Promise<{ userId: string } | NextResponse> {
   const session = await auth.api.getSession({ headers: headers() })
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const userRole = (session.user as { role?: string }).role ?? "editor"
+  const userRole = ((session.user as { role?: string }).role ?? "editor").toLowerCase()
   if (role === "admin" && userRole !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
