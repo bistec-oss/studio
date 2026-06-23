@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Menu, X } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 
 interface NavItem {
@@ -13,10 +13,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/',          icon: <LayoutDashboard size={18} /> },
-  { label: 'Library',   href: '/library',   icon: <BookOpen size={18} /> },
-  { label: 'Projects',  href: '/projects',  icon: <FolderOpen size={18} /> },
-  { label: 'Brief',     href: '/brief',     icon: <Megaphone size={18} /> },
+  { label: 'Dashboard', href: '/',                   icon: <LayoutDashboard size={18} /> },
+  { label: 'Library',   href: '/library',            icon: <BookOpen size={18} /> },
+  { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
+  { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
+  { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} /> },
 ]
 
 function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
