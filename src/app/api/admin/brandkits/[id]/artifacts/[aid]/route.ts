@@ -35,5 +35,21 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string;
 
   await prisma.brandKitArtifact.delete({ where: { id: params.aid } })
 
+  // Keep the kit's denormalised fields in sync so deleted assets don't dangle.
+  if (artifact.type === 'LOGO' || artifact.type === 'FONT') {
+    const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
+    if (kit) {
+      if (artifact.type === 'LOGO' && kit.logoUrl === artifact.url) {
+        await prisma.brandKit.update({ where: { id: params.id }, data: { logoUrl: null } })
+      }
+      if (artifact.type === 'FONT' && Array.isArray(kit.fonts)) {
+        const fonts = (kit.fonts as Array<{ name: string; url: string }>).filter(
+          (f) => f.url !== artifact.url,
+        )
+        await prisma.brandKit.update({ where: { id: params.id }, data: { fonts } })
+      }
+    }
+  }
+
   return new NextResponse(null, { status: 204 })
 }

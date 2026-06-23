@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import * as instagram from '@/lib/social/instagram'
 import * as linkedin from '@/lib/social/linkedin'
+import { getSystemUserId } from '@/mcp/systemUser'
 
 export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' | 'LINKEDIN' }) {
   const draft = await prisma.draft.findUnique({
@@ -22,7 +23,7 @@ export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' 
   await prisma.post.create({
     data: {
       draftId: args.draftId,
-      userId: 'mcp-agent',
+      userId: await getSystemUserId(),
       channel: args.channel,
       status: 'PUBLISHED',
       publishedAt: new Date(),

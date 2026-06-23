@@ -79,17 +79,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'API key validation failed', detail: validationError }, { status: 422 })
   }
 
-  if (isDefault) {
-    await prisma.availableProvider.updateMany({ where: { slot }, data: { isDefault: false } })
-  }
-
   const providerKey = `${providerName}-${Date.now()}`
-  const keyPrefix = apiKey.slice(0, 12)
+  // Store only a masked last-4 suffix — never a leading slice of the secret.
+  const keyPrefix = `…${apiKey.slice(-4)}`
   const encryptedApiKey = encrypt(apiKey)
 
-  const provider = await prisma.availableProvider.create({
-    data: { slot, providerKey, providerName, label, keyPrefix, encryptedApiKey, isEnabled: true, isDefault: isDefault ?? false },
-    select: { id: true, slot: true, providerKey: true, providerName: true, label: true, keyPrefix: true, isEnabled: true, isDefault: true, createdAt: true },
+  // Clearing the prior default + creating the new row must be atomic so a
+  // failure can't leave the slot with zero (or two) defaults.
+  const provider = await prisma.$transaction(async (tx) => {
+    if (isDefault) {
+      await tx.availableProvider.updateMany({ where: { slot }, data: { isDefault: false } })
+    }
+    return tx.availableProvider.create({
+      data: { slot, providerKey, providerName, label, keyPrefix, encryptedApiKey, isEnabled: true, isDefault: isDefault ?? false },
+      select: { id: true, slot: true, providerKey: true, providerName: true, label: true, keyPrefix: true, isEnabled: true, isDefault: true, createdAt: true },
+    })
   })
 
   return NextResponse.json(provider, { status: 201 })

@@ -29,19 +29,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }
 
-  // Only one kit can be the system default
-  if (isDefault) {
-    await prisma.brandKit.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
-  }
-
-  const kit = await prisma.brandKit.create({
-    data: {
-      name: name.trim(),
-      colors: colors ?? [],
-      fonts: fonts ?? [],
-      logoUrl: logoUrl ?? null,
-      isDefault: isDefault ?? false,
-    },
+  // Only one kit can be the system default — clear + create atomically.
+  const kit = await prisma.$transaction(async (tx) => {
+    if (isDefault) {
+      await tx.brandKit.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
+    }
+    return tx.brandKit.create({
+      data: {
+        name: name.trim(),
+        colors: colors ?? [],
+        fonts: fonts ?? [],
+        logoUrl: logoUrl ?? null,
+        isDefault: isDefault ?? false,
+      },
+    })
   })
 
   return NextResponse.json(kit, { status: 201 })

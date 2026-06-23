@@ -24,6 +24,25 @@ const s3 = new S3Client({
 
 const SEVEN_DAYS = 60 * 60 * 24 * 7
 
+export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10 MB
+// Raster only — SVG is intentionally excluded (script-bearing SVGs are an XSS
+// vector once embedded in agent-rendered HTML).
+export const RASTER_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"]
+
+// Validates an uploaded File. Returns an error string, or null when acceptable.
+// Pass `allowed` to enforce a MIME allow-list (use for untrusted/public uploads);
+// omit it to enforce the size cap only (admin-trusted uploads, e.g. fonts whose
+// MIME type browsers report inconsistently).
+export function validateUpload(file: File, allowed?: string[]): string | null {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `File exceeds the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB size limit`
+  }
+  if (allowed && (!file.type || !allowed.includes(file.type))) {
+    return `Unsupported file type${file.type ? `: ${file.type}` : ""}`
+  }
+  return null
+}
+
 async function ensureBucket(bucket: string): Promise<void> {
   try {
     await s3.send(new HeadBucketCommand({ Bucket: bucket }))

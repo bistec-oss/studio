@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { resolveCopyProvider, resolveDesignOrchestrator } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
+import { getSystemUserId } from '@/mcp/systemUser'
 
 interface GeneratePostArgs {
   topic: string
@@ -31,7 +32,7 @@ export async function generatePost(args: GeneratePostArgs) {
   // Create a Brief row for tool-call tracking
   const brief = await prisma.brief.create({
     data: {
-      userId: 'mcp-agent',
+      userId: await getSystemUserId(),
       topic: args.topic,
       description: args.description,
       goal: args.goal,

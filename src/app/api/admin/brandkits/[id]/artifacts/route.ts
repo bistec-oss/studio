@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
-import { uploadObject, BUCKET_BRANDKITS } from '@/lib/storage/minio'
+import { uploadObject, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 import type { ArtifactType } from '@prisma/client'
 
 const VALID_TYPES: ArtifactType[] = ['LOGO', 'FONT', 'COLOR', 'REFERENCE_IMAGE', 'EXAMPLE_POST', 'OTHER']
@@ -35,6 +35,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!VALID_TYPES.includes(type as ArtifactType)) {
     return NextResponse.json({ error: `type must be one of: ${VALID_TYPES.join(', ')}` }, { status: 400 })
   }
+  const invalid = validateUpload(file)
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
 
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)

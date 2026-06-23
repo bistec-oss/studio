@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/auth'
-import { uploadObject, BUCKET_IMAGES } from '@/lib/storage/minio'
+import { uploadObject, BUCKET_IMAGES, validateUpload, RASTER_IMAGE_TYPES } from '@/lib/storage/minio'
 
 // Accepts a multipart image upload from the brief wizard (Images step) and
 // returns a MinIO URL. Runs before the Brief exists, so it is not scoped to a
@@ -14,9 +14,8 @@ export async function POST(req: NextRequest) {
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'file is required' }, { status: 400 })
 
-  if (!file.type.startsWith('image/')) {
-    return NextResponse.json({ error: 'file must be an image' }, { status: 400 })
-  }
+  const invalid = validateUpload(file, RASTER_IMAGE_TYPES)
+  if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
