@@ -138,31 +138,56 @@ async function commitRevision(
     finalExportUrl = await uploadObject(buffer, BUCKET_EXPORTS, `refine-${draftId}-${Date.now()}.png`, 'image/png')
   }
 
-  const last = await prisma.draftRevision.findFirst({
-    where: { draftId },
-    orderBy: { revisionNumber: 'desc' },
-    select: { revisionNumber: true },
-  })
-  const revisionNumber = (last?.revisionNumber ?? 0) + 1
+  // Allocate the revision number, write the revision, and update the draft
+  // atomically. Concurrent refines on the same draft can read the same max and
+  // collide on @@unique([draftId, revisionNumber]) — catch P2002 and retry with
+  // a freshly computed number rather than 500-ing.
+  let revision: { id: string } | null = null
+  const MAX_ATTEMPTS = 4
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      revision = await prisma.$transaction(async (tx) => {
+        const last = await tx.draftRevision.findFirst({
+          where: { draftId },
+          orderBy: { revisionNumber: 'desc' },
+          select: { revisionNumber: true },
+        })
+        const revisionNumber = (last?.revisionNumber ?? 0) + 1
 
-  const revision = await prisma.draftRevision.create({
-    data: {
-      draftId,
-      revisionNumber,
-      instruction,
-      htmlSnapshot: newHtml,
-      exportUrl: finalExportUrl,
-    },
-  })
+        const created = await tx.draftRevision.create({
+          data: {
+            draftId,
+            revisionNumber,
+            instruction,
+            htmlSnapshot: newHtml,
+            exportUrl: finalExportUrl,
+          },
+          select: { id: true },
+        })
 
-  await prisma.draft.update({
-    where: { id: draftId },
-    data: {
-      htmlContent: newHtml,
-      exportUrl: finalExportUrl,
-      pendingConflict: Prisma.JsonNull,
-    },
-  })
+        await tx.draft.update({
+          where: { id: draftId },
+          data: {
+            htmlContent: newHtml,
+            exportUrl: finalExportUrl,
+            pendingConflict: Prisma.JsonNull,
+          },
+        })
 
-  return NextResponse.json({ reply: 'Design updated', revisionId: revision.id, exportUrl: finalExportUrl })
+        return created
+      })
+      break
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        attempt < MAX_ATTEMPTS
+      ) {
+        continue // revision number collided — recompute and retry
+      }
+      throw err
+    }
+  }
+
+  return NextResponse.json({ reply: 'Design updated', revisionId: revision!.id, exportUrl: finalExportUrl })
 }

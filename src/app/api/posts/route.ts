@@ -41,6 +41,24 @@ export async function POST(req: NextRequest) {
   const scheduledAtDate = scheduledAt ? new Date(scheduledAt) : null
   const publishNow = !scheduledAtDate || scheduledAtDate <= new Date()
 
+  // Scheduled path: persist a SCHEDULED row directly — no transient PENDING that
+  // could be orphaned if the request dies before the follow-up update.
+  if (!publishNow) {
+    const post = await prisma.post.create({
+      data: {
+        draftId,
+        userId: auth.userId,
+        channel: channel as Channel,
+        status: 'SCHEDULED',
+        scheduledAt: scheduledAtDate,
+      },
+    })
+    return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
+  }
+
+  // Immediate path: the external publish call can't be inside a DB transaction,
+  // so every exit (success, PublishError, or unexpected throw) must drive the
+  // row to a terminal status — a PENDING row must never survive this handler.
   const post = await prisma.post.create({
     data: {
       draftId,
@@ -51,37 +69,32 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  if (publishNow) {
-    try {
-      const { platformId } = await publishers[channel as keyof typeof publishers].publish(
-        draft.exportUrl,
-        draft.copyText ?? '',
-      )
-      const updated = await prisma.post.update({
-        where: { id: post.id },
-        data: {
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          platformId,
-        },
-      })
-      return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
-    } catch (err) {
-      if (err instanceof PublishError) {
-        const updated = await prisma.post.update({
-          where: { id: post.id },
-          data: { status: 'FAILED', errorReason: err.reason },
-        })
-        return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
-      }
-      throw err
-    }
-  } else {
+  try {
+    const { platformId } = await publishers[channel as keyof typeof publishers].publish(
+      draft.exportUrl,
+      draft.copyText ?? '',
+    )
     const updated = await prisma.post.update({
       where: { id: post.id },
-      data: { status: 'SCHEDULED' },
+      data: {
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        platformId,
+      },
     })
     return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
+  } catch (err) {
+    const reason = err instanceof PublishError ? err.reason : 'Unexpected publish error'
+    const updated = await prisma.post.update({
+      where: { id: post.id },
+      data: { status: 'FAILED', errorReason: reason },
+    })
+    // Known publish failures are an expected outcome (201, FAILED row); anything
+    // else is a real fault — surface it after the row is safely terminal.
+    if (err instanceof PublishError) {
+      return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
+    }
+    throw err
   }
 }
 
