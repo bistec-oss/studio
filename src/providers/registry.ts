@@ -4,11 +4,14 @@ import type { CopyProvider } from "./interfaces/CopyProvider"
 import type { ImageProvider } from "./interfaces/ImageProvider"
 import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
+import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
     case "openai":
       return new OpenAICopyProvider(apiKey)
+    case "anthropic":
+      return new AnthropicCopyProvider(apiKey)
     default:
       throw new Error(`Unsupported provider: ${providerName}`)
   }
@@ -43,11 +46,13 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
     )
   }
 
-  const envKey = process.env.OPENAI_API_KEY
-  if (!envKey) {
-    throw new Error("No COPY provider found and OPENAI_API_KEY env var is not set")
-  }
-  return new OpenAICopyProvider(envKey)
+  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  if (anthropicKey) return new AnthropicCopyProvider(anthropicKey)
+
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (openaiKey) return new OpenAICopyProvider(openaiKey)
+
+  throw new Error("No COPY provider configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY")
 }
 
 export async function resolveImageProvider(providerKey?: string): Promise<ImageProvider> {
