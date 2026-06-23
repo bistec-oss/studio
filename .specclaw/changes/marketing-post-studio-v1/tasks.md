@@ -60,25 +60,25 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 2 — Provider abstraction layer
 
-- [ ] `T05` — Define provider interfaces
+- [x] `T05` — Define provider interfaces
   - Files: `src/providers/interfaces/CopyProvider.ts`, `src/providers/interfaces/ImageProvider.ts`, `src/providers/interfaces/DesignOrchestrator.ts`
   - Estimate: small
   - Depends: T01
   - Notes: Three TypeScript interfaces. `CopyProvider.generateCopy(brief: Brief): Promise<string>`. `ImageProvider.generateImage(brief: Brief): Promise<{ url: string }>`. `DesignOrchestrator.orchestrate(brief: Brief, brandKitId: string): Promise<{ exportUrl: string, htmlContent: string }>`. These interfaces are the stable contract — all future AI models plug in here.
 
-- [ ] `T06` — OpenAI copy provider implementation
+- [x] `T06` — OpenAI copy provider implementation
   - Files: `src/providers/implementations/copy/openai.ts`
   - Estimate: small
   - Depends: T05
   - Notes: Implements `CopyProvider`. Calls OpenAI Chat Completions (GPT-4o mini). Channel-aware system prompt (Instagram caption vs LinkedIn post format per FR-8). Returns copy string.
 
-- [ ] `T07` — OpenAI image provider implementation
+- [x] `T07` — OpenAI image provider implementation
   - Files: `src/providers/implementations/image/openai.ts`
   - Estimate: small
   - Depends: T05
   - Notes: Implements `ImageProvider`. Calls gpt-image-2 via OpenAI Images API. Returns image URL. Handles moderation rejection (EC-2) by throwing a typed `ModerationError`.
 
-- [ ] `T08` — Provider registry
+- [x] `T08` — Provider registry
   - Files: `src/providers/registry.ts`
   - Estimate: small
   - Depends: T06, T07
@@ -159,19 +159,19 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
 ### Wave 4 — Core generation + design assembly API routes
 
-- [ ] `T11` — Brief creation (DB + API route)
+- [x] `T11` — Brief creation (DB + API route)
   - Files: `src/app/api/briefs/route.ts`, `src/app/api/providers/available/route.ts`, `src/app/(app)/brief/page.tsx`
   - Estimate: medium
   - Depends: T03, T04, T08, T23, T25, T26
   - Notes: `POST /api/briefs` creates a Brief record including optional `campaignId`. Brief UI includes a project → campaign drill-down selector (optional — leaving blank = Uncategorized). On campaign select, calls `GET /api/campaigns/[id]/brandkit` to auto-populate the brand kit field; user is not prompted to pick brand kit again unless overriding. Tone pre-fills from campaign/project default. Copy model dropdown populates from `GET /api/providers/available`. Design mode radio (Path A / Path B). **Image uploads differ by path:** Path A shows a single "Additional Image" upload (stored as `additionalImageUrl` in Brief — passed into the HTML template by the Claude design agent). Path B shows a multi-image upload where each image is tagged with an **intent**: "Embed in design" (Claude places this image in the HTML layout) or "Style reference only" (Claude uses it for compositional inspiration only). Stored as `briefImages: { url, intent }[]` (JSON) in Brief. Path B also shows an optional **template reference** picker (same thumbnail list as Path A's picker) — user can choose a template from the resolved brand kit as style inspiration; stored as `referenceTemplateId` FK on Brief. **Image provider selector is hidden by default** — system default is used when Claude calls `generateImage`. An "Advanced" disclosure exposes it for users who want to override. FR-5, FR-5a, FR-5b, FR-6, FR-18c, FR-18d, FR-28–FR-30, AC-13, AC-16, AC-17.
 
-- [ ] `T12` — Copy generation API route + image tool handler
+- [x] `T12` — Copy generation API route + image tool handler
   - Files: `src/app/api/generate/copy/route.ts`, `src/app/api/generate/image/route.ts`
   - Estimate: small
   - Depends: T08, T10, T11
   - Notes: `POST /api/generate/copy` is called by the assembly pipeline; `POST /api/generate/image` is called internally by the `generateImage` agent tool implementation (not directly by the pipeline orchestrator). Copy route reads brief + brand kit prompt → calls registry copy provider → returns `{ copyText }`. Image route accepts `{ briefId, prompt? }` → calls registry image provider → uploads buffer to MinIO `generated-images` bucket → returns `{ imageUrl }`. `ModerationError` → 422 `{ code: 'MODERATION' }` (EC-2). FR-7–FR-11, AC-4.
 
-- [ ] `T13` — Path A: design assembly API route (preset template)
+- [x] `T13` — Path A: design assembly API route (preset template)
   - Files: `src/app/api/generate/assemble-a/route.ts`
   - Estimate: medium
   - Depends: T09, T12
@@ -185,7 +185,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
     On agent error: return 422 with `{ code: 'AGENT_ERROR', message }` — surface to user as a recoverable error.
 
-- [ ] `T14` — Path B: Claude HTML design agent orchestrator
+- [x] `T14` — Path B: Claude HTML design agent orchestrator
   - Files: `src/app/api/generate/assemble-b/route.ts`, `src/providers/implementations/orchestrator/claude-html.ts`
   - Estimate: large
   - Depends: T09, T12, T08, T26
@@ -202,7 +202,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 
     Hard limit: 15 tool calls (EC-12). On tool error: agent halted, error returned to caller with brief preserved.
 
-- [ ] `T15` — Export route
+- [x] `T15` — Export route
   - Files: `src/app/api/generate/export/route.ts`
   - Estimate: small
   - Depends: T09, T10

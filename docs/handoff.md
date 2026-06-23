@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23 (updated after Wave 3b)
+**Date:** 2026-06-23 (updated after Wave 4)
 **Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
 **Branch:** `specclaw/marketing-post-studio-v1`
 **Specclaw change:** `marketing-post-studio-v1`
@@ -9,7 +9,7 @@
 
 ## Current status
 
-**Wave 3b — complete ✅**
+**Wave 4 — complete ✅**
 
 | Task | Status | Notes |
 |---|---|---|
@@ -27,6 +27,11 @@
 | T26 — BrandKit management (API + admin UI) | ✅ | 11 API routes; admin UI at `/admin/brandkits`; AI prompt assist |
 | T23 — Project & Campaign API routes | ✅ | CRUD + soft delete; brand kit resolution endpoint |
 | T24 — Projects & Campaigns UI | ✅ | List + detail pages; resolved brand kit badge with source label |
+| T11 — Brief creation (DB + API + UI) | ✅ | 3-step wizard; `POST /api/briefs`; `GET /api/providers/available` |
+| T12 — Copy + image generation routes | ✅ | `POST /api/generate/copy`; `POST /api/generate/image` (base64 → MinIO) |
+| T13 — Path A assembly route | ✅ | `POST /api/generate/assemble-a`; Haiku fills template → Puppeteer PNG |
+| T14 — Path B orchestrator | ✅ | `POST /api/generate/assemble-b`; `ClaudeHtmlOrchestrator`; registry wired |
+| T15 — Export route | ✅ | `POST /api/generate/export`; re-render path for copy edits |
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
@@ -40,7 +45,7 @@
 - `src/lib/agent/tools.ts` — `toolGenerateImage` (handles base64 data URL → MinIO), `toolRenderHtml` (Puppeteer → MinIO), `toolGetBrandKitContext` (campaign→project→system default chain)
 - `src/lib/agent/designAgent.ts` — `runDesignAgent`: standard Anthropic SDK tool-use loop; throws `AgentToolLimitError` at 15 calls; halts on any tool error
 - `src/providers/implementations/orchestrator/claude-cli.ts` — `ClaudeCliOrchestrator` (dev mode; `DESIGN_PROVIDER=cli`; single-shot `claude -p`, no Puppeteer, `exportUrl=""`)
-- `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → stub that throws until T14 (Wave 4)
+- `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → `ClaudeHtmlOrchestrator` (wired in T14)
 
 **Wave 3b details:**
 - `src/lib/brandkit/resolve.ts` — `resolveBrandKit(campaignId?)`: campaign→project→system default; returns `ResolvedBrandKit` + source label; shared by tools.ts and API routes
@@ -54,7 +59,19 @@ Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStud
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
-**Next:** Wave 4 — T11 (Brief UI + API), T12 (copy/image routes), T13 (Path A assembly), T14 (Path B orchestrator + `ClaudeHtmlOrchestrator`), T15 (export route). T14 will unblock `resolveDesignOrchestrator` for production mode. ⚠️ Stop before T21 (Wave 6) and ask about model swap — see tasks.md note.
+**Wave 4 details:**
+- `src/app/api/briefs/route.ts` — `POST /api/briefs`: creates Brief with full validation (topic, goal, tone, channels, designMode, copyProviderKey required; FK checks for campaign, template, providers)
+- `src/app/api/providers/available/route.ts` — `GET /api/providers/available?slot=COPY|IMAGE`: lists enabled providers ordered defaults-first
+- `src/app/(app)/brief/page.tsx` — 3-step wizard: Step 1 content (topic/desc/goal/tone), Step 2 brand+design (campaign selector with brand-kit badge, design mode toggle, template/image pickers), Step 3 channels+providers (channel toggles, copy provider select, advanced image provider disclosure)
+- `src/app/api/generate/copy/route.ts` — `POST /api/generate/copy { briefId }`: resolves copy provider, builds BriefInput, returns `{ copyText }`
+- `src/app/api/generate/image/route.ts` — `POST /api/generate/image { briefId, prompt }`: resolves image provider, handles base64 data URL → MinIO upload, returns `{ imageUrl }`; 422 on moderation error
+- `src/app/api/generate/assemble-a/route.ts` — `POST /api/generate/assemble-a { briefId, templateId }`: Path A full pipeline — copy generation → `runDesignAgent` (Haiku, template-fill mode) → Draft created with `status: EXPORTED`
+- `src/app/api/generate/assemble-b/route.ts` — `POST /api/generate/assemble-b { briefId }`: Path B full pipeline — brand kit resolution (required) → feed-to-AI artifacts → optional style reference → copy generation → `runDesignAgent` (Sonnet, freeform mode) → Draft created
+- `src/providers/implementations/orchestrator/claude-html.ts` — `ClaudeHtmlOrchestrator` implementing `DesignOrchestrator`; wraps `runDesignAgent` with brand-aware system prompt; used by `resolveDesignOrchestrator()` in production
+- `src/providers/registry.ts` — `resolveDesignOrchestrator()` now returns `ClaudeHtmlOrchestrator` for `DESIGN_PROVIDER=claude-html` (default); Wave 3 stub removed
+- `src/app/api/generate/export/route.ts` — `POST /api/generate/export { draftId }`: short-circuits if `exportUrl` already set; otherwise re-renders `htmlContent` via Puppeteer → MinIO → updates `Draft.exportUrl` + `status: EXPORTED`
+
+**Next:** Wave 5 — T16 (Instagram + LinkedIn publishers), T17 (publish/schedule routes), T18 (scheduler worker), T19 (library UI). ⚠️ Stop before T21 (Wave 6) and ask about model swap — see tasks.md note.
 
 ---
 

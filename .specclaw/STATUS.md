@@ -1,12 +1,12 @@
 # 🦞 SpecClaw Dashboard
 
 **Project:** bistec-studio
-**Last Updated:** 2026-06-12 05:45 UTC
+**Last Updated:** 2026-06-23 03:54 UTC
 
 ## Active Changes
 
 
-- 🔨 **marketing-post-studio-v1** — 0/23 tasks (0%) | 0 failed
+- 🔨 **marketing-post-studio-v1** — 14/30 tasks (46%) | 0 failed
 
 ## Pending Proposals
 
