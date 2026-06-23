@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, requireRole } from '@/lib/auth'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser()
@@ -21,8 +21,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('admin')
+  if (auth instanceof NextResponse) return auth
 
   const project = await prisma.project.findUnique({ where: { id: params.id } })
   if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -44,9 +44,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  // Soft-delete: any authenticated user can delete
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('admin')
+  if (auth instanceof NextResponse) return auth
 
   const project = await prisma.project.findUnique({ where: { id: params.id } })
   if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })

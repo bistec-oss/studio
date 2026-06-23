@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveImageProvider } from '@/providers/registry'
 import { uploadObject, BUCKET_IMAGES } from '@/lib/storage/minio'
 
@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
 
   const brief = await prisma.brief.findUnique({ where: { id: briefId } })
   if (!brief) return NextResponse.json({ error: 'Brief not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, brief.userId)
+  if (forbidden) return forbidden
 
   try {
     const provider = await resolveImageProvider(brief.imageProviderKey ?? undefined)

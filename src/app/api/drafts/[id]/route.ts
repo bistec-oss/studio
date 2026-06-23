@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 
 async function loadDraft(id: string) {
@@ -26,6 +26,8 @@ async function loadDraft(id: string) {
   const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined)
 
   return {
+    ownerId: draft.brief.userId,
+    data: {
     id: draft.id,
     briefId: draft.briefId,
     copyText: draft.copyText,
@@ -45,6 +47,7 @@ async function loadDraft(id: string) {
       designMode: draft.brief.designMode,
     },
     posts: draft.posts,
+    },
   }
 }
 
@@ -52,10 +55,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const draft = await loadDraft(params.id)
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const result = await loadDraft(params.id)
+  if (!result) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, result.ownerId)
+  if (forbidden) return forbidden
 
-  return NextResponse.json(draft)
+  return NextResponse.json(result.data)
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
@@ -67,8 +72,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: 'copyText is required' }, { status: 400 })
   }
 
-  const existing = await prisma.draft.findUnique({ where: { id: params.id }, select: { status: true } })
+  const existing = await prisma.draft.findUnique({
+    where: { id: params.id },
+    select: { status: true, brief: { select: { userId: true } } },
+  })
   if (!existing) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, existing.brief.userId)
+  if (forbidden) return forbidden
 
   await prisma.draft.update({
     where: { id: params.id },
@@ -79,6 +89,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     },
   })
 
-  const draft = await loadDraft(params.id)
-  return NextResponse.json(draft)
+  const result = await loadDraft(params.id)
+  return NextResponse.json(result?.data)
 }

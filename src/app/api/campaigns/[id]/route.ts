@@ -20,20 +20,14 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('admin')
+  if (auth instanceof NextResponse) return auth
 
   const campaign = await prisma.campaign.findUnique({ where: { id: params.id } })
   if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const body = await req.json()
   const { name, brandKitId, defaultTone, projectId } = body
-
-  // Campaign → project reassignment is admin-only
-  if (projectId !== undefined) {
-    const auth = await requireRole('admin')
-    if (auth instanceof NextResponse) return auth
-  }
 
   const updated = await prisma.campaign.update({
     where: { id: params.id },
@@ -55,8 +49,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const auth = await requireRole('admin')
+  if (auth instanceof NextResponse) return auth
 
   const campaign = await prisma.campaign.findUnique({ where: { id: params.id } })
   if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })

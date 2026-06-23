@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { AgentToolLimitError } from '@/lib/agent/types'
@@ -48,6 +48,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     include: { brief: true },
   })
   if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
+  if (forbidden) return forbidden
 
   // ── Override path: apply the previously withheld HTML without re-running compliance.
   if (overrideConflictId) {

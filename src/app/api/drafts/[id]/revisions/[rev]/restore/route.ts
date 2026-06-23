@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, BUCKET_EXPORTS } from '@/lib/storage/minio'
 
@@ -15,6 +15,11 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   if (!Number.isInteger(revisionNumber)) {
     return NextResponse.json({ error: 'Invalid revision number' }, { status: 400 })
   }
+
+  const ownerId = await getDraftOwnerId(params.id)
+  if (ownerId === null) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, ownerId)
+  if (forbidden) return forbidden
 
   const revision = await prisma.draftRevision.findFirst({
     where: { draftId: params.id, revisionNumber },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { hasAnyKey } from '@/mcp/auth'
+import { isValidKey } from '@/mcp/auth'
 import { generatePost } from '@/mcp/tools/generate'
 import { publishPost } from '@/mcp/tools/publish'
 
@@ -7,7 +7,7 @@ export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
   const apiKey = req.headers.get('x-bistec-api-key')
-  if (!hasAnyKey(apiKey)) {
+  if (!isValidKey(apiKey)) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
 

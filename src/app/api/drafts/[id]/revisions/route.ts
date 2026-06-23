@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const user = await getCurrentUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const ownerId = await getDraftOwnerId(params.id)
+  if (ownerId === null) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, ownerId)
+  if (forbidden) return forbidden
 
   const revisions = await prisma.draftRevision.findMany({
     where: { draftId: params.id },

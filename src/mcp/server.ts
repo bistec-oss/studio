@@ -1,7 +1,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { isAdminKey, hasAnyKey } from './auth'
+import { isAdminKey, isValidKey } from './auth'
 import { createBrandKit, setBrandKitPrompt, uploadBrandTemplate, listBrandKits, getBrandKit } from './tools/brandkit'
 import { generatePost, getDraft } from './tools/generate'
 import { publishPost } from './tools/publish'
@@ -113,7 +113,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params
   const admin = isAdminKey(API_KEY)
-  const authenticated = hasAnyKey(API_KEY)
+  const authenticated = isValidKey(API_KEY)
 
   const adminOnly = () => ({ content: [{ type: 'text' as const, text: 'Admin access required — set BISTEC_ADMIN_API_KEYS and MCP_API_KEY' }], isError: true })
   const authRequired = () => ({ content: [{ type: 'text' as const, text: 'Authentication required — set MCP_API_KEY' }], isError: true })

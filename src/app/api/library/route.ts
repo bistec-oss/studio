@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       status?: "EXPORTED"
       posts?: { some?: { status?: PostStatus } }
     }>
-    AND?: Array<{ brief?: { topic?: { contains: string; mode: "insensitive" } } }>
+    AND?: Array<{ brief?: { topic?: { contains: string; mode: "insensitive" }; userId?: string } }>
   }
 
   const where: WhereClause = {}
@@ -63,6 +63,12 @@ export async function GET(req: NextRequest) {
     } else {
       where.AND = [searchCondition]
     }
+  }
+
+  // Non-admins only see drafts from their own briefs (IDOR fix).
+  if (user.role !== "admin") {
+    const ownership = { brief: { userId: user.userId } }
+    where.AND = where.AND ? [...where.AND, ownership] : [ownership]
   }
 
   const [drafts, total] = await Promise.all([

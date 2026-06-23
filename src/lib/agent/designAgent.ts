@@ -31,8 +31,9 @@ const TOOL_DEFINITIONS: Tool[] = [
         html: {
           type: "string",
           description:
-            "Complete self-contained HTML/CSS — no external CDN dependencies. " +
-            "Embed fonts via base64 data URIs or system fonts only.",
+            "Complete self-contained HTML/CSS. " +
+            "Load brand fonts via @import with the Google Fonts URLs provided in the brand kit context. " +
+            "Do not use other external CDN dependencies.",
         },
         width: { type: "number", description: "Canvas width in logical pixels (e.g. 1080)" },
         height: { type: "number", description: "Canvas height in logical pixels (e.g. 1080)" },
@@ -124,6 +125,7 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     messages.push({ role: "assistant", content: response.content })
 
     const toolResults: ToolResultBlockParam[] = []
+    let toolError: unknown = null
 
     for (const block of toolUseBlocks) {
       toolCallCount++
@@ -148,11 +150,16 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
           content: `Error: ${message}`,
           is_error: true,
         })
-        throw err
+        toolError = err
+        break
       }
     }
 
+    // Always close out the assistant turn with the tool results collected so far
+    // (keeps the message history valid), then surface the error — the agent
+    // halts on any tool failure by design.
     messages.push({ role: "user", content: toolResults })
+    if (toolError) throw toolError
   }
 
   return { htmlContent: lastHtml, exportUrl: lastExportUrl, toolCallCount }

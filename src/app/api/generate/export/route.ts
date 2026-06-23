@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, BUCKET_EXPORTS } from '@/lib/storage/minio'
 
@@ -11,8 +11,13 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { draftId } = body
 
-  const draft = await prisma.draft.findUnique({ where: { id: draftId } })
+  const draft = await prisma.draft.findUnique({
+    where: { id: draftId },
+    include: { brief: { select: { userId: true } } },
+  })
   if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
+  if (forbidden) return forbidden
 
   if (draft.exportUrl) {
     return NextResponse.json({ exportUrl: draft.exportUrl })

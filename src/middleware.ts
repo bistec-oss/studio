@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const PUBLIC_PREFIXES = ["/login", "/api/auth"]
+// /api/acp is a machine-to-machine surface authenticated by its own API key
+// (isValidKey), not by the session cookie — exempt it from the session gate so
+// the route-level key check governs (and fails closed when no key is configured).
+const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp"]
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
