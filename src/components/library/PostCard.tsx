@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { ImageIcon } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
@@ -58,12 +59,15 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
   return (
     <GlassPanel className="flex flex-col overflow-hidden">
       {/* Image area — square aspect */}
-      <div className="relative aspect-square w-full bg-light-border/30 dark:bg-dark-border/30 overflow-hidden">
+      <Link
+        href={`/drafts/${draft.id}`}
+        className="relative aspect-square w-full bg-light-border/30 dark:bg-dark-border/30 overflow-hidden block group"
+      >
         {draft.exportUrl ? (
           <img
             src={draft.exportUrl}
             alt={draft.brief.topic}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
@@ -73,7 +77,7 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
             />
           </div>
         )}
-      </div>
+      </Link>
 
       {/* Content */}
       <div className="flex flex-col gap-2 p-3">
