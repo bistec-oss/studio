@@ -106,6 +106,10 @@ docker ps   # confirm both are Up
 
 3. **MinIO credentials.** The server falls back to `minioadmin`/`minioadmin` by default, which matches `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` in `.env.example`. If you set custom `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`, update `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` to match.
 
+> ### 🔒 Security invariant — never publicly expose MinIO port 9000 in production
+> H10 made the `generated-images` and `brand-kits` buckets **anonymously public-read** (stable unsigned URLs). This is safe **only because** MinIO's port 9000 is never reachable from the public internet — the committed `docker-compose.yml` deliberately `expose`s 9000 internally (container-to-container) instead of publishing it, and binds the console to `127.0.0.1:9001`. The `-p 9000:9000` publishing in gotcha #2 above is a **host-dev convenience only**.
+> **In production, MinIO must sit behind the app / on a private network — do not bind 9000 to a public interface and do not put it behind a public CDN/reverse proxy.** Doing so makes those two buckets world-readable across all users. If a deployment ever needs MinIO assets served publicly, switch those buckets to app-mediated signed reads (the pattern the private `EXPORTS` bucket already uses via `resolveExportUrl`) before exposing the port. (See `docs/handoff.md` → Security review for the full rationale.)
+
 ---
 
 ## 4. Apply migrations + generate the Prisma client
