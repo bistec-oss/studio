@@ -1,0 +1,7 @@
+# Local dev override: publish MinIO :9000 to the host so a host-side
+# `npm run dev` can reach it (committed compose only exposes 9000 internally).
+# See docs/cold-start.md §3 gotcha #2.
+services:
+  minio:
+    ports:
+      - "9000:9000"
