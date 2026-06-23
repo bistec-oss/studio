@@ -45,42 +45,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'copyProviderKey is required' }, { status: 400 })
   }
 
-  // Verify copyProviderKey exists as an enabled provider
-  const copyProvider = await prisma.availableProvider.findFirst({
-    where: { providerKey: copyProviderKey, slot: 'COPY', isEnabled: true },
-  })
+  // Verify referenced records in parallel (independent lookups).
+  const [copyProvider, imageProvider, campaign, template] = await Promise.all([
+    prisma.availableProvider.findFirst({
+      where: { providerKey: copyProviderKey, slot: 'COPY', isEnabled: true },
+    }),
+    imageProviderKey
+      ? prisma.availableProvider.findFirst({
+          where: { providerKey: imageProviderKey, slot: 'IMAGE', isEnabled: true },
+        })
+      : Promise.resolve(null),
+    campaignId
+      ? prisma.campaign.findFirst({ where: { id: campaignId, isDeleted: false } })
+      : Promise.resolve(null),
+    referenceTemplateId
+      ? prisma.brandKitTemplate.findUnique({ where: { id: referenceTemplateId } })
+      : Promise.resolve(null),
+  ])
+
   if (!copyProvider) {
     return NextResponse.json({ error: 'Invalid or disabled copyProviderKey' }, { status: 400 })
   }
-
-  // Verify imageProviderKey if provided
-  if (imageProviderKey) {
-    const imageProvider = await prisma.availableProvider.findFirst({
-      where: { providerKey: imageProviderKey, slot: 'IMAGE', isEnabled: true },
-    })
-    if (!imageProvider) {
-      return NextResponse.json({ error: 'Invalid or disabled imageProviderKey' }, { status: 400 })
-    }
+  if (imageProviderKey && !imageProvider) {
+    return NextResponse.json({ error: 'Invalid or disabled imageProviderKey' }, { status: 400 })
   }
-
-  // Verify campaign if provided
-  if (campaignId) {
-    const campaign = await prisma.campaign.findFirst({
-      where: { id: campaignId, isDeleted: false },
-    })
-    if (!campaign) {
-      return NextResponse.json({ error: 'Campaign not found' }, { status: 400 })
-    }
+  if (campaignId && !campaign) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 400 })
   }
-
-  // Verify referenceTemplate if provided
-  if (referenceTemplateId) {
-    const template = await prisma.brandKitTemplate.findUnique({
-      where: { id: referenceTemplateId },
-    })
-    if (!template) {
-      return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
-    }
+  if (referenceTemplateId && !template) {
+    return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
   }
 
   const brief = await prisma.brief.create({

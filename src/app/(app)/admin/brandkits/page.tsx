@@ -24,6 +24,34 @@ interface Prompt { id: string; content: string; version: number; isActive: boole
 interface Template { id: string; name: string; htmlTemplate: string; createdAt: string }
 interface Artifact { id: string; name: string; type: string; url: string; feedToAI: boolean }
 
+// ─── Google Fonts list (top 100) ─────────────────────────────────────────────
+
+const GOOGLE_FONTS = [
+  'Inter','Roboto','Open Sans','Lato','Montserrat','Poppins','Raleway','Oswald',
+  'Source Sans 3','Merriweather','Nunito','Ubuntu','Playfair Display','Rubik',
+  'PT Sans','Mukta','Noto Sans','Work Sans','Quicksand','Fira Sans',
+  'Titillium Web','Barlow','DM Sans','Josefin Sans','Inconsolata',
+  'Libre Baskerville','Arimo','Cabin','Nanum Gothic','Mulish',
+  'Hind Siliguri','Karla','Heebo','Jost','Exo 2','Manrope','Bitter',
+  'Space Grotesk','Figtree','Plus Jakarta Sans','Outfit','Sora','Albert Sans',
+  'Lexend','Instrument Sans','Kanit','Oxanium','Urbanist','Be Vietnam Pro',
+  'Noto Serif','Cormorant Garamond','EB Garamond','Spectral','Crimson Text',
+  'Lora','Libre Franklin','Source Serif 4','PT Serif','Zilla Slab',
+  'Arvo','Rokkitt','Cardo','Vollkorn','Domine','Neuton','Glegoo',
+  'DM Serif Display','Abril Fatface','Alfa Slab One','Fjalla One',
+  'Anton','Black Han Sans','Righteous','Russo One','Teko','Passion One',
+  'Bebas Neue','Boogaloo','Acme','Fredoka One','Nunito Sans','Varela Round',
+  'Comfortaa','Pacifico','Lobster','Dancing Script','Caveat','Sacramento',
+  'Great Vibes','Satisfy','Kaushan Script','Permanent Marker','Shadows Into Light',
+  'Amatic SC','Indie Flower','Patrick Hand','Architects Daughter','Just Another Hand',
+  'JetBrains Mono','Fira Code','Source Code Pro','IBM Plex Mono','Space Mono',
+  'Courier Prime','Share Tech Mono','Roboto Mono','Noto Sans Mono','Overpass Mono',
+]
+
+function googleFontsUrl(name: string): string {
+  return `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;500;600;700&display=swap`
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -89,6 +117,71 @@ function ColorEditor({ colors, onChange }: { colors: string[]; onChange: (c: str
           className="glass-input rounded-xl px-3 py-2 text-sm w-36 text-light-text dark:text-dark-text"
         />
         <Button variant="secondary" size="sm" onClick={add}>Add</Button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Font Editor ─────────────────────────────────────────────────────────────
+
+function FontEditor({ fonts, onChange }: { fonts: Array<{ name: string; url: string }>; onChange: (f: Array<{ name: string; url: string }>) => void }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const matches = query.trim()
+    ? GOOGLE_FONTS.filter(f => f.toLowerCase().includes(query.toLowerCase()) && !fonts.find(x => x.name === f))
+    : []
+
+  function add(name: string) {
+    onChange([...fonts, { name, url: googleFontsUrl(name) }])
+    setQuery('')
+    setOpen(false)
+  }
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {fonts.map(f => (
+          <div key={f.name} className="flex items-center gap-1.5 glass-input rounded-lg px-2 py-1">
+            <span className="text-sm text-light-text dark:text-dark-text">{f.name}</span>
+            <button
+              onClick={() => onChange(fonts.filter(x => x.name !== f.name))}
+              className="text-light-text-muted dark:text-dark-text-muted hover:text-red-500 ml-1"
+            >×</button>
+          </div>
+        ))}
+      </div>
+      <div ref={ref} className="relative">
+        <input
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          placeholder="Search Google Fonts…"
+          className="glass-input rounded-xl px-3 py-2 text-sm w-full text-light-text dark:text-dark-text"
+        />
+        {open && matches.length > 0 && (
+          <ul className="absolute z-20 mt-1 w-full glass-panel rounded-xl border border-white/10 shadow-lg max-h-48 overflow-y-auto">
+            {matches.slice(0, 8).map(name => (
+              <li key={name}>
+                <button
+                  onMouseDown={e => { e.preventDefault(); add(name) }}
+                  className="w-full text-left px-3 py-2 text-sm text-light-text dark:text-dark-text hover:bg-primary/10 dark:hover:bg-primary-light/10 transition-colors"
+                >
+                  {name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
@@ -259,6 +352,7 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(kit.name)
   const [colors, setColors] = useState<string[]>(kit.colors)
+  const [fonts, setFonts] = useState<Array<{ name: string; url: string }>>(kit.fonts)
   const [saving, setSaving] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [templateHtml, setTemplateHtml] = useState('')
@@ -269,6 +363,7 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
   useEffect(() => {
     setName(kit.name)
     setColors(kit.colors)
+    setFonts(kit.fonts)
   }, [kit])
 
   async function saveEdit() {
@@ -277,22 +372,12 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
       await apiFetch(`/api/admin/brandkits/${kit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, colors }),
+        body: JSON.stringify({ name, colors, fonts }),
       })
       setEditing(false)
       onRefresh()
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
     finally { setSaving(false) }
-  }
-
-  async function uploadFile(file: File, type: string) {
-    const fd = new FormData()
-    fd.append('file', file)
-    await apiFetch(`/api/admin/brandkits/${kit.id}/artifacts`, {
-      method: 'POST',
-      body: Object.assign(fd, (() => { fd.append('type', type); fd.append('name', file.name); return {} })()),
-    })
-    onRefresh()
   }
 
   async function uploadAsset(file: File) {
@@ -414,7 +499,7 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
           {editing ? (
             <>
               <Button size="sm" onClick={saveEdit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setName(kit.name); setColors(kit.colors) }}>Cancel</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setName(kit.name); setColors(kit.colors); setFonts(kit.fonts) }}>Cancel</Button>
             </>
           ) : (
             <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
@@ -467,12 +552,14 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
       {/* Fonts */}
       <GlassPanel className="p-4">
         <SectionHeader title="Fonts" />
-        {kit.fonts.length === 0 ? (
+        {editing ? (
+          <FontEditor fonts={fonts} onChange={setFonts} />
+        ) : fonts.length === 0 ? (
           <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No fonts added</span>
         ) : (
           <ul className="space-y-1">
-            {kit.fonts.map(f => (
-              <li key={f.url} className="text-sm text-light-text dark:text-dark-text flex items-center gap-2">
+            {fonts.map(f => (
+              <li key={f.name} className="text-sm text-light-text dark:text-dark-text flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary dark:bg-primary-light flex-shrink-0" />
                 {f.name}
               </li>

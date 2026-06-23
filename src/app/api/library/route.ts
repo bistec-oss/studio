@@ -76,7 +76,18 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         brief: { select: { topic: true, channels: true } },
-        posts: { orderBy: { createdAt: "desc" } },
+        posts: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            channel: true,
+            status: true,
+            scheduledAt: true,
+            publishedAt: true,
+            platformId: true,
+            errorReason: true,
+          },
+        },
         campaigns: {
           include: {
             campaign: {

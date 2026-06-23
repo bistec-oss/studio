@@ -8,11 +8,16 @@ const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp"]
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  if (PUBLIC_PREFIXES.some(p => pathname.startsWith(p))) {
+  // Exact path or a true sub-path — avoids a public prefix matching an
+  // unintended sibling route (e.g. "/loginsomething").
+  if (PUBLIC_PREFIXES.some(p => pathname === p || pathname.startsWith(p + "/"))) {
     return NextResponse.next()
   }
 
-  // better-auth sets this cookie on successful sign-in
+  // NOTE: this is a cheap presence gate only — it does not validate the session.
+  // Authoritative auth (session validity + role) is enforced per-route via
+  // getCurrentUser()/requireRole(); the cookie check just short-circuits
+  // obviously-unauthenticated navigation to the login page.
   const session = req.cookies.get("better-auth.session_token")
   if (!session) {
     return NextResponse.redirect(new URL("/login", req.url))

@@ -397,6 +397,14 @@ export default function DraftDetailPage() {
       .catch(() => {})
   }, [])
 
+  // Poll while a draft is still generating so the preview updates without a
+  // manual refresh.
+  useEffect(() => {
+    if (draft?.status !== 'IN_PROGRESS') return
+    const timer = setInterval(fetchDraft, 4000)
+    return () => clearInterval(timer)
+  }, [draft?.status, fetchDraft])
+
   function refreshAfterChange() {
     fetchDraft()
     fetchRevisions()

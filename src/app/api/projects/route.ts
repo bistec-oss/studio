@@ -13,6 +13,8 @@ export async function GET() {
       _count: { select: { campaigns: true } },
     },
     orderBy: { createdAt: 'desc' },
+    // Bounded; full pagination deferred (response is a bare array today).
+    take: 200,
   })
 
   return NextResponse.json(projects)

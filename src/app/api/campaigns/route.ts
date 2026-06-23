@@ -15,6 +15,9 @@ export async function GET() {
       _count: { select: { briefs: true } },
     },
     orderBy: { createdAt: 'desc' },
+    // Bound the result set. Full page/pageSize pagination is deferred (would
+    // change the response shape consumed by the wizard + list pages).
+    take: 200,
   })
 
   return NextResponse.json(campaigns)

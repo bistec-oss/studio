@@ -23,16 +23,22 @@ export async function publish(
 
   const baseUrl = `https://graph.facebook.com/v19.0/${businessAccountId}`
 
+  // Pass the token via the Authorization header (Graph API accepts Bearer auth)
+  // rather than in the request body, so it doesn't land in request logs.
+  const authHeaders = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Authorization: `Bearer ${accessToken}`,
+  }
+
   // Step 1: Create media container
   const createParams = new URLSearchParams({
     image_url: exportUrl,
     caption: copyText,
-    access_token: accessToken,
   })
 
   const createResponse = await fetch(`${baseUrl}/media`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: authHeaders,
     body: createParams.toString(),
   })
 
@@ -61,12 +67,11 @@ export async function publish(
   // Step 2: Publish the media container
   const publishParams = new URLSearchParams({
     creation_id: containerId,
-    access_token: accessToken,
   })
 
   const publishResponse = await fetch(`${baseUrl}/media_publish`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: authHeaders,
     body: publishParams.toString(),
   })
 
