@@ -5,7 +5,10 @@ import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
+import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { AgentToolLimitError } from '@/lib/agent/types'
+
+const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -77,13 +80,15 @@ Copy text: ${copyText}${imageNote}
 Fill the template with this content. Replace all placeholder text with the copy. Call renderHtml(html, 1080, 1080) when done.`
 
   try {
-    const result = await runDesignAgent({
-      systemPrompt,
-      userMessage,
-      briefId,
-      model: 'claude-haiku-4-5-20251001',
-      maxToolCalls: 15,
-    })
+    const result = CLI_MODE
+      ? await runDesignAgentCli({ systemPrompt, userMessage, briefId })
+      : await runDesignAgent({
+          systemPrompt,
+          userMessage,
+          briefId,
+          model: 'claude-haiku-4-5-20251001',
+          maxToolCalls: 15,
+        })
 
     const draft = await prisma.draft.create({
       data: {

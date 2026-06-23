@@ -52,7 +52,23 @@
   - `GET /api/templates` (**new**, non-admin) — lists templates across all non-deleted kits with `brandKitName` + `previewColor` (kit's first color). Needed because the picker shows all templates in step 1, and `/api/admin/brandkits*` is admin-gated (403s for editors after the `requireRole` fix).
   - `GET /api/campaigns` — now includes `projects { project { id, name } }` so the wizard can group campaigns by project + standalone.
   - `POST /api/briefs/images` (**new**, non-admin) — multipart → MinIO `BUCKET_IMAGES` under `briefs/{userId}/`, returns `{url, filename}`. Runs before the brief exists; uses 7-day presigned URLs (consumed at generation time — same known expiry caveat as other uploads).
-- **Not yet verifiable here:** end-to-end generation needs registered providers + API keys (env has 0 providers, `DESIGN_PROVIDER=cli`). Everything up to the Generate call is smoke-tested (page 200, all supporting endpoints 200, project grouping confirmed with real data).
+- **Not yet verifiable here:** end-to-end generation needs registered providers + API keys (env has 0 providers, `DESIGN_PROVIDER=cli`). Everything up to the Generate call is smoke-tested (page 200, all supporting endpoints 200, project grouping confirmed with real data). **→ Now solved via the CLI orchestrator below.**
+
+**CLI orchestrator (keyless generation) — 2026-06-23 (on `main`):** Routes the full pipeline — copy, design, and PNG render — through the local **Claude Code CLI** (`claude -p`) instead of the Anthropic/OpenAI APIs, so the brief flow runs **end-to-end without any API key**. Activated by `DESIGN_PROVIDER=cli`. Verified: Path A (75s) and Path B (81s) both produce real 2160×2160 PNGs and `EXPORTED` drafts.
+- `src/lib/agent/claudeCli.ts` — `runClaudeCli(prompt)` spawns the CLI and pipes the prompt via **STDIN** (argv would truncate at Windows' ~8191-char cmd limit). On win32 it runs `claude.cmd` via shell; override with `CLAUDE_CLI_PATH`. Guards prompts > 600k chars with an actionable error. `stripCodeFences()` cleans markdown-wrapped output.
+- `src/providers/implementations/copy/claude-cli.ts` — `ClaudeCliCopyProvider` (copy via CLI). Wired into `registry.ts` as the `cli` case; `providerApiKey()` skips `decrypt()` for the keyless `cli` provider.
+- `src/lib/agent/designAgentCli.ts` — `runDesignAgentCli()`: single-shot `claude -p` → HTML → `renderHtmlToPng` (Puppeteer) → MinIO `BUCKET_EXPORTS` → real `exportUrl`. Replaces the Anthropic tool-use loop (`runDesignAgent`) in CLI mode only.
+- `src/app/api/generate/assemble-a|b/route.ts` — branch on `CLI_MODE` (`DESIGN_PROVIDER === 'cli'`): CLI path vs. the untouched API path.
+- `scripts/seed-cli-provider.mjs` — idempotently registers a default COPY `AvailableProvider` `{providerKey:"cli", providerName:"cli", label:"Claude CLI (local, no API key)"}` so the wizard's Generate is enabled and `/api/briefs` validation passes. Run: `node --env-file=.env scripts/seed-cli-provider.mjs`.
+- **Images:** CLI mode has no raster-image API — visuals are CSS/SVG authored by Claude and rasterized by Puppeteer. True raster generation (e.g. DALL·E) still needs an IMAGE provider + key.
+- **Template size limit:** single-shot prompts can't carry a giant template. The seeded **"Hearts Talk 1080×1080"** template is 1.81 MB (~475k tokens) and fails with the size guard (it would also exceed the API's 200k context). Use a normal-sized template — a **"Simple Gradient Card"** template was added to the Bistec kit for Path A testing.
+
+> ### ⤺ Reverting to API mode (once an API key is confirmed)
+> The CLI path is **only** taken when `DESIGN_PROVIDER=cli`. To switch back to the real Anthropic/OpenAI providers, **no code changes are needed** — the API path (`runDesignAgent`, `AnthropicCopyProvider`/`OpenAICopyProvider`) is left fully intact:
+> 1. In `.env`, set `DESIGN_PROVIDER=claude-html` (and add `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`). Restart the dev server so it re-reads the env (`CLI_MODE` is read at module load).
+> 2. Register the real provider(s) in the UI at **`/admin/settings`** (encrypted, stored as `AvailableProvider` rows), **or** rely on the env-var fallback in `registry.ts`.
+> 3. Disable/remove the seeded CLI provider so it isn't auto-selected as default: in `/admin/settings` toggle it off, or run SQL `UPDATE "AvailableProvider" SET "isEnabled"=false WHERE "providerKey"='cli';` (or `DELETE … WHERE "providerKey"='cli';`). Set your real provider as `isDefault`.
+> 4. (Optional) The CLI files (`claudeCli.ts`, `designAgentCli.ts`, `copy/claude-cli.ts`, the `cli` cases in `registry.ts`, and the `CLI_MODE` branches in the assemble routes) are dormant when `DESIGN_PROVIDER!=='cli'` and can stay for future keyless testing, or be deleted to fully remove the path.
 
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`

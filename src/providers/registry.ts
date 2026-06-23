@@ -6,11 +6,15 @@ import type { DesignOrchestrator } from "./interfaces/DesignOrchestrator"
 import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
 import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
+import { ClaudeCliCopyProvider } from "./implementations/copy/claude-cli"
 import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
 import { ClaudeHtmlOrchestrator } from "./implementations/orchestrator/claude-html"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
+    case "cli":
+      // Local Claude Code CLI — no API key needed.
+      return new ClaudeCliCopyProvider()
     case "openai":
       return new OpenAICopyProvider(apiKey)
     case "anthropic":
@@ -18,6 +22,12 @@ function instantiateCopyProvider(providerName: string, apiKey: string): CopyProv
     default:
       throw new Error(`Unsupported provider: ${providerName}`)
   }
+}
+
+// The "cli" provider carries no real API key, so its encryptedApiKey is a
+// placeholder that must not be run through decrypt().
+function providerApiKey(record: { providerName: string; encryptedApiKey: string }): string {
+  return record.providerName.toLowerCase() === "cli" ? "" : decrypt(record.encryptedApiKey)
 }
 
 function instantiateImageProvider(providerName: string, apiKey: string): ImageProvider {
@@ -35,7 +45,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
       where: { slot: "COPY", providerKey, isEnabled: true },
     })
     if (record) {
-      return instantiateCopyProvider(record.providerName, decrypt(record.encryptedApiKey))
+      return instantiateCopyProvider(record.providerName, providerApiKey(record))
     }
   }
 
@@ -43,10 +53,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
     where: { slot: "COPY", isDefault: true, isEnabled: true },
   })
   if (defaultRecord) {
-    return instantiateCopyProvider(
-      defaultRecord.providerName,
-      decrypt(defaultRecord.encryptedApiKey)
-    )
+    return instantiateCopyProvider(defaultRecord.providerName, providerApiKey(defaultRecord))
   }
 
   const anthropicKey = process.env.ANTHROPIC_API_KEY
