@@ -42,7 +42,10 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 - **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — authoritative source for the Prisma schema, all API route contracts, the AI provider abstraction layer (`CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces), the Claude design agent harness, the Puppeteer renderer, MinIO integration, AGUI backend flow, provider registration encryption, and the full file/folder structure of the real app. Any implementation that touches data models, API routes, or provider logic must align with this document.
 
 ### Code review & remediation status
-- **[`docs/code-review-findings.md`](docs/code-review-findings.md)** — full code review (42 findings) + **Remediation Status** (22/28 fixed as of 2026-06-23) with remaining items, their recommended model + effort, and a known issue (oversized "Hearts Talk" template breaks Path A). **Read this before picking up review/remediation work.**
+- **[`docs/code-review-findings.md`](docs/code-review-findings.md)** — full code review (42 findings) + **Remediation Status** (✅ all 28 fixed as of 2026-06-23) plus the one open known issue (oversized "Hearts Talk" template breaks Path A). **Read this before picking up review/remediation work.**
+
+### Testing
+- **[`docs/e2e-test-plan.md`](docs/e2e-test-plan.md)** — the authoritative E2E test design (to execute later, task T22). Catalogs every flow + a regression suite for all 28 remediation fixes, documents the real API contracts, and flags that the existing `tests/e2e/` skeleton is non-functional (unimplemented `MOCK_*` hooks + contract drift). Read before writing/running E2E tests.
 
 ### Specification & planning
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary

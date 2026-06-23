@@ -1,0 +1,319 @@
+# bistec-studio — E2E Test Plan
+
+**Created:** 2026-06-23
+**Status:** Design — to be executed later (no test code written yet beyond the existing skeleton)
+**Owner:** _unassigned_
+**Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
+
+This document is the authoritative test design. Implement the cases below as Playwright specs under `tests/e2e/`. Every case lists an **ID**, **precondition**, **steps**, **expected result**, and (where relevant) the **finding it guards**.
+
+---
+
+## 0. Why this plan exists — current suite assessment
+
+A Playwright skeleton already exists under `tests/e2e/`, but it is **not currently functional as written**. Before adding new tests, the issues below must be fixed (tracked as task **T22**, which is still open in `tasks.md`).
+
+| # | Problem | Evidence | Action |
+|---|---|---|---|
+| 1 | **Mock hooks never implemented.** Tests gate on `MOCK_AI`, `MOCK_PUPPETEER`, `MOCK_SOCIAL`, but none of these env vars are read anywhere in `src/`. Every generation/publish test therefore `test.skip()`s permanently. | `grep MOCK_ src/` → no matches; fixtures `tests/fixtures/mockHtml.ts` are unused | Implement the three mock hooks (see §3) **or** drive generation through `DESIGN_PROVIDER=cli`. |
+| 2 | **Contract drift — `/api/posts`.** `publish.test.ts` posts `{ channels: ['INSTAGRAM'] }` and expects an **array** response (`posts[0].status`). The real route reads a singular `channel` and returns `{ postId, status }`. | `src/app/api/posts/route.ts` | Rewrite the spec to the real contract (§5). |
+| 3 | **Contract drift — `/api/generate/assemble-a`.** `path-a.test.ts` asserts `draft.htmlContent`, `draft.status`, `draft.imageUrl`. The route returns only `{ draftId, exportUrl }`. | `src/app/api/generate/assemble-a/route.ts` | Assert the real shape; fetch `GET /api/drafts/[id]` for the rest. |
+| 4 | **Port mismatch.** `playwright.config.ts` and `helpers/api.ts` default to `:3001`; the dev server runs on `:3000` (per `CLAUDE.md`). | config vs cold-start docs | Set `TEST_BASE_URL`, or run the test server on 3001 (recommended — isolation). |
+| 5 | **No DB isolation / teardown.** Tests create kits, campaigns, providers against the dev DB and mostly don't clean up. | specs | Use a dedicated test DB + per-run reset (see §2). |
+
+> **Bottom line:** the existing files (`path-a`, `path-b`, `agui-refinement`, `publish`, `provider-registration`, `brand-kit`) are a useful starting structure, but treat them as drafts to be corrected against §5, not as passing coverage.
+
+---
+
+## 1. Test pyramid & what E2E owns
+
+E2E here means **black-box tests against a running app + real Postgres + real MinIO**, with the three external AI/social dependencies mocked deterministically.
+
+- **Unit-ish (out of scope here, recommend separately):** `crypto.ts` round-trip, `resolveBrandKit` precedence, `backoffMs`, `resolveExportUrl` passthrough.
+- **E2E (this doc):** HTTP API contracts, RBAC, ownership, generation pipeline, publish/schedule, storage URL behavior, AGUI, and a few critical UI browser flows.
+- **Concurrency/integration (this doc, §K):** the H7/H12 race fixes — these need parallel requests, which Playwright `request` can drive.
+
+---
+
+## 2. Test environment & preconditions
+
+### Infrastructure
+1. Postgres + MinIO containers up (`docker compose up -d`), MinIO `:9000` published to host.
+2. A **dedicated test database** (e.g. `bistec_studio_test`) so runs are disposable. Point `DATABASE_URL` at it.
+3. Migrations applied: `npx prisma migrate deploy` (must include `20260623153740_h9_indexes` and `20260623154752_h12_scheduler_claim`).
+4. Seed the baseline: `npm run db:seed` (admin user + Bistec kit + Hearts Talk kit) and `node --env-file=.env.test scripts/seed-cli-provider.mjs` if using CLI mode.
+
+### Required `.env.test`
+```
+DATABASE_URL=postgresql://...@localhost:5432/bistec_studio_test
+BETTER_AUTH_SECRET=<32+ char test secret>
+TOKEN_ENCRYPTION_KEY=<test key>
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_PUBLIC_ENDPOINT=http://localhost:9000
+DESIGN_PROVIDER=cli                # or unset if using MOCK_AI hooks
+MOCK_AI=true                       # see §3 — must be implemented first
+MOCK_PUPPETEER=true
+MOCK_SOCIAL=true
+TEST_BASE_URL=http://localhost:3001
+```
+
+### Known seeded accounts
+- **Admin:** `admin@bisteccare.lk` / `BistecStudio2026!` (role ADMIN)
+- **Editor:** _create one in a global setup fixture_ (no seeded editor exists — see TC-AUTH-05 precondition). Needed for all RBAC/IDOR tests.
+
+### Per-run reset
+Add a global setup that truncates app tables (keep `User`/`Account`/`Session` for the seeded admin, or re-seed) between runs so counts/asserts are deterministic. `fullyParallel: false, workers: 1` is already set — keep it until isolation exists.
+
+---
+
+## 3. Mock strategy (must be built before generation tests run)
+
+The deterministic path requires three small, test-only seams. Implement each behind its env flag so production is untouched.
+
+| Flag | Insert at | Behavior when set |
+|---|---|---|
+| `MOCK_AI` | `resolveCopyProvider` / `resolveDesignOrchestrator` in `src/providers/registry.ts` | Return a stub copy provider (`generateCopy` → fixed string) and a stub orchestrator whose `orchestrate()` returns `{ htmlContent: MOCK_HTML, exportUrl: <key> }` after uploading `MOCK_PNG_BUFFER` to EXPORTS. Also stub `runDesignAgent` for refine. |
+| `MOCK_PUPPETEER` | `renderHtmlToPng` in `src/lib/renderer/puppeteer.ts` | Skip Chromium; return `MOCK_PNG_BUFFER`. Lets export/restore/refine run with no browser. |
+| `MOCK_SOCIAL` | `publish()` in `src/lib/social/instagram.ts` + `linkedin.ts` | Return `{ platformId: 'mock-<channel>-<rand>' }` without an HTTP call. Add a `MOCK_SOCIAL_FAIL=true` variant that throws `PublishError` — needed for retry/backoff tests (§K, H12). |
+
+> **Alternative (no new code):** run with `DESIGN_PROVIDER=cli` + real Puppeteer (needs `PUPPETEER_EXECUTABLE_PATH` + Claude CLI auth) + `MOCK_SOCIAL`. Slower and non-deterministic copy, but exercises the real render path. Use the mock hooks for CI; CLI mode for local "does it really render" checks.
+
+Fixtures already present: `tests/fixtures/mockHtml.ts` (`MOCK_HTML`, `MOCK_PNG_BUFFER`).
+
+---
+
+## 4. Conventions for implementing cases
+
+- Reuse `tests/helpers/api.ts` (`login`, `post`, `get`, `patch`, `del`). Extend it with `loginAs(email, password)` returning an isolated cookie jar so editor-vs-admin tests don't clobber each other's session.
+- Each `describe` block logs in in `beforeEach`.
+- Assert **status code first**, then body shape, then values.
+- For multipart (`/upload`, `/artifacts`, `/briefs/images`) use Playwright's `multipart` option.
+- Clean up created rows in `afterEach`/`afterAll` until DB reset exists.
+
+---
+
+## 5. Real API contract reference (assert against these)
+
+| Endpoint | Method | Body | Success | Notes |
+|---|---|---|---|---|
+| `/api/auth/sign-in/email` | POST | `{email,password}` | 200 + `set-cookie` | session token |
+| `/api/me` | GET | — | 200 `{ role }` | server-side role (H13) |
+| `/api/admin/brandkits` | POST | `{name,colors,fonts}` | 200 kit | admin only |
+| `/api/admin/brandkits/[id]/templates` | POST | `{name,htmlTemplate}` | template `{id}` | admin |
+| `/api/admin/brandkits/[id]/prompts` | POST | `{content}` | 201 prompt / **409** on version race | H7 |
+| `/api/admin/brandkits/[id]/upload` | POST | multipart `file` | `{url,key,name}` | `url` is **public** (H10) |
+| `/api/admin/brandkits/[id]/artifacts` | POST | multipart | 201 artifact | `url` public (H10) |
+| `/api/campaigns` | POST | `{name,brandKitId?}` | campaign `{id}` | any role |
+| `/api/briefs` | POST | `{topic,goal,tone,channels[],designMode,copyProviderKey,campaignId?}` | **201** brief `{id}` | validation |
+| `/api/briefs/images` | POST | multipart | `{url,filename}` | `url` **public** (H10) |
+| `/api/generate/assemble-a` | POST | `{briefId,templateId}` | **201** `{draftId,exportUrl}` | `exportUrl` signed (H10) |
+| `/api/generate/assemble-b` | POST | `{briefId}` | **201** `{draftId,exportUrl}` | signed |
+| `/api/generate/export` | POST | `{draftId}` | `{exportUrl}` | signed; short-circuits if set |
+| `/api/drafts/[id]` | GET | — | draft detail, `exportUrl` signed | ownership |
+| `/api/drafts/[id]` | PATCH | `{copyText}` | updated draft | EXPORTED→IN_PROGRESS |
+| `/api/drafts/[id]/refine` | POST | `{instruction}` or `{overrideConflictId,instruction}` | `{reply,revisionId,exportUrl}` or `{conflict,explanation,conflictId}` | signed |
+| `/api/drafts/[id]/revisions` | GET | — | array, `exportUrl` signed | |
+| `/api/drafts/[id]/revisions/[rev]/restore` | POST | — | `{exportUrl}` signed | |
+| `/api/posts` | POST | `{draftId,channel,scheduledAt?}` | **201** `{postId,status}` | **singular `channel`**; PUBLISHED / SCHEDULED / FAILED |
+| `/api/posts` | GET | `?page&pageSize&status?` | `{posts,total,page,pageSize}` | admin=all, editor=own; `draft.exportUrl` signed |
+| `/api/posts/[id]` | GET | — | post, `draft.exportUrl` signed | ownership |
+| `/api/posts/[id]` | DELETE | — | `{postId,status:CANCELLED}` / **409** if not SCHEDULED | admin |
+| `/api/posts/[id]/publish` | POST | — | `{postId,status}` / 409 if not FAILED | admin retry |
+| `/api/library` | GET | `?page&pageSize&status&search` | `{drafts,total,...}` | non-admin filtered to own; `exportUrl` signed |
+| `/api/admin/providers` | POST | `{apiKey,slot,providerName?,label?}` | 201 / 422 / 400 | prefix auto-detect |
+| `/api/providers/available` | GET | `?slot=COPY\|IMAGE` | array (no secret fields) | |
+| `/api/acp/manifest`, `/api/acp/run` | * | — | **401 without valid key** | H1 |
+
+---
+
+## 6. Test catalog
+
+Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediation finding regression.
+
+### A. Authentication & RBAC
+
+- **TC-AUTH-01 — Login success.** S: POST sign-in with seeded admin. E: 200, session cookie set.
+- **TC-AUTH-02 — Login failure.** S: wrong password. E: 4xx, no session cookie.
+- **TC-AUTH-03 — Unauthenticated API is rejected.** P: no cookie. S: GET `/api/library`, `/api/drafts/<any>`. E: 401.
+- **TC-AUTH-04 — `/api/me` returns role.** S: as admin GET `/api/me`. E: 200 `{role:'admin'}`. As editor → `'editor'`. **Guards H13.**
+- **TC-AUTH-05 — Admin-only mutations gated.** P: editor session. S: PATCH/DELETE `/api/campaigns/[id]`, `/api/projects/[id]`; POST `/api/posts`; any `/api/admin/*`. E: 403. **Guards H4.**
+- **TC-AUTH-06 — `requireRole` case-insensitive.** S: as admin (`ADMIN` in DB) hit an admin route. E: 200 (not 403). **Guards the role-casing bonus fix.**
+- **TC-AUTH-07 — middleware exact-prefix.** S: request a path that merely *prefixes* a protected one (e.g. `/admincustom`). E: not wrongly treated as protected/exempt. **Guards M9.**
+
+### B. Brand kits (admin)
+
+- **TC-BK-01 — Create kit.** S: POST with colors/fonts. E: kit returned with id.
+- **TC-BK-02 — Single-default invariant.** S: create kit A default, then kit B default. E: only B `isDefault` (atomic toggle). **Guards M1.**
+- **TC-BK-03 — Prompt versioning happy path.** S: POST prompt content twice. E: versions 1 then 2; only latest `isActive`.
+- **TC-BK-04 — Logo upload returns public URL.** S: multipart upload. E: `url` starts with `MINIO_PUBLIC_ENDPOINT`, **anonymous GET of `url` → 200** (no signing). **Guards H10.**
+- **TC-BK-05 — Artifact upload + feedToAI sync.** S: upload LOGO artifact. E: `BrandKit.logoUrl` updated; artifact `url` public.
+- **TC-BK-06 — Artifact DELETE clears kit field.** S: delete the LOGO artifact. E: `BrandKit.logoUrl` cleared / font removed. **Guards M5.**
+- **TC-BK-07 — Upload size/MIME validation.** S: upload >10 MB file; upload an SVG to `/briefs/images`. E: 400 both. **Guards H8.**
+- **TC-BK-08 — Non-admin blocked.** P: editor. S: any brandkit write. E: 403.
+
+### C. Projects, campaigns & brand-kit resolution
+
+- **TC-RES-01 — Campaign override wins.** P: project default kit X, campaign kit Y. S: resolve. E: Y, source `campaign`.
+- **TC-RES-02 — Inherit from project.** P: campaign has no kit, project default X. E: X, source `project`.
+- **TC-RES-03 — System default fallback.** P: neither set. E: the `isDefault` kit, source `system`.
+- **TC-RES-04 — Soft-deleted kit/campaign skipped.** P: campaign kit Y is soft-deleted. S: resolve. E: falls through to project/system, never returns Y. **Guards M4.**
+- **TC-RES-05 — Campaign→project reassign admin-only.** P: editor. E: 403.
+- **TC-RES-06 — List endpoints bounded.** S: GET `/api/campaigns`, `/api/projects`. E: capped (`take:200`). **Guards M11.**
+
+### D. Brief → generation (Path A & B)
+
+> Requires §3 mocks (or CLI mode).
+
+- **TC-GEN-A1 — Path A produces an EXPORTED draft.** P: kit + template + campaign + brief (`designMode:TEMPLATE`). S: POST `/api/generate/assemble-a {briefId,templateId}`. E: 201 `{draftId,exportUrl}`; `exportUrl` matches `^https?://`; `GET /api/drafts/[id]` → `status:EXPORTED`, `htmlContent` contains a brand color. **(Corrects path-a.test.ts.)**
+- **TC-GEN-A2 — Path A bad templateId.** S: assemble with non-existent template. E: 404.
+- **TC-GEN-B1 — Path B produces an EXPORTED draft.** P: kit + brief (`designMode:GENERATE`). S: POST `/api/generate/assemble-b {briefId}`. E: 201 `{draftId,exportUrl}`.
+- **TC-GEN-B2 — Path B requires a brand kit.** P: no resolvable kit. E: 422 `NO_BRAND_KIT`.
+- **TC-GEN-03 — Brief validation.** S: POST `/api/briefs` missing `goal`/`channels`/bad FK. E: 4xx with field error. **Guards M12 (parallel validation still correct).**
+- **TC-GEN-04 — Brief validation is parallelized & correct.** S: brief with invalid campaign + invalid template + invalid provider. E: 4xx (any/all bad FKs reported). **Guards M12.**
+- **TC-GEN-05 — Generated image stored as public URL.** P: mock image provider returns a data URL. S: run generation that calls `generateImage`. E: image embedded in HTML is a **public** URL (anonymous GET 200), so re-render later works. **Guards H10.**
+- **TC-GEN-06 — Oversized template guard.** P: Hearts Talk template (1.81 MB). S: Path A with it. E: clean error (`Prompt too large…`), not a crash. **Known Issue regression.**
+
+### E. AGUI refinement
+
+- **TC-AGUI-01 — Refine creates a revision.** P: an EXPORTED draft. S: POST refine `{instruction:'make the background darker'}`. E: `{reply,revisionId,exportUrl(signed)}`; `GET …/revisions` shows the new row with signed `exportUrl`.
+- **TC-AGUI-02 — Revision numbers are sequential.** S: three sequential refines. E: revisionNumber 1,2,3; no gap/dup.
+- **TC-AGUI-03 — Conflict card path.** P: mock agent returns a `{conflict:true,...}` JSON. S: refine. E: `{conflict:true,conflictId}`; draft.`pendingConflict` set; **no** new revision yet.
+- **TC-AGUI-04 — Override applies pending HTML.** S: refine with `{overrideConflictId}`. E: revision created, `pendingConflict` cleared.
+- **TC-AGUI-05 — Restore a revision.** S: POST `…/revisions/1/restore`. E: `{exportUrl}` signed; `Draft.htmlContent` = that snapshot.
+- **TC-AGUI-06 — Refine ownership.** P: editor B, draft owned by A. E: 403. **Guards H2.**
+
+### F. Export
+
+- **TC-EXP-01 — Export re-renders missing PNG.** P: draft with `htmlContent` but no `exportUrl`. S: POST export. E: `{exportUrl}` signed; draft `EXPORTED`.
+- **TC-EXP-02 — Export short-circuit.** P: draft already has `exportUrl`. S: POST export. E: returns the (signed) existing one; no re-render.
+- **TC-EXP-03 — Export needs HTML.** P: draft with no `htmlContent`. E: 422.
+
+### G. Publish & schedule
+
+> Requires `MOCK_SOCIAL`.
+
+- **TC-PUB-01 — Immediate publish.** P: EXPORTED draft. S: POST `/api/posts {draftId,channel:'INSTAGRAM'}`. E: 201 `{postId,status:'PUBLISHED'}`; `platformId` set. **(Corrects publish.test.ts — singular `channel`, object response.)**
+- **TC-PUB-02 — Schedule for later.** S: POST with future `scheduledAt`. E: 201 `{status:'SCHEDULED'}`; **no transient PENDING row persists** (query DB → status is SCHEDULED, never PENDING). **Guards H7.**
+- **TC-PUB-03 — Publish failure → FAILED, never PENDING.** P: `MOCK_SOCIAL_FAIL=true`. S: immediate publish. E: 201 `{status:'FAILED'}` with `errorReason`; row terminal, no PENDING orphan. **Guards H7.**
+- **TC-PUB-04 — Retry FAILED.** P: a FAILED post, mock now succeeds. S: POST `…/publish`. E: 200 `PUBLISHED`, `retryCount`/`nextRetryAt` reset. **Guards H12.**
+- **TC-PUB-05 — Retry on non-FAILED → 409.** S: `…/publish` on a PUBLISHED post. E: 409.
+- **TC-PUB-06 — Cancel scheduled.** S: DELETE a SCHEDULED post. E: `CANCELLED`. DELETE a PUBLISHED post → 409.
+- **TC-PUB-07 — Publish requires exportUrl.** P: draft without export. E: 422.
+- **TC-PUB-08 — Publisher receives a signed, fetchable URL.** Assert (via mock spy) the URL handed to `publish()` is an `https` signed export URL, not a bare object key. **Guards H10.**
+- **TC-PUB-09 — Publish is admin-only.** P: editor. E: 403. **Guards H4.**
+
+### H. Library
+
+- **TC-LIB-01 — Admin sees all, editor sees own.** P: drafts from A and B. S: editor B GET `/api/library`. E: only B's drafts. **Guards H3.**
+- **TC-LIB-02 — Status filters.** S: `?status=READY|PUBLISHED|SCHEDULED|FAILED|ALL`. E: correct subsets.
+- **TC-LIB-03 — Search.** S: `?search=<topic substring>`. E: matching drafts only.
+- **TC-LIB-04 — Pagination envelope.** E: `{drafts,total,page,pageSize}`; `take` honored.
+- **TC-LIB-05 — Thumbnails are signed.** E: every `drafts[].exportUrl` is `https` signed (fetchable). **Guards H10.**
+
+### I. Provider registration
+
+- **TC-PROV-01 — `sk-ant-` → Anthropic.** (already drafted) E: 201 or 422-from-provider.
+- **TC-PROV-02 — `sk-` → OpenAI.** E: 201/422.
+- **TC-PROV-03 — Unknown prefix needs name+label.** E: 400 without, 201/422 with.
+- **TC-PROV-04 — Available list hides secrets.** E: no `encryptedApiKey`/`apiKey` fields; `keyPrefix` is masked **last-4**. **Guards M10.**
+- **TC-PROV-05 — Disable removes from available.** E: gone from list after `isEnabled:false`.
+- **TC-PROV-06 — Default toggle atomic.** S: set provider B default for COPY. E: only one default per slot. **Guards M1.**
+
+### J. MCP / ACP surface
+
+- **TC-ACP-01 — No key → 401.** S: GET `/api/acp/manifest`, POST `/api/acp/run` with no/empty/garbage key. E: 401 (fails closed). **Guards H1.**
+- **TC-ACP-02 — Valid key → manifest.** P: configured `BISTEC_API_KEYS`/admin key. E: 200 manifest.
+- **TC-ACP-03 — `run` input validation.** S: `generate_post`/`publish_post` with missing fields. E: 400. **Guards M6.**
+- **TC-ACP-04 — MCP system-user FK.** S: `generate_post` via MCP. E: Brief/Draft created with a real system user id (no FK violation). **Guards L1.**
+- **TC-ACP-05 — MCP getDraft signs exportUrl.** E: returned `exportUrl` is signed/fetchable. **Guards H10.**
+
+### K. Remediation regression suite (the just-completed work)
+
+These are the highest-value additions — they guard the H7/H9/H10/H11/H12 fixes specifically and need targeted setups.
+
+- **TC-REG-H7a — Concurrent refine, no duplicate revision numbers.** P: one EXPORTED draft. S: fire **N=10 parallel** POST `/refine` (mock agent, instant). E: all succeed; revisions have **distinct** sequential numbers 1..N (the `@@unique` + `$transaction` retry holds; no 500s). 
+- **TC-REG-H7b — Concurrent prompt version save.** S: fire 5 parallel POST `/prompts`. E: distinct versions, at most one 409, no 500. **Guards H7.**
+- **TC-REG-H7c — No PENDING orphan on crash-shaped failure.** Covered by TC-PUB-03; additionally assert DB has zero `PENDING` posts after the suite.
+- **TC-REG-H9 — Index presence + query plan.** S: `SELECT indexname FROM pg_indexes WHERE tablename='Post'`; optionally `EXPLAIN` the scheduler's due-query. E: `(status,scheduledAt)` and `(status,nextRetryAt)` indexes exist and the due-query uses an index (not Seq Scan) on a seeded large table. **Guards H9.**
+- **TC-REG-H10a — Public bucket anonymous read.** S: upload via `/briefs/images`; fetch the returned `url` with **no auth**. E: 200 + bytes. **Guards H10.**
+- **TC-REG-H10b — Private export not publicly readable.** S: take a draft's stored export key, GET `MINIO_ENDPOINT/exported-designs/<key>` **anonymously**. E: 403. The API's signed URL → 200. **Guards H10.**
+- **TC-REG-H10c — Legacy URL passthrough.** P: a draft row whose `exportUrl` is a full `http…` URL (pre-migration shape). S: GET `/api/drafts/[id]`. E: returned unchanged (no double-sign). **Guards H10 (`resolveExportUrl` passthrough).**
+- **TC-REG-H11a — Browser singleton reuse.** P: `MOCK_PUPPETEER=false`, real Chromium. S: 5 sequential exports. E: all succeed; (if observable) one Chromium process for the run, not five. **Guards H11.**
+- **TC-REG-H11b — Concurrency cap holds.** S: fire 8 parallel exports with `PUPPETEER_MAX_CONCURRENCY=2`. E: all complete successfully (semaphore queues, no OOM/crash). **Guards H11.**
+- **TC-REG-H11c — Relaunch after disconnect.** S: kill the Chromium process mid-run, then export again. E: next export relaunches and succeeds (no permanently-dead handle). **Guards H11.**
+- **TC-REG-H12a — Atomic claim, exactly-once.** P: one SCHEDULED post due now; **two** `runScheduledJobs()` invoked concurrently (import the function directly in a node test, two parallel calls). E: exactly **one** publishes; no double `platformId`. **Guards H12.**
+- **TC-REG-H12b — Backoff retry then terminal FAIL.** P: `MOCK_SOCIAL_FAIL=true`, a due post. S: run the scheduler repeatedly (advance `nextRetryAt`). E: status cycles SCHEDULED with growing `nextRetryAt`, `retryCount` increments to MAX (5), then terminal `FAILED`. **Guards H12.**
+- **TC-REG-H12c — Lease reclaim.** P: a post stuck in `PUBLISHING` with a lapsed `nextRetryAt` lease (simulate a dead worker). S: run scheduler. E: the post is reclaimed and processed. **Guards H12.**
+- **TC-REG-L2 — Shared helpers wired.** Static/build assertion: `src/lib/apiFetch.ts` and `src/lib/brandkit/systemContext.ts` exist and the 8/4 former copies are gone (`grep` guard in CI). **Guards L2.**
+
+### L. Critical UI browser flows (Playwright `page`, not just `request`)
+
+A thin layer of real-browser tests for the highest-risk UI regressions (the rest is API-covered above).
+
+- **TC-UI-01 — Login → dashboard.** Log in via the form, land on `/`, KPIs render (no 404 — the dashboard route exists).
+- **TC-UI-02 — Brief wizard 5-step happy path.** Walk Platform&Path → Campaign → Content → Images → Review → Generate; land on `/drafts/[id]` with a preview. (Path A blocks Continue until a template is chosen.)
+- **TC-UI-03 — Publish button actually publishes.** On a draft, click Publish → POST fires (not a navigation). **Guards H5.**
+- **TC-UI-04 — Draft preview image loads.** The `<img src={exportUrl}>` returns 200 (signed URL works end-to-end in the browser). **Guards H10.**
+- **TC-UI-05 — AGUI chat refine round-trip.** Type an instruction, see the preview update + a new revision in history.
+
+---
+
+## 7. Fixes required to the existing specs (before/while implementing)
+
+1. `path-a.test.ts` — assert `{draftId,exportUrl}` then `GET /api/drafts/[id]` for `status`/`htmlContent`/`imageUrl`.
+2. `publish.test.ts` — singular `channel`; expect `{postId,status}`; drop the array assumptions; add the FAIL→retry path.
+3. All generation/AGUI specs — wire the §3 mock hooks so they stop unconditionally skipping.
+4. `helpers/api.ts` — add `loginAs()` with isolated cookie jars for RBAC/IDOR tests (current module-level `sessionCookie` can't represent two users at once).
+5. Align ports: run the test app on `:3001` or set `TEST_BASE_URL=http://localhost:3000`.
+
+---
+
+## 8. Execution
+
+```bash
+# 1. infra
+docker compose up -d
+# 2. test DB + migrations + seed
+DATABASE_URL=...test npx prisma migrate deploy
+npm run db:seed
+# 3. build mock hooks (§3) — one-time dev task
+# 4. start the app against the test env on 3001
+PORT=3001 npm run dev   # (or `next start` against a prod build)
+# 5. run
+npx playwright test
+npx playwright show-report
+```
+
+CI gate (recommended): run §A–K with mocks on every PR; §L (browser) + CLI-mode smoke nightly. Block merge on §K (remediation regressions) failing.
+
+---
+
+## 9. Coverage traceability
+
+| Finding(s) | Guarded by |
+|---|---|
+| H1 ACP/MCP auth | TC-ACP-01/02/03 |
+| H2 IDOR | TC-AGUI-06, TC-LIB-01, ownership asserts across D/E/F |
+| H3 library leak | TC-LIB-01 |
+| H4 admin gating | TC-AUTH-05, TC-PUB-09, TC-BK-08, TC-RES-05 |
+| H5 publish button | TC-UI-03 |
+| H7 atomicity | TC-PUB-02/03, TC-REG-H7a/b/c |
+| H8 upload validation | TC-BK-07 |
+| H9 indexes | TC-REG-H9 |
+| H10 storage | TC-BK-04, TC-GEN-05, TC-PUB-08, TC-LIB-05, TC-ACP-05, TC-REG-H10a/b/c, TC-UI-04 |
+| H11 puppeteer | TC-REG-H11a/b/c |
+| H12 scheduler | TC-PUB-04, TC-REG-H12a/b/c |
+| H13 /api/me | TC-AUTH-04 |
+| M1 atomic default | TC-BK-02, TC-PROV-06 |
+| M4 soft-delete resolve | TC-RES-04 |
+| M5 artifact sync | TC-BK-06 |
+| M6 ACP validation | TC-ACP-03 |
+| M9 middleware prefix | TC-AUTH-07 |
+| M10 key prefix mask | TC-PROV-04 |
+| M11 bounded lists | TC-RES-06 |
+| M12 brief validation | TC-GEN-03/04 |
+| L1 IG header / system user | TC-ACP-04 |
+| L2 shared helpers | TC-REG-L2 |
+| Known Issue (oversized template) | TC-GEN-06 |
+
+> Items with no behavioral surface (M2 init race, M3 stdin, M7 polling, M8 crypto guards, M13 dead code) are best covered by unit tests; M7 polling can optionally be a UI test (draft auto-refresh while `IN_PROGRESS`).
