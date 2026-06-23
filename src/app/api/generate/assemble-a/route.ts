@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -48,18 +49,9 @@ export async function POST(req: NextRequest) {
   const copyText = await copyProvider.generateCopy(briefInput)
 
   // Build prompts
-  const colors = kit?.colors.join(', ') ?? 'not specified'
-  const fonts = kit?.fonts.map((f) => `${f.name} (${f.url})`).join(', ') ?? 'not specified'
-  const logoUrl = kit?.logoUrl ?? 'none'
-  const voicePrompt = kit?.voicePrompt ?? 'not specified'
-
   const systemPrompt = `You are a professional social media design agent. Your task is to fill an HTML/CSS brand template with the provided content.
 
-Brand kit:
-- Colors: ${colors}
-- Fonts: ${fonts}
-- Logo URL: ${logoUrl}
-- Brand voice: ${voicePrompt}
+${buildBrandKitSystemContext(kit)}
 
 Instructions:
 - Fill the template with the provided copy text. Replace placeholder text with the actual content.

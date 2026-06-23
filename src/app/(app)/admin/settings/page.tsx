@@ -5,6 +5,7 @@ import { Plus, Trash2, ToggleLeft, ToggleRight, Star, Instagram, Linkedin, Check
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { apiFetch } from '@/lib/apiFetch'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,12 +34,6 @@ interface ChannelMap {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function apiFetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.status === 204 ? null : res.json()
-}
 
 function detectProvider(key: string): { name: string; label: string } | null {
   if (key.startsWith('sk-ant-')) return { name: 'anthropic', label: 'Claude (Anthropic)' }

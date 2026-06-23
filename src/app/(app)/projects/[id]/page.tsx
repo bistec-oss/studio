@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface Project {
   id: string
@@ -15,12 +16,6 @@ interface Project {
   campaigns: Array<{
     campaign: { id: string; name: string; isDeleted: boolean }
   }>
-}
-
-async function apiFetch(url: string) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.json()
 }
 
 export default function ProjectDetailPage() {

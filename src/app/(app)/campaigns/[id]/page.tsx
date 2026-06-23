@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface Campaign {
   id: string
@@ -25,12 +26,6 @@ const SOURCE_LABEL: Record<string, string> = {
   campaign: 'Campaign override',
   project: 'Inherited from project',
   system: 'System default',
-}
-
-async function apiFetch(url: string) {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.json()
 }
 
 export default function CampaignDetailPage() {

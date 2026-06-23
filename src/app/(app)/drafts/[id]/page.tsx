@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
+import { apiFetch } from '@/lib/apiFetch'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,12 +71,6 @@ interface ConflictState {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function apiFetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.status === 204 ? null : res.json()
-}
 
 const CHANNEL_LIMITS: Record<string, number> = { INSTAGRAM: 2200, LINKEDIN: 3000 }
 

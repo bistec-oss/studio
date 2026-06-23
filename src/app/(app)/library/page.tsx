@@ -8,6 +8,7 @@ import { GlassInput } from '@/components/ui/GlassInput'
 import { PostCard } from '@/components/library/PostCard'
 import { PublishHistoryDrawer } from '@/components/library/PublishHistoryDrawer'
 import { cn } from '@/lib/utils'
+import { apiFetch } from '@/lib/apiFetch'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -271,8 +272,13 @@ export default function LibraryPage() {
     setPage(1)
   }, [activeStatus])
 
+  const prevFiltersRef = useRef({ activeStatus, search })
   useEffect(() => {
-    fetchLibrary(false)
+    const filtersChanged =
+      prevFiltersRef.current.activeStatus !== activeStatus ||
+      prevFiltersRef.current.search !== search
+    prevFiltersRef.current = { activeStatus, search }
+    fetchLibrary(!filtersChanged && page > 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStatus, search, page])
 
@@ -286,16 +292,8 @@ export default function LibraryPage() {
     setPage((p) => p + 1)
   }
 
-  // When page increments, append
-  const isFirstRender = useRef(true)
-  useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return }
-    if (page > 1) fetchLibrary(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page])
-
   async function handleRetry(postId: string) {
-    await fetch(`/api/posts/${postId}/publish`, { method: 'POST' })
+    await apiFetch(`/api/posts/${postId}/publish`, { method: 'POST' })
     fetchLibrary(false)
   }
 

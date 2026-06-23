@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { AgentToolLimitError } from '@/lib/agent/types'
 
@@ -68,18 +69,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     )
   }
 
-  const colors = kit.colors.join(', ') || 'none specified'
-  const fonts = kit.fonts.length > 0 ? kit.fonts.map((f) => `${f.name} (${f.url})`).join(', ') : 'system fonts'
-  const logoUrl = kit.logoUrl ?? 'none'
-  const voicePrompt = kit.voicePrompt ?? 'not specified'
-
   const systemPrompt = `You are a design refinement agent. Here is the current HTML design. Apply the user's instruction as a targeted edit — change only what the instruction requires and preserve everything else.
 
-Brand guidelines:
-- Colors: ${colors}
-- Fonts: ${fonts}
-- Logo URL: ${logoUrl}
-- Brand voice: ${voicePrompt}
+${buildBrandKitSystemContext(kit)}
 
 Compliance instructions:
 Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, 1080, 1080) as your final step to produce the finished PNG.

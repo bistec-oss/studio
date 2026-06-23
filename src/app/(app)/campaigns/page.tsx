@@ -6,6 +6,7 @@ import { Plus, Trash2, RotateCcw, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { apiFetch } from '@/lib/apiFetch'
 
 interface Campaign {
   id: string
@@ -14,12 +15,6 @@ interface Campaign {
   isDeleted: boolean
   brandKit: { id: string; name: string } | null
   _count: { briefs: number }
-}
-
-async function apiFetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.status === 204 ? null : res.json()
 }
 
 export default function CampaignsPage() {

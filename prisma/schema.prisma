@@ -81,6 +81,8 @@ model Session {
   userAgent String?
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {
@@ -98,6 +100,8 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Verification {
@@ -175,6 +179,9 @@ model Brief {
   referenceTemplate   BrandKitTemplate?  @relation("BriefReferenceTemplate", fields: [referenceTemplateId], references: [id])
   createdAt           DateTime           @default(now())
   drafts              Draft[]
+
+  @@index([userId])
+  @@index([campaignId])
 }
 
 model Draft {
@@ -192,6 +199,8 @@ model Draft {
   posts           Post[]
   revisions       DraftRevision[]
   campaigns       CampaignDraft[]
+
+  @@index([briefId])
 }
 
 model Post {
@@ -207,6 +216,10 @@ model Post {
   platformId  String?
   errorReason String?
   createdAt   DateTime   @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([draftId])
+  @@index([userId])
 }
 
 model BrandKit {
@@ -224,6 +237,8 @@ model BrandKit {
   templates BrandKitTemplate[]
   projects  Project[]           @relation("ProjectBrandKit")
   campaigns Campaign[]          @relation("CampaignBrandKit")
+
+  @@index([isDefault, isDeleted])
 }
 
 model BrandKitTemplate {
@@ -234,6 +249,8 @@ model BrandKitTemplate {
   htmlTemplate       String   @db.Text
   createdAt          DateTime @default(now())
   referencedByBriefs Brief[]  @relation("BriefReferenceTemplate")
+
+  @@index([brandKitId])
 }
 
 model BrandKitPrompt {
@@ -258,6 +275,8 @@ model BrandKitArtifact {
   url        String
   feedToAI   Boolean      @default(false)
   createdAt  DateTime     @default(now())
+
+  @@index([brandKitId])
 }
 
 model AvailableProvider {

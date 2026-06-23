@@ -2,22 +2,14 @@ import type { DesignOrchestrator } from '../../interfaces/DesignOrchestrator'
 import type { BriefInput } from '../../interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 
 function buildSystemPrompt(kit: Awaited<ReturnType<typeof resolveBrandKit>>): string {
   if (!kit) throw new Error('No brand kit resolved — brand kit is required for Path B generation')
 
-  const colors = kit.colors.join(', ')
-  const fonts = kit.fonts.length > 0 ? kit.fonts.map((f) => `${f.name} (${f.url})`).join(', ') : 'system fonts'
-  const logoUrl = kit.logoUrl ?? 'none'
-  const voicePrompt = kit.voicePrompt ?? 'not specified'
-
   return `You are a professional social media design agent. Your task is to create a complete, original HTML/CSS social media post design from scratch.
 
-Brand guidelines:
-- Colors: ${colors}
-- Fonts: ${fonts}
-- Logo URL: ${logoUrl}
-- Brand voice: ${voicePrompt}
+${buildBrandKitSystemContext(kit)}
 
 Design requirements:
 - Create a visually striking, on-brand social media post

@@ -5,6 +5,7 @@ import { Plus, Pencil, Trash2, ChevronRight, Star, Upload, ToggleLeft, ToggleRig
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { apiFetch } from '@/lib/apiFetch'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,14 +51,6 @@ const GOOGLE_FONTS = [
 
 function googleFontsUrl(name: string): string {
   return `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;500;600;700&display=swap`
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function apiFetch(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts)
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? res.statusText)
-  return res.status === 204 ? null : res.json()
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

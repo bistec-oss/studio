@@ -19,6 +19,7 @@ import {
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Select } from '@/components/ui/Select'
+import { apiFetch } from '@/lib/apiFetch'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -104,15 +105,6 @@ const SOURCE_LABEL: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function apiFetch<T>(url: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(url, opts)
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.message ?? body.error ?? res.statusText)
-  }
-  return res.status === 204 ? (null as T) : res.json()
-}
 
 // Shared card-button styling (selected vs idle), used across the picker steps.
 function cardCls(selected: boolean, extra = '') {

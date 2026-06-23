@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -67,11 +68,6 @@ export async function POST(req: NextRequest) {
   const copyText = await copyProvider.generateCopy(briefInput)
 
   // Build system prompt
-  const colors = kit.colors.join(', ')
-  const fonts = kit.fonts.length > 0 ? kit.fonts.map((f) => `${f.name} (${f.url})`).join(', ') : 'system fonts'
-  const logoUrl = kit.logoUrl ?? 'none'
-  const voicePrompt = kit.voicePrompt ?? 'not specified'
-
   const artifactLine = artifactUrls.length > 0
     ? `\n- Brand reference images: ${artifactUrls.join(', ')}`
     : ''
@@ -82,11 +78,7 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = `You are a professional social media design agent. Your task is to create a complete, original HTML/CSS social media post design from scratch.
 
-Brand guidelines:
-- Colors: ${colors}
-- Fonts: ${fonts}
-- Logo URL: ${logoUrl}
-- Brand voice: ${voicePrompt}${artifactLine}
+${buildBrandKitSystemContext(kit)}${artifactLine}
 
 Design requirements:
 - Create a visually striking, on-brand social media post
