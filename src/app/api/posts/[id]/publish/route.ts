@@ -44,6 +44,8 @@ export async function POST(
         publishedAt: new Date(),
         platformId,
         errorReason: null,
+        retryCount: 0,
+        nextRetryAt: null,
       },
     })
     return NextResponse.json({ postId: updated.id, status: updated.status })
@@ -51,7 +53,7 @@ export async function POST(
     if (err instanceof PublishError) {
       const updated = await prisma.post.update({
         where: { id: post.id },
-        data: { status: 'FAILED', errorReason: err.reason },
+        data: { status: 'FAILED', errorReason: err.reason, nextRetryAt: null },
       })
       return NextResponse.json({ postId: updated.id, status: updated.status })
     }

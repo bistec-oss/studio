@@ -32,6 +32,7 @@ enum Channel {
 enum PostStatus {
   PENDING
   SCHEDULED
+  PUBLISHING
   PUBLISHED
   FAILED
   CANCELLED
@@ -215,9 +216,12 @@ model Post {
   publishedAt DateTime?
   platformId  String?
   errorReason String?
+  retryCount  Int        @default(0)
+  nextRetryAt DateTime?
   createdAt   DateTime   @default(now())
 
   @@index([status, scheduledAt])
+  @@index([status, nextRetryAt])
   @@index([draftId])
   @@index([userId])
 }
