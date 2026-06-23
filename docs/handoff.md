@@ -40,7 +40,7 @@
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
-- `src/lib/crypto.ts` stub created (throws — to be implemented in Wave 6)
+- `src/lib/crypto.ts` — AES-256-GCM encrypt/decrypt implemented (`encryptApiKey` / `decryptApiKey`; key from `TOKEN_ENCRYPTION_KEY` env var)
 
 **Wave 3 details:**
 - `src/lib/storage/minio.ts` — S3-compatible client wrapping `@aws-sdk/client-s3`; `BUCKET_IMAGES` (7-day pre-signed URLs) / `BUCKET_EXPORTS` / `BUCKET_BRANDKITS`; `initBuckets()` idempotent
@@ -88,8 +88,6 @@ Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 - `src/providers/implementations/orchestrator/claude-html.ts` — `ClaudeHtmlOrchestrator` implementing `DesignOrchestrator`; wraps `runDesignAgent` with brand-aware system prompt; used by `resolveDesignOrchestrator()` in production
 - `src/providers/registry.ts` — `resolveDesignOrchestrator()` now returns `ClaudeHtmlOrchestrator` for `DESIGN_PROVIDER=claude-html` (default); Wave 3 stub removed
 - `src/app/api/generate/export/route.ts` — `POST /api/generate/export { draftId }`: short-circuits if `exportUrl` already set; otherwise re-renders `htmlContent` via Puppeteer → MinIO → updates `Draft.exportUrl` + `status: EXPORTED`
-
-**Next:** Wave 6 — T20 (admin provider settings UI), T21 (draft refinement UI + AGUI backend), T22 (E2E Playwright), T27 (Prisma migration), T28 (MCP server), T29 (ACP server). ⚠️ Stop before T21 and ask about model swap — see tasks.md note.
 
 ---
 
@@ -297,7 +295,7 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
-**Current specclaw phase:** Wave 3b complete → Wave 4 ready to begin
+**Specclaw status:** All 6 waves complete — v1 feature complete
 
 ---
 
@@ -307,11 +305,11 @@ The design orchestrator is NOT user-selectable — env-configured only.
 |---|---|---|
 | 1 ✅ | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation |
 | 2 ✅ | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
-| 3 | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
-| 3b | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
-| 4 | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
+| 3 ✅ | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
+| 3b ✅ | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
+| 4 ✅ | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
 | 5 ✅ | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
-| 6 | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
+| 6 ✅ | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).
 Start the Meta Business app registration **before** Wave 1 code begins — it blocks AC-3.
