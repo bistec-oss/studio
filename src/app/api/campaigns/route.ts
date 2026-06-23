@@ -10,6 +10,8 @@ export async function GET() {
     where: { isDeleted: false },
     include: {
       brandKit: { select: { id: true, name: true } },
+      // Project membership lets the brief wizard group campaigns by project.
+      projects: { select: { project: { select: { id: true, name: true } } } },
       _count: { select: { briefs: true } },
     },
     orderBy: { createdAt: 'desc' },
