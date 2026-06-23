@@ -2,22 +2,24 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ⏳ Outstanding work — START HERE (updated 2026-06-23)
+## ✅ Outstanding work — START HERE (updated 2026-06-23)
 
-A code review was completed and **22 of 28 remediation fixes are done** (pushed to `main`). **6 tasks remain** — full details, file refs, and rationale in **[`docs/code-review-findings.md`](docs/code-review-findings.md) → Remediation Status**.
+The code review is **fully remediated — all 28 fixes are done** (pushed to `main`). Full details, file refs, and rationale in **[`docs/code-review-findings.md`](docs/code-review-findings.md) → Remediation Status**.
 
-| ID | Remaining task | Model · Effort | Needs migration |
-|---|---|---|---|
-| H7 | Transaction atomicity (refine revision #, prompt version, posts) + `@@unique([draftId,revisionNumber])` | Opus · high | ✅ yes |
-| H9 | Prisma indexes: `Post(status,scheduledAt)`, FKs, `BrandKit(isDefault,isDeleted)` | Sonnet · medium | ✅ yes |
-| H12 | Scheduler atomic claim (`SKIP LOCKED`) + retry/backoff | Opus · high | ✅ yes |
-| H10 | Presigned-URL → store object key, sign at read time | Opus · high | architectural (~10 files) |
-| H11 | Puppeteer singleton browser + concurrency cap | Opus · high | no |
-| L2 | Extract shared `apiFetch` + `buildBrandKitSystemContext` | Sonnet · medium | no |
+The final 6 (the others landed earlier):
 
-**Recommended order:** migration trio **H7 + H9 + H12** first (best value/credit, one migration) → **H11** → **H10** (most expensive) → **L2**.
+| ID | Fix | Migration |
+|---|---|---|
+| H7 | Transaction atomicity — refine revision #, prompt version, posts create→publish wrapped in `$transaction` (P2002 → retry/409). Unique constraints already existed. | no |
+| H9 | Prisma indexes — `Post(status,scheduledAt)` + `(status,nextRetryAt)`, FK indexes, `BrandKit(isDefault,isDeleted)`. | `20260623153740_h9_indexes` |
+| H12 | Scheduler atomic claim (`FOR UPDATE SKIP LOCKED`) + `PUBLISHING` lease + exponential-backoff retry (`retryCount`/`nextRetryAt`). | `20260623154752_h12_scheduler_claim` |
+| H10 | Hybrid MinIO storage — public-read IMAGES/BRANDKITS buckets (stable URLs); private EXPORTS store object key, signed at read (`resolveExportUrl`). New `MINIO_PUBLIC_ENDPOINT` env. | no |
+| H11 | Puppeteer singleton browser + `p-limit` concurrency cap (`PUPPETEER_MAX_CONCURRENCY`, default 2). | no |
+| L2 | Shared `src/lib/apiFetch.ts` + `src/lib/brandkit/systemContext.ts`. | no |
 
-**🐛 Known bug:** Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails (`Prompt too large … 1899849 chars > 600000`) — the template inlines assets as `data:` URIs (1.81 MB). Workaround: use the **"Simple Gradient Card"** template (Bistec kit) or **Path B**. Fix: re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO URLs. (See findings doc → Known Issue.)
+> After pulling these, run `npx prisma migrate deploy` (or `migrate dev`) to apply the two new migrations before starting the app.
+
+**🐛 Known bug (still open):** Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails (`Prompt too large … 1899849 chars > 600000`) — the template inlines assets as `data:` URIs (1.81 MB). Workaround: use the **"Simple Gradient Card"** template (Bistec kit) or **Path B**. Fix: re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO URLs. (See findings doc → Known Issue.) Note: H10's public-bucket URLs now make externalized asset URLs stable, so this re-seed is the clean follow-up.
 
 > Before testing/running, follow `docs/cold-start.md` §0 preflight. Dev server runs on `http://localhost:3000`; CLI-mode generation (`DESIGN_PROVIDER=cli`) needs the seeded `cli` provider (`node --env-file=.env scripts/seed-cli-provider.mjs`).
 

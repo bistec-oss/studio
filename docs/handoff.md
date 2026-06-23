@@ -70,16 +70,16 @@
 > 3. Disable/remove the seeded CLI provider so it isn't auto-selected as default: in `/admin/settings` toggle it off, or run SQL `UPDATE "AvailableProvider" SET "isEnabled"=false WHERE "providerKey"='cli';` (or `DELETE … WHERE "providerKey"='cli';`). Set your real provider as `isDefault`.
 > 4. (Optional) The CLI files (`claudeCli.ts`, `designAgentCli.ts`, `copy/claude-cli.ts`, the `cli` cases in `registry.ts`, and the `CLI_MODE` branches in the assemble routes) are dormant when `DESIGN_PROVIDER!=='cli'` and can stay for future keyless testing, or be deleted to fully remove the path.
 
-**Code review + remediation — 2026-06-23 (on `main`):** A full optimization/security code review was run and is documented in **[`docs/code-review-findings.md`](code-review-findings.md)** (42 findings: 16 High / 20 Medium / 6 Low). Remediation is **in progress — 22 of 28 tracked fixes applied & pushed** across commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`.
+**Code review + remediation — 2026-06-23 (on `main`):** A full optimization/security code review was run and is documented in **[`docs/code-review-findings.md`](code-review-findings.md)** (42 findings: 16 High / 20 Medium / 6 Low). Remediation is **complete — all 28 tracked fixes applied & pushed**: the first 22 across commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`; the final 6 (H7, H9, H10, H11, H12, L2) in the follow-up batch (two new migrations: `20260623153740_h9_indexes`, `20260623154752_h12_scheduler_claim`).
 - **Fixed (highlights):** ACP/MCP auth bypass (`isValidKey` allow-list + `/api/acp` exempted from session middleware, fails closed); system-wide IDOR (`forbiddenIfNotOwner`/`getDraftOwnerId` on all draft/brief/generate routes); library ownership filter; campaign/project mutations admin-gated; Publish button wired (+ `GET /api/me` for server-side role); upload size/MIME validation; atomic `isDefault` toggles; MinIO init race; artifact-delete kit sync; ACP input validation; draft polling; decrypt guard + `BETTER_AUTH_SECRET` fail-fast; masked last-4 `keyPrefix`; bounded list queries; parallelized brief validation; Instagram token → `Authorization` header; MCP system-user FK fix; `getCurrentUser` role-casing normalised.
-- **Remaining (6) — see the [Remediation Status](code-review-findings.md#-remediation-status--updated-2026-06-23) table for model + effort per item:**
-  - **H7** transaction atomicity + `@@unique([draftId,revisionNumber])` — *needs migration* (Opus · high)
-  - **H9** Prisma indexes (`Post(status,scheduledAt)`, FKs, `BrandKit(isDefault,isDeleted)`) — *needs migration* (Sonnet · medium)
-  - **H12** scheduler atomic claim (`SKIP LOCKED`) + retry/backoff — *needs migration* (Opus · high)
-  - **H10** presigned-URL → store object key + sign at read — *architectural, ~10 files* (Opus · high)
-  - **H11** Puppeteer singleton + concurrency cap (Opus · high)
-  - **L2** extract shared `apiFetch` + `buildBrandKitSystemContext` (Sonnet · medium)
-  - Best value-per-credit next step: the **migration trio (H7+H9+H12)** in one unit. **H10** is the single most expensive remaining item.
+- **Final 6 (now done):**
+  - **H7** transaction atomicity — refine revision #, prompt version, posts create→publish wrapped in `$transaction` (P2002 → retry/409); the unique constraints already existed so no migration was needed.
+  - **H9** Prisma indexes — `Post(status,scheduledAt)` + `(status,nextRetryAt)`, FK indexes, `BrandKit(isDefault,isDeleted)` (migration `20260623153740_h9_indexes`).
+  - **H12** scheduler atomic claim (`FOR UPDATE SKIP LOCKED` + `PUBLISHING` lease) + exponential-backoff retry (`retryCount`/`nextRetryAt`, MAX 5); reuses the prisma singleton (migration `20260623154752_h12_scheduler_claim`).
+  - **H10** hybrid storage — IMAGES/BRANDKITS buckets are public-read (stable embeddable URLs); EXPORTS stays private, storing the object **key** and signing at read (`resolveExportUrl`); new `MINIO_PUBLIC_ENDPOINT` env. Runtime-verified against MinIO.
+  - **H11** Puppeteer singleton browser + page-per-render + relaunch-on-disconnect + `p-limit` cap (`PUPPETEER_MAX_CONCURRENCY`, default 2).
+  - **L2** shared `src/lib/apiFetch.ts` (8 copies removed) + `src/lib/brandkit/systemContext.ts` (4 copies removed); consolidated library fetch effects.
+  - **⚠️ Deploy note:** two new migrations — run `npx prisma migrate deploy` before starting the app.
 - **Deferred on purpose:** Anthropic client → module scope (would throw at import in CLI mode — keep per-request); `requireRole('editor')` rename (editor is the auth floor, not a bug); icon-button aria-labels (cosmetic).
 
 > ### 🐛 Known issue — oversized brand template breaks Path A
@@ -119,7 +119,7 @@ Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 - `scripts/seed-hearts-talk.mjs` — seeds the **"Hearts Talk"** brand kit (NOT default): navy/cyan/green palette, Orbitron + Poppins + Montserrat (Google Fonts), provisional voice prompt v1, a 1080×1080 HTML template, and LOGO artifacts. Reads assets from `scripts/seed-assets/` at runtime (`hearts-talk-1080x1080.html` required; `hearts-academy-logo.png` + `bistec-global-logo.png` optional). Logos are embedded as **`data:` URIs** (never expire, no MinIO needed). ⚠️ `hearts-academy-logo.png` is not yet present and `bistec-global-logo.png` is a best-guess copy — see `scripts/seed-assets/README.md`.
 - Run all via `npm run db:seed` (admin → Bistec → Hearts Talk; admin first so `createdBy` resolves) or individually with `node --env-file=.env scripts/<file>.mjs`. Requires `.env` with `DATABASE_URL` + `BETTER_AUTH_SECRET` and a running Postgres container.
 
-> **Known latent bug (not introduced by seeds):** the admin UI's logo/artifact upload routes (`/api/admin/brandkits/[id]/upload` + `/artifacts`) store **7-day presigned MinIO URLs** directly in `BrandKit.logoUrl` / `BrandKitArtifact.url`, so UI-uploaded logos break after ~7 days. Fix: regenerate presigned URLs on read, or store stable object keys. The Hearts Talk seed sidesteps this by embedding logos as `data:` URIs.
+> **~~Known latent bug~~ — FIXED by H10:** the admin UI's logo/artifact upload routes (`/api/admin/brandkits/[id]/upload` + `/artifacts`) previously stored **7-day presigned MinIO URLs** directly in `BrandKit.logoUrl` / `BrandKitArtifact.url`, so UI-uploaded logos broke after ~7 days. As of H10 these buckets are **public-read** and the routes store **stable public URLs** (`publicUrl()`), which never expire. (Legacy rows written before H10 still carry expiring URLs — re-upload to refresh them.)
 
 ### Testing kickoff prompt
 

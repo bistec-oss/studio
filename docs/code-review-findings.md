@@ -3,18 +3,18 @@
 **Date:** 2026-06-23
 **Scope:** Full system — 101 TypeScript files, 40 API routes, Prisma schema. Static analysis (read-only).
 **Method:** 6 parallel area reviewers (Sonnet, high effort) → Opus synthesis (dedup + rank). Single bounded pass to respect a credit budget; findings carry confidence flags and were **not** put through second-pass adversarial verification. The four headline security findings (ACP/MCP auth, draft IDOR, library ownership leak, dead Publish button) were spot-verified by hand against the source and confirmed.
-**Status:** ⚙️ **Remediation in progress — 22 of 28 tracked fixes applied & pushed (2026-06-23).** See **[Remediation Status](#-remediation-status--updated-2026-06-23)** below for what's done vs remaining (with models + effort). The original review text (Executive Summary onward) is preserved as the as-found snapshot.
+**Status:** ✅ **Remediation complete — all 28 tracked fixes applied & pushed (2026-06-23).** See **[Remediation Status](#-remediation-status--updated-2026-06-23)** below. The original review text (Executive Summary onward) is preserved as the as-found snapshot.
 
 **Findings:** 42 total — 🔴 16 High · 🟡 20 Medium · 🟢 6 Low.
 **Top themes:** Correctness (16) · Security (13) · Performance (14).
 
-> **Original posture (as found): At risk.** The headline security items (#1 ACP/MCP auth bypass, #2 system-wide IDOR, library ownership leak, dead Publish button) are now **fixed**. The remaining at-risk items are the **presigned-URL expiry (H10)**, **scheduler locking (H12)**, and **transaction atomicity (H7)** — still open (see Remediation Status).
+> **Original posture (as found): At risk.** All headline items are now **fixed** — the ACP/MCP auth bypass, system-wide IDOR, library ownership leak, dead Publish button, plus the final batch: presigned-URL expiry (H10), scheduler locking (H12), transaction atomicity (H7), Prisma indexes (H9), Puppeteer singleton (H11), and the shared-helper dedup (L2).
 
 ---
 
 ## ✅ Remediation Status — updated 2026-06-23
 
-**22 of 28 tracked fixes applied** and pushed to `main` (commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`). All batches typecheck clean; the security set was smoke-tested (admin retains access; ACP returns 401 without a configured key). IDs below are the remediation task IDs that map onto the findings.
+**All 28 tracked fixes applied** and pushed to `main`. The first 22 landed in commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`; the final 6 (H7, H9, H10, H11, H12, L2) in the Opus/Sonnet remediation batch (H9+L2, H7, H12, H11, H10). All batches typecheck clean and `next build` passes; the security set was smoke-tested (admin retains access; ACP returns 401 without a configured key) and the H10 storage model was runtime-verified against MinIO (public anonymous GET 200; private export 403 anonymous / 200 signed). IDs below are the remediation task IDs that map onto the findings.
 
 ### Completed (✅)
 | ID | Fix | Theme |
@@ -41,19 +41,17 @@
 | M12 | parallelized brief validation (`Promise.all`) + library `posts` `select` projection | Perf |
 | M13 | removed dead `uploadFile()` (broken IIFE) | Maintainability |
 | L1 | Instagram token → `Authorization: Bearer` header; MCP uses a real system-user id (FK fix) | Security |
+| H7 | Transaction atomicity — refine revision #, prompt version, and posts create→publish wrapped in `$transaction`; P2002 → retry/409. (`@@unique([draftId,revisionNumber])` already existed, so no migration was needed.) | Correctness |
+| H9 | Prisma indexes — `Post(status,scheduledAt)` + `(status,nextRetryAt)`, FK indexes (Post, Draft, Brief, Session, Account, BrandKitTemplate, BrandKitArtifact), `BrandKit(isDefault,isDeleted)`. Migration `20260623153740_h9_indexes`. | Performance |
+| H10 | Hybrid storage — public-read policy on IMAGES + BRANDKITS buckets (stable embeddable URLs); EXPORTS stays private, object **key** stored and signed at read (`resolveExportUrl`). ~17 write/read/publish sites updated. | Security/Durability |
+| H11 | Puppeteer singleton browser reused across renders (page-per-render), relaunch-on-disconnect, `p-limit` concurrency cap (`PUPPETEER_MAX_CONCURRENCY`, default 2). | Performance |
+| H12 | Scheduler atomic claim (`FOR UPDATE SKIP LOCKED` via `UPDATE … RETURNING`) with a `PUBLISHING` lease state + exponential-backoff retry (`retryCount`, `nextRetryAt`, MAX 5); reuses the prisma singleton. Migration `20260623154752_h12_scheduler_claim`. | Correctness |
+| L2 | Extracted shared `apiFetch` (`src/lib/apiFetch.ts`, replaced 8 copies) + `buildBrandKitSystemContext` (`src/lib/brandkit/systemContext.ts`, replaced 4 copies); consolidated library fetch effects. | Maintainability |
 | — | **bonus:** `getCurrentUser` role-casing normalised (`ADMIN`→`admin`) | Correctness |
 
-### Remaining (⬜) — with recommended model · effort
-| ID | Fix | Model · Effort | Notes |
-|---|---|---|---|
-| H7 | Transaction atomicity (refine revision #, prompt version, posts create→publish) + `@@unique([draftId, revisionNumber])` | **Opus · high** | needs a Prisma migration |
-| H9 | Indexes: `Post(status, scheduledAt)`, FK indexes, `BrandKit(isDefault, isDeleted)` | Sonnet · medium | needs a Prisma migration |
-| H12 | Scheduler atomic claim (`FOR UPDATE SKIP LOCKED`) + retry/backoff (`retryCount`, `nextRetryAt`) | **Opus · high** | needs a Prisma migration |
-| H10 | Presigned-URL → store the object **key**, sign at read time | **Opus · high** | architectural; ~10 files + frontend |
-| H11 | Puppeteer singleton browser + page pool + concurrency semaphore | **Opus · high** | one-file rewrite + a `p-limit` |
-| L2 | Extract shared `apiFetch` + `buildBrandKitSystemContext`; consolidate library fetch effects | Sonnet · medium | dedup churn, no behavior change |
+### Remaining (⬜)
 
-> **Cost note:** the migration trio (H7+H9+H12) is the best value-per-credit remaining (one migration, data-integrity + scheduler correctness). **H10 is the single most expensive item** (~half the remaining cost). H11/L2 are cheap.
+None — all 28 tracked fixes are complete.
 
 ### Deferred sub-items (intentional — do not "fix" blindly)
 - **Anthropic client → module scope** (a sub-item of M13): **NOT applied** — `new Anthropic({ apiKey: undefined })` throws at *import* time in CLI mode (`DESIGN_PROVIDER=cli`, no key), and the assemble routes import this module even in CLI mode. Per-request instantiation is required here.
