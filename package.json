@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "prepare": "husky install",
-    "mcp": "tsx src/mcp/server.ts"
+    "mcp": "tsx src/mcp/server.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:mock": "cross-env MOCK_AI=true MOCK_PUPPETEER=true MOCK_SOCIAL=true playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
@@ -29,10 +31,12 @@
     "tailwind-merge": "^2.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
     "autoprefixer": "^10.0.0",
+    "cross-env": "^10.1.0",
     "eslint": "^8.0.0",
     "eslint-config-next": "14",
     "husky": "^9.0.0",
