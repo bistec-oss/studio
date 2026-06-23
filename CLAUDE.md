@@ -20,8 +20,11 @@ Before building or modifying any page, read the design system:
 Before writing any backend code, API routes, Prisma models, or provider logic, read the design document:
 - **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — authoritative source for the Prisma schema, all API route contracts, the AI provider abstraction layer (`CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces), the Claude design agent harness, the Puppeteer renderer, MinIO integration, AGUI backend flow, provider registration encryption, and the full file/folder structure of the real app. Any implementation that touches data models, API routes, or provider logic must align with this document.
 
+### Code review & remediation status
+- **[`docs/code-review-findings.md`](docs/code-review-findings.md)** — full code review (42 findings) + **Remediation Status** (22/28 fixed as of 2026-06-23) with remaining items, their recommended model + effort, and a known issue (oversized "Hearts Talk" template breaks Path A). **Read this before picking up review/remediation work.**
+
 ### Specification & planning
-- **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, and v2 interoperability target
+- **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary
 - **[`.specclaw/changes/marketing-post-studio-v1/spec.md`](.specclaw/changes/marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements
 - **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — architecture, Prisma schema, API routes, provider abstraction layer, file tree
 - **[`.specclaw/changes/marketing-post-studio-v1/tasks.md`](.specclaw/changes/marketing-post-studio-v1/tasks.md)** — 28 tasks across 6 waves with estimates and dependencies

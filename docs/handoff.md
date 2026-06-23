@@ -70,6 +70,23 @@
 > 3. Disable/remove the seeded CLI provider so it isn't auto-selected as default: in `/admin/settings` toggle it off, or run SQL `UPDATE "AvailableProvider" SET "isEnabled"=false WHERE "providerKey"='cli';` (or `DELETE … WHERE "providerKey"='cli';`). Set your real provider as `isDefault`.
 > 4. (Optional) The CLI files (`claudeCli.ts`, `designAgentCli.ts`, `copy/claude-cli.ts`, the `cli` cases in `registry.ts`, and the `CLI_MODE` branches in the assemble routes) are dormant when `DESIGN_PROVIDER!=='cli'` and can stay for future keyless testing, or be deleted to fully remove the path.
 
+**Code review + remediation — 2026-06-23 (on `main`):** A full optimization/security code review was run and is documented in **[`docs/code-review-findings.md`](code-review-findings.md)** (42 findings: 16 High / 20 Medium / 6 Low). Remediation is **in progress — 22 of 28 tracked fixes applied & pushed** across commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`.
+- **Fixed (highlights):** ACP/MCP auth bypass (`isValidKey` allow-list + `/api/acp` exempted from session middleware, fails closed); system-wide IDOR (`forbiddenIfNotOwner`/`getDraftOwnerId` on all draft/brief/generate routes); library ownership filter; campaign/project mutations admin-gated; Publish button wired (+ `GET /api/me` for server-side role); upload size/MIME validation; atomic `isDefault` toggles; MinIO init race; artifact-delete kit sync; ACP input validation; draft polling; decrypt guard + `BETTER_AUTH_SECRET` fail-fast; masked last-4 `keyPrefix`; bounded list queries; parallelized brief validation; Instagram token → `Authorization` header; MCP system-user FK fix; `getCurrentUser` role-casing normalised.
+- **Remaining (6) — see the [Remediation Status](code-review-findings.md#-remediation-status--updated-2026-06-23) table for model + effort per item:**
+  - **H7** transaction atomicity + `@@unique([draftId,revisionNumber])` — *needs migration* (Opus · high)
+  - **H9** Prisma indexes (`Post(status,scheduledAt)`, FKs, `BrandKit(isDefault,isDeleted)`) — *needs migration* (Sonnet · medium)
+  - **H12** scheduler atomic claim (`SKIP LOCKED`) + retry/backoff — *needs migration* (Opus · high)
+  - **H10** presigned-URL → store object key + sign at read — *architectural, ~10 files* (Opus · high)
+  - **H11** Puppeteer singleton + concurrency cap (Opus · high)
+  - **L2** extract shared `apiFetch` + `buildBrandKitSystemContext` (Sonnet · medium)
+  - Best value-per-credit next step: the **migration trio (H7+H9+H12)** in one unit. **H10** is the single most expensive remaining item.
+- **Deferred on purpose:** Anthropic client → module scope (would throw at import in CLI mode — keep per-request); `requireRole('editor')` rename (editor is the auth floor, not a bug); icon-button aria-labels (cosmetic).
+
+> ### 🐛 Known issue — oversized brand template breaks Path A
+> Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails: `Prompt too large for CLI mode (1899849 chars > 600000)`. The template is **1.81 MB (~475k tokens)** because its assets are inlined as `data:` URIs — too large for a single-shot prompt (also exceeds the Anthropic API's ~200k context, so this is **not** CLI-specific). The 600k guard in `src/lib/agent/claudeCli.ts` is working as intended; the data is the problem.
+> **Workaround:** use the small **"Simple Gradient Card"** template (Bistec kit) for Path A, or use **Path B** (no template embedded).
+> **Fix:** re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO-hosted asset URLs instead of inlined `data:` URIs. Tracked in `docs/code-review-findings.md` → Known Issue.
+
 **Post-Wave-2 addition (out of band):**
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
