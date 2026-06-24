@@ -3,9 +3,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 
 interface Campaign {
@@ -15,6 +16,17 @@ interface Campaign {
   brandKit: { id: string; name: string } | null
   projects: Array<{ project: { id: string; name: string } }>
   _count: { briefs: number }
+}
+
+interface BrandKitOption {
+  id: string
+  name: string
+  previewColor: string
+}
+
+interface ProjectOption {
+  id: string
+  name: string
 }
 
 interface ResolvedKit {
@@ -34,6 +46,11 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [resolved, setResolved] = useState<ResolvedKit | null>(null)
   const [loading, setLoading] = useState(true)
+  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
+  const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [savingKit, setSavingKit] = useState(false)
+  const [savingProject, setSavingProject] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -51,6 +68,46 @@ export default function CampaignDetailPage() {
   }, [params.id, router])
 
   useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
+    apiFetch<ProjectOption[]>('/api/projects').then(setProjects).catch(console.error)
+    apiFetch<{ role: string }>('/api/me')
+      .then(u => setIsAdmin(u.role?.toLowerCase() === 'admin'))
+      .catch(() => setIsAdmin(false))
+  }, [])
+
+  async function updateBrandKit(value: string) {
+    setSavingKit(true)
+    try {
+      await apiFetch(`/api/campaigns/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandKitId: value || null }),
+      })
+      await fetchData()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to update brand kit')
+    } finally {
+      setSavingKit(false)
+    }
+  }
+
+  async function updateProject(value: string) {
+    setSavingProject(true)
+    try {
+      await apiFetch(`/api/campaigns/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        // API replaces project membership: '' clears it (standalone).
+        body: JSON.stringify({ projectId: value || '' }),
+      })
+      await fetchData()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to update project')
+    } finally {
+      setSavingProject(false)
+    }
+  }
 
   if (loading) {
     return <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8">Loading…</div>
@@ -140,16 +197,56 @@ export default function CampaignDetailPage() {
             </h3>
             <dl className="space-y-2 text-sm">
               <div>
+                <dt className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1.5">
+                  Project
+                  {savingProject && <Loader2 size={11} className="animate-spin" />}
+                </dt>
+                {isAdmin ? (
+                  <dd className="mt-1">
+                    <Select
+                      options={[
+                        { value: '', label: 'Standalone (no project)' },
+                        ...projects.map(p => ({ value: p.id, label: p.name })),
+                      ]}
+                      value={campaign.projects[0]?.project.id ?? ''}
+                      onChange={e => updateProject(e.target.value)}
+                      disabled={savingProject}
+                    />
+                  </dd>
+                ) : (
+                  <dd className="text-light-text dark:text-dark-text font-medium">
+                    {campaign.projects[0]?.project.name ?? 'Standalone'}
+                  </dd>
+                )}
+              </div>
+              <div>
                 <dt className="text-light-text-muted dark:text-dark-text-muted">Default tone</dt>
                 <dd className="text-light-text dark:text-dark-text font-medium capitalize">
                   {campaign.defaultTone ?? '—'}
                 </dd>
               </div>
               <div>
-                <dt className="text-light-text-muted dark:text-dark-text-muted">Brand kit override</dt>
-                <dd className="text-light-text dark:text-dark-text font-medium">
-                  {campaign.brandKit?.name ?? '—'}
-                </dd>
+                <dt className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1.5">
+                  Brand kit override
+                  {savingKit && <Loader2 size={11} className="animate-spin" />}
+                </dt>
+                {isAdmin ? (
+                  <dd className="mt-1">
+                    <Select
+                      options={[
+                        { value: '', label: 'No override (inherit / system default)' },
+                        ...brandKits.map(k => ({ value: k.id, label: k.name })),
+                      ]}
+                      value={campaign.brandKit?.id ?? ''}
+                      onChange={e => updateBrandKit(e.target.value)}
+                      disabled={savingKit}
+                    />
+                  </dd>
+                ) : (
+                  <dd className="text-light-text dark:text-dark-text font-medium">
+                    {campaign.brandKit?.name ?? '—'}
+                  </dd>
+                )}
               </div>
             </dl>
           </GlassPanel>

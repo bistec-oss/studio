@@ -6,6 +6,7 @@ import { Plus, Trash2, RotateCcw, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 
 interface Campaign {
@@ -17,11 +18,26 @@ interface Campaign {
   _count: { briefs: number }
 }
 
+interface BrandKitOption {
+  id: string
+  name: string
+  previewColor: string
+}
+
+interface ProjectOption {
+  id: string
+  name: string
+}
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newBrandKitId, setNewBrandKitId] = useState('')
+  const [newProjectId, setNewProjectId] = useState('')
+  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
+  const [projects, setProjects] = useState<ProjectOption[]>([])
   const [showDeleted, setShowDeleted] = useState(false)
 
   const fetchCampaigns = useCallback(async () => {
@@ -33,6 +49,19 @@ export default function CampaignsPage() {
   }, [])
 
   useEffect(() => { fetchCampaigns() }, [fetchCampaigns])
+  useEffect(() => {
+    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
+    apiFetch<ProjectOption[]>('/api/projects').then(setProjects).catch(console.error)
+  }, [])
+
+  const brandKitOptions = [
+    { value: '', label: 'No brand kit (inherit / system default)' },
+    ...brandKits.map(k => ({ value: k.id, label: k.name })),
+  ]
+  const projectOptions = [
+    { value: '', label: 'Standalone (no project)' },
+    ...projects.map(p => ({ value: p.id, label: p.name })),
+  ]
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
@@ -41,9 +70,13 @@ export default function CampaignsPage() {
       await apiFetch('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          brandKitId: newBrandKitId || undefined,
+          projectId: newProjectId || undefined,
+        }),
       })
-      setNewName(''); setCreating(false)
+      setNewName(''); setNewBrandKitId(''); setNewProjectId(''); setCreating(false)
       fetchCampaigns()
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
@@ -90,7 +123,7 @@ export default function CampaignsPage() {
 
       {creating && (
         <GlassPanel className="p-4 mb-4 animate-fade-in">
-          <form onSubmit={create} className="flex gap-3 items-end">
+          <form onSubmit={create} className="flex flex-col sm:flex-row gap-3 sm:items-end">
             <GlassInput
               label="Campaign name"
               value={newName}
@@ -99,8 +132,26 @@ export default function CampaignsPage() {
               className="flex-1"
               autoFocus
             />
-            <Button type="submit" disabled={!newName.trim()}>Create</Button>
-            <Button variant="ghost" type="button" onClick={() => { setCreating(false); setNewName('') }}>Cancel</Button>
+            <div className="sm:w-52">
+              <Select
+                label="Project"
+                options={projectOptions}
+                value={newProjectId}
+                onChange={e => setNewProjectId(e.target.value)}
+              />
+            </div>
+            <div className="sm:w-52">
+              <Select
+                label="Brand kit"
+                options={brandKitOptions}
+                value={newBrandKitId}
+                onChange={e => setNewBrandKitId(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={!newName.trim()}>Create</Button>
+              <Button variant="ghost" type="button" onClick={() => { setCreating(false); setNewName(''); setNewBrandKitId(''); setNewProjectId('') }}>Cancel</Button>
+            </div>
           </form>
         </GlassPanel>
       )}

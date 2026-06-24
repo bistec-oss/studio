@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     channels,
     designMode,
     campaignId,
+    brandKitId,
     copyProviderKey,
     imageProviderKey,
     additionalImageUrl,
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify referenced records in parallel (independent lookups).
-  const [copyProvider, imageProvider, campaign, template] = await Promise.all([
+  const [copyProvider, imageProvider, campaign, template, brandKit] = await Promise.all([
     prisma.availableProvider.findFirst({
       where: { providerKey: copyProviderKey, slot: 'COPY', isEnabled: true },
     }),
@@ -60,6 +61,9 @@ export async function POST(req: NextRequest) {
       : Promise.resolve(null),
     referenceTemplateId
       ? prisma.brandKitTemplate.findUnique({ where: { id: referenceTemplateId } })
+      : Promise.resolve(null),
+    brandKitId
+      ? prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
       : Promise.resolve(null),
   ])
 
@@ -75,6 +79,9 @@ export async function POST(req: NextRequest) {
   if (referenceTemplateId && !template) {
     return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
   }
+  if (brandKitId && !brandKit) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  }
 
   const brief = await prisma.brief.create({
     data: {
@@ -86,6 +93,7 @@ export async function POST(req: NextRequest) {
       channels,
       designMode: designMode as DesignMode,
       campaignId: campaignId ?? null,
+      brandKitId: brandKitId ?? null,
       copyProviderKey: copyProviderKey.trim(),
       imageProviderKey: imageProviderKey?.trim() ?? null,
       additionalImageUrl: additionalImageUrl ?? null,

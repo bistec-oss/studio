@@ -12,6 +12,11 @@ export interface DesignAgentOptions {
   briefId: string
   model?: string
   maxToolCalls?: number
+  // Placeholder token → original `data:` URI. When present, the runner restores
+  // these into the model's HTML before rendering (see lib/agent/inlineAssets.ts).
+  // Lets oversized templates be sent to the model with their inline assets
+  // stripped, then re-inlined for the final render.
+  inlineAssets?: Record<string, string>
 }
 
 export interface DesignAgentResult {

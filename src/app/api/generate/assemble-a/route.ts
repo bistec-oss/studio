@@ -7,7 +7,8 @@ import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
-import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
+import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
+import { extractInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
 
 const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
@@ -26,8 +27,17 @@ export async function POST(req: NextRequest) {
   const template = await prisma.brandKitTemplate.findUnique({ where: { id: templateId } })
   if (!template) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
 
-  // Resolve brand kit
-  const kit = await resolveBrandKit(brief.campaignId ?? undefined)
+  // If the brief pinned a brand kit, the template must belong to it — the wizard
+  // only offers templates from the selected kit, so a mismatch is a bad request.
+  if (brief.brandKitId && template.brandKitId !== brief.brandKitId) {
+    return NextResponse.json(
+      { error: 'Template does not belong to the brief\'s selected brand kit' },
+      { status: 400 }
+    )
+  }
+
+  // Resolve brand kit: explicit brief kit → campaign → project → system default.
+  const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
 
   // Generate copy inline (avoid HTTP round-trip)
   const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
@@ -49,6 +59,21 @@ export async function POST(req: NextRequest) {
   }
   const copyText = await copyProvider.generateCopy(briefInput)
 
+  // Externalize inline data: assets (e.g. base64 logos/backgrounds) before the
+  // template enters the prompt. The model sees compact placeholder tokens; the
+  // real assets are spliced back in just before rendering. Keeps oversized
+  // templates (e.g. "Hearts Talk", 1.81 MB) within the prompt/context limits.
+  const { html: slimTemplate, assets: inlineAssets } = extractInlineAssets(template.htmlTemplate)
+  const hasInlineAssets = Object.keys(inlineAssets).length > 0
+
+  const placeholderNote = hasInlineAssets
+    ? `\n- The template contains image placeholders like __INLINE_ASSET_0__ inside src="" or CSS url(). Keep every such token EXACTLY as-is — do not modify, remove, or replace them. They are restored to real images after rendering.`
+    : ''
+
+  const imageInstruction = brief.additionalImageUrl
+    ? `\n- A user-provided image is supplied (URL below). You MUST embed it in the template's primary photo/subject slot (e.g. the avatar/photo/headshot area), replacing whatever placeholder graphic — a decorative SVG, a coloured shape, or a sample photo — currently fills that slot. Use an <img> that covers the slot (object-fit: cover) or set it as that element's background-image. This specific URL is allowed.`
+    : ''
+
   // Build prompts
   const systemPrompt = `You are a professional social media design agent. Your task is to fill an HTML/CSS brand template with the provided content.
 
@@ -57,17 +82,17 @@ ${buildBrandKitSystemContext(kit)}
 Instructions:
 - Fill the template with the provided copy text. Replace placeholder text with the actual content.
 - Apply brand colors as CSS custom properties where appropriate.
-- If the design requires a raster image, call the generateImage tool. Otherwise use CSS gradients or SVG.
+- If the design requires a raster image (and none is provided), call the generateImage tool. Otherwise use CSS gradients or SVG.
 - Always call renderHtml as the final step to produce the PNG.
-- Output dimensions: 1080×1080 pixels.`
+- Output dimensions: 1080×1080 pixels.${imageInstruction}${placeholderNote}`
 
   const imageNote = brief.additionalImageUrl
-    ? `\nAdditional image URL to embed: ${brief.additionalImageUrl}`
+    ? `\nUser-provided image URL (embed this into the main photo/subject slot): ${brief.additionalImageUrl}`
     : ''
 
   const userMessage = `Here is the HTML template to fill:
 <template>
-${template.htmlTemplate}
+${slimTemplate}
 </template>
 
 Copy text: ${copyText}${imageNote}
@@ -76,13 +101,20 @@ Fill the template with this content. Replace all placeholder text with the copy.
 
   try {
     const result = CLI_MODE
-      ? await runDesignAgentCli({ systemPrompt, userMessage, briefId })
+      ? await runDesignAgentCli({
+          systemPrompt,
+          userMessage,
+          briefId,
+          inlineAssets,
+          cliInstruction: CLI_INSTRUCTION.templateFill,
+        })
       : await runDesignAgent({
           systemPrompt,
           userMessage,
           briefId,
           model: 'claude-haiku-4-5-20251001',
           maxToolCalls: 15,
+          inlineAssets,
         })
 
     const draft = await prisma.draft.create({

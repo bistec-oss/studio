@@ -17,9 +17,15 @@ The final 6 (the others landed earlier):
 | H11 | Puppeteer singleton browser + `p-limit` concurrency cap (`PUPPETEER_MAX_CONCURRENCY`, default 2). | no |
 | L2 | Shared `src/lib/apiFetch.ts` + `src/lib/brandkit/systemContext.ts`. | no |
 
-> After pulling these, run `npx prisma migrate deploy` (or `migrate dev`) to apply the two new migrations before starting the app.
+> After pulling these, run `npx prisma migrate deploy` (or `migrate dev`) to apply the new migrations before starting the app. As of 2026-06-24 there is a third migration, `20260624120000_brief_brandkit` (adds `Brief.brandKitId`).
 
-**🐛 Known bug (still open):** Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails (`Prompt too large … 1899849 chars > 600000`) — the template inlines assets as `data:` URIs (1.81 MB). Workaround: use the **"Simple Gradient Card"** template (Bistec kit) or **Path B**. Fix: re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO URLs. (See findings doc → Known Issue.) Note: H10's public-bucket URLs now make externalized asset URLs stable, so this re-seed is the clean follow-up.
+**✅ Brand-kit selection + Hearts Talk fix — 2026-06-24:** Three related changes landed:
+- **Oversized templates now work (Hearts Talk Path A fixed).** The orchestrator externalizes inline `data:` assets before the prompt and re-inlines them before render — see "Inline-asset externalization" below. The 600k CLI guard and the API's ~200k context are no longer hit; no re-seed needed.
+- **Brand kit is selectable per brief** (independent of campaign) and the template picker filters to the selected kit (Path A + Path B). New `Brief.brandKitId`; precedence is now **explicit brief kit → campaign → project → system default**.
+- **Brand kits are assignable on campaigns/projects** at create + edit (UI added; APIs already supported it). A campaign/project's assigned kit becomes the brief default; if none, the user picks one at the brief.
+
+### Inline-asset externalization (the Hearts Talk fix)
+`src/lib/agent/inlineAssets.ts` — `extractInlineAssets(html)` replaces every `data:` URI with a short `__INLINE_ASSET_n__` token (the model only ever sees the compact structural HTML — Hearts Talk shrinks 1.89 MB → 6.2 KB); `restoreInlineAssets(html, assets)` splices the originals back just before Puppeteer renders (byte-for-byte lossless). Threaded through `DesignAgentOptions.inlineAssets`, the CLI runner (`designAgentCli.ts`, with a template-fill instruction that tells Claude to preserve the placeholders), the API tool-use runner (`designAgent.ts`), and `assemble-a/route.ts`. Generic to any oversized template — not specific to Hearts Talk.
 
 > Before testing/running, follow `docs/cold-start.md` §0 preflight. Dev server runs on `http://localhost:3000`; CLI-mode generation (`DESIGN_PROVIDER=cli`) needs the seeded `cli` provider (`node --env-file=.env scripts/seed-cli-provider.mjs`).
 
@@ -68,7 +74,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 ## Architecture decisions to remember
 
 - All AI calls are **server-side only** — the browser never calls an AI API or Puppeteer directly
-- **Brand kit precedence:** Campaign kit → Project default → system default (`BrandKit.isDefault = true`)
+- **Brand kit precedence:** Explicit brief kit (`Brief.brandKitId`) → Campaign kit → Project default → system default (`BrandKit.isDefault = true`)
 - **AI provider resolution order:** Brief's chosen key → `AvailableProvider.isDefault` → env var fallback
 - **API keys** stored AES-256-GCM encrypted; only `keyPrefix` shown in UI after registration; full key never returned
 - **MinIO** served to browser via pre-signed URLs only — MinIO port never publicly exposed

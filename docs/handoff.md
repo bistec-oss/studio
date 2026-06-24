@@ -9,6 +9,25 @@
 
 ## Current status
 
+**Brand-kit selection + Hearts Talk fix — 2026-06-24 (on `main`):**
+- **Hearts Talk Path A fixed** via orchestrator-level inline-asset externalization (see Resolved note below). No re-seed required.
+- **Brand kit selectable per brief**, independent of campaign. New `Brief.brandKitId` (migration `20260624120000_brief_brandkit`); `resolveBrandKit(campaignId, brandKitId)` precedence is now **explicit brief kit → campaign → project → system default** (also honored by `toolGetBrandKitContext`). New `GET /api/brandkits` (non-admin list); `GET /api/templates?brandKitId=` filter; `POST /api/briefs` validates+stores `brandKitId`; `assemble-a` rejects a template that doesn't belong to the pinned kit.
+- **Brand kits assignable on campaigns/projects** at create + edit. Brand-kit `<Select>` added to the campaign/project create forms and admin-gated inline editors on both detail pages (the PATCH/POST routes already accepted `brandKitId`/`defaultBrandKitId`).
+- **Brief wizard reordered** to `Campaign → Platform & Design → Content → Images → Review`: the kit defaults from the campaign/project assignment (campaign/project tier only — a bare system default leaves it empty so the user picks), and the template + style-reference pickers filter to the selected kit on both paths.
+- **Deploy:** run `npx prisma migrate deploy` to apply the new migration, then restart the dev server (regenerated Prisma client).
+
+**Draft regeneration (copy + design) — 2026-06-24 (on `main`):** The draft page now offers independent **Regenerate** + one-click **Undo** for both copy and design.
+- `POST /api/drafts/[id]/regenerate-copy` (new) — re-runs the resolved copy provider against the brief, persists the new copy, and returns `{ copyText, previousCopyText }` for an immediate Undo. Design is untouched; an `EXPORTED` draft flips to `IN_PROGRESS` (a copy change invalidates the prior export, mirroring the PATCH route). Works for both paths.
+- `POST /api/drafts/[id]/regenerate-design` (new) — **Path B only** (returns `400 NOT_PATH_B` for a TEMPLATE draft). Runs the new design first (draft untouched on failure), then snapshots the *current* design as a `DraftRevision` (`instruction: "Design before regenerate"`) before pointing the draft at the new one — atomic, with the standard P2002 revision-number retry. Returns `{ exportUrl (signed), previousRevisionNumber }`; the snapshot is the Undo target and also shows in revision history.
+- `src/lib/agent/pathB.ts` (new) — extracted `buildBriefInput(brief)` and `runPathBDesign(brief, kit, copyText)` as the single source of truth for the Path B pipeline (CLI vs API dispatch), shared by `assemble-b`, `regenerate-copy`, and `regenerate-design` so they never drift. `assemble-b/route.ts` was slimmed to call it.
+- Draft-page UI (`src/app/(app)/drafts/[id]/page.tsx`) wires both: Regenerate copy + Undo (`previousCopyText`), and Regenerate design (Path-B-gated) + Undo design (restores the `previousRevisionNumber` snapshot).
+
+**E2E verification of the 2026-06-24 additions — 2026-06-24 (CLI mode, real generation, no mocks):** All new endpoints verified end-to-end against the running app (`DESIGN_PROVIDER=cli`, admin session):
+- `GET /api/brandkits` → 200, both kits + preview swatches; `GET /api/templates?brandKitId=` filters correctly (empty kit → `[]`).
+- `regenerate-copy` → 200, returns new + `previousCopyText`, persists, flips `EXPORTED→IN_PROGRESS`.
+- `regenerate-design` (Path B) → 200 (~51s), snapshots old design as `DraftRevision #1`, produces a real **2160×2160** PNG via Puppeteer→MinIO with an H10-signed read URL; output is on-brand and incorporates the regenerated copy. Path A draft → `400 NOT_PATH_B` (guard verified).
+- > ⚠️ **Dev-server gotcha (CLI mode):** after a long session of CLI-mode generation (hours; each generate spawns a `claude -p` subprocess), the Next.js dev compiler worker can wedge — newly-touched routes fail to compile with `Jest worker encountered N child process exceptions, exceeding retry limit` (instant HTTP 500), while already-compiled routes keep serving 200. `tsc --noEmit` stays clean (it's not a code error). **Fix: restart `npm run dev`.** Not a production concern (prod is a built image, not `next dev`).
+
 **Wave 5 — complete ✅**
 
 | Task | Status | Notes |
@@ -82,10 +101,9 @@
   - **⚠️ Deploy note:** two new migrations — run `npx prisma migrate deploy` before starting the app.
 - **Deferred on purpose:** Anthropic client → module scope (would throw at import in CLI mode — keep per-request); `requireRole('editor')` rename (editor is the auth floor, not a bug); icon-button aria-labels (cosmetic).
 
-> ### 🐛 Known issue — oversized brand template breaks Path A
-> Path A generation with the seeded **"Hearts Talk 1080×1080"** template fails: `Prompt too large for CLI mode (1899849 chars > 600000)`. The template is **1.81 MB (~475k tokens)** because its assets are inlined as `data:` URIs — too large for a single-shot prompt (also exceeds the Anthropic API's ~200k context, so this is **not** CLI-specific). The 600k guard in `src/lib/agent/claudeCli.ts` is working as intended; the data is the problem.
-> **Workaround:** use the small **"Simple Gradient Card"** template (Bistec kit) for Path A, or use **Path B** (no template embedded).
-> **Fix:** re-seed `scripts/seed-hearts-talk.mjs` with externalized MinIO-hosted asset URLs instead of inlined `data:` URIs. Tracked in `docs/code-review-findings.md` → Known Issue.
+> ### ✅ Resolved — oversized brand template (Hearts Talk) Path A — 2026-06-24
+> Previously, Path A with the seeded **"Hearts Talk 1080×1080"** template failed: `Prompt too large for CLI mode (1899849 chars > 600000)`. The template is 1.81 MB because its assets are inlined as `data:` URIs (also exceeds the Anthropic API's ~200k context — not CLI-specific).
+> **Fix (orchestrator-level, no re-seed):** the assemble pipeline now externalizes inline `data:` assets before the prompt is built and re-inlines them before render. `src/lib/agent/inlineAssets.ts` — `extractInlineAssets()` swaps each `data:` URI for a short `__INLINE_ASSET_n__` token (Hearts Talk: 1.89 MB → **6.2 KB**, well under the 600k guard and the API context); `restoreInlineAssets()` splices the originals back just before Puppeteer renders (verified **byte-for-byte lossless**). Threaded through `DesignAgentOptions.inlineAssets`, `designAgentCli.ts` (with a template-fill CLI instruction telling Claude to preserve the placeholders verbatim), `designAgent.ts` (restores before the `renderHtml` Puppeteer call), and `assemble-a/route.ts`. Generic to any oversized template.
 
 **Security review — 2026-06-23 (on `main`):** After all 6 waves + the code-review remediation, a focused security review (`/security-review`) was run over the full remediation changeset (the 9 commits ahead of `origin`: H7, H9, H10, H11, H12, L2 + prototype removal). Method: one discovery pass over all modified files, then independent false-positive verification of each candidate, reporting only findings at **confidence ≥ 8/10**.
 - **Outcome: no high-confidence vulnerabilities found — no security fixes required.** All high-risk areas were examined and cleared:

@@ -2,15 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
-import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
-import type { BriefInput } from '@/providers/interfaces/CopyProvider'
-import { runDesignAgent } from '@/lib/agent/designAgent'
-import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
+import { runPathBDesign, buildBriefInput } from '@/lib/agent/pathB'
 import { AgentToolLimitError } from '@/lib/agent/types'
-
-const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -23,8 +18,9 @@ export async function POST(req: NextRequest) {
   const forbidden = forbiddenIfNotOwner(user, brief.userId)
   if (forbidden) return forbidden
 
-  // Resolve brand kit (required for Path B)
-  const kit = await resolveBrandKit(brief.campaignId ?? undefined)
+  // Resolve brand kit (required for Path B):
+  // explicit brief kit → campaign → project → system default.
+  const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
   if (!kit) {
     return NextResponse.json(
       { code: 'NO_BRAND_KIT', message: 'No brand kit found — configure a brand kit for this campaign, project, or set a system default.' },
@@ -32,96 +28,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Fetch feed-to-AI artifact URLs
-  const artifacts = await prisma.brandKitArtifact.findMany({
-    where: { brandKitId: kit.id, feedToAI: true },
-    select: { url: true },
-  })
-  const artifactUrls = artifacts.map((a) => a.url)
-
-  // Optionally load reference template for style inspiration
-  let referenceTemplate: { htmlTemplate: string } | null = null
-  if (brief.referenceTemplateId) {
-    referenceTemplate = await prisma.brandKitTemplate.findUnique({
-      where: { id: brief.referenceTemplateId },
-      select: { htmlTemplate: true },
-    })
-  }
-
   // Generate copy
   const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
-  const briefImages = Array.isArray(brief.briefImages)
-    ? (brief.briefImages as Array<{ url: string; intent: string }>)
-    : []
-  const briefInput: BriefInput = {
-    topic: brief.topic,
-    description: brief.description ?? '',
-    goal: brief.goal,
-    tone: brief.tone,
-    channels: brief.channels,
-    designMode: brief.designMode,
-    copyProviderKey: brief.copyProviderKey ?? undefined,
-    imageProviderKey: brief.imageProviderKey ?? undefined,
-    additionalImageUrl: brief.additionalImageUrl ?? undefined,
-    briefImages: briefImages.length > 0 ? (briefImages as Array<{ url: string; intent: 'embed' | 'reference' }>) : undefined,
-    referenceTemplateId: brief.referenceTemplateId ?? undefined,
-  }
-  const copyText = await copyProvider.generateCopy(briefInput)
-
-  // Build system prompt
-  const artifactLine = artifactUrls.length > 0
-    ? `\n- Brand reference images: ${artifactUrls.join(', ')}`
-    : ''
-
-  const referenceTemplateLine = referenceTemplate
-    ? `\n- Style reference: the following template shows the visual style to inspire your design (do NOT fill or copy it — design from scratch): ${referenceTemplate.htmlTemplate}`
-    : ''
-
-  const systemPrompt = `You are a professional social media design agent. Your task is to create a complete, original HTML/CSS social media post design from scratch.
-
-${buildBrandKitSystemContext(kit)}${artifactLine}
-
-Design requirements:
-- Create a visually striking, on-brand social media post
-- Use the brand colors as CSS custom properties
-- Apply brand fonts via @font-face (use the provided URLs) or fall back to system fonts
-- If the logo URL is provided, include it in the design
-- Output dimensions: 1080×1080 pixels (square format)
-- Use CSS/SVG for backgrounds, shapes, and geometric elements where possible
-- Only call generateImage when authentic photographic imagery genuinely improves the design
-- Always call renderHtml as the final step to produce the finished PNG
-
-Image intent rules (IMPORTANT):
-- Images tagged "embed": YOU MUST include these in the HTML layout via <img> tags
-- Images tagged "reference": use for compositional inspiration only — do NOT embed as <img> tags${referenceTemplateLine}`
-
-  // Build user message
-  const imageSection = briefImages.length > 0
-    ? `\n\nProvided images (follow intent rules from system prompt):\n${briefImages.map((img) => `- ${img.url} (intent: ${img.intent})`).join('\n')}`
-    : ''
-
-  const userMessage = `Create a social media post for the following brief:
-
-Topic: ${brief.topic}
-Description: ${brief.description ?? 'none'}
-Goal: ${brief.goal}
-Tone: ${brief.tone}
-Channels: ${brief.channels.join(', ')}
-
-Copy text to use: ${copyText}${imageSection}
-
-Design a complete, original HTML/CSS post. Call renderHtml(html, 1080, 1080) as your final step.`
+  const copyText = await copyProvider.generateCopy(buildBriefInput(brief))
 
   try {
-    const result = CLI_MODE
-      ? await runDesignAgentCli({ systemPrompt, userMessage, briefId })
-      : await runDesignAgent({
-          systemPrompt,
-          userMessage,
-          briefId,
-          model: 'claude-sonnet-4-6',
-          maxToolCalls: 15,
-        })
+    const result = await runPathBDesign(brief, kit, copyText)
 
     const draft = await prisma.draft.create({
       data: {

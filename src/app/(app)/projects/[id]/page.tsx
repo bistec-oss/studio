@@ -3,9 +3,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Megaphone } from 'lucide-react'
+import { ArrowLeft, Megaphone, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 
 interface Project {
@@ -18,11 +19,20 @@ interface Project {
   }>
 }
 
+interface BrandKitOption {
+  id: string
+  name: string
+  previewColor: string
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
+  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [savingKit, setSavingKit] = useState(false)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -36,6 +46,28 @@ export default function ProjectDetailPage() {
   }, [params.id, router])
 
   useEffect(() => { fetchProject() }, [fetchProject])
+  useEffect(() => {
+    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
+    apiFetch<{ role: string }>('/api/me')
+      .then(u => setIsAdmin(u.role?.toLowerCase() === 'admin'))
+      .catch(() => setIsAdmin(false))
+  }, [])
+
+  async function updateBrandKit(value: string) {
+    setSavingKit(true)
+    try {
+      await apiFetch(`/api/projects/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ defaultBrandKitId: value || null }),
+      })
+      await fetchProject()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to update brand kit')
+    } finally {
+      setSavingKit(false)
+    }
+  }
 
   if (loading) {
     return <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8">Loading…</div>
@@ -91,10 +123,27 @@ export default function ProjectDetailPage() {
             </h3>
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="text-light-text-muted dark:text-dark-text-muted">Default brand kit</dt>
-                <dd className="text-light-text dark:text-dark-text font-medium">
-                  {project.defaultBrandKit?.name ?? '—'}
-                </dd>
+                <dt className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1.5">
+                  Default brand kit
+                  {savingKit && <Loader2 size={11} className="animate-spin" />}
+                </dt>
+                {isAdmin ? (
+                  <dd className="mt-1">
+                    <Select
+                      options={[
+                        { value: '', label: 'No default brand kit' },
+                        ...brandKits.map(k => ({ value: k.id, label: k.name })),
+                      ]}
+                      value={project.defaultBrandKit?.id ?? ''}
+                      onChange={e => updateBrandKit(e.target.value)}
+                      disabled={savingKit}
+                    />
+                  </dd>
+                ) : (
+                  <dd className="text-light-text dark:text-dark-text font-medium">
+                    {project.defaultBrandKit?.name ?? '—'}
+                  </dd>
+                )}
               </div>
               <div>
                 <dt className="text-light-text-muted dark:text-dark-text-muted">Default tone</dt>

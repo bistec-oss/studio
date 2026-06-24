@@ -36,8 +36,17 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
     )
   }
 
+  // CLI mode authenticates via the developer's local Claude Code (claude.ai)
+  // login — the whole point is keyless operation. If ANTHROPIC_API_KEY (or an
+  // auth token) is present in the server env, the spawned `claude` CLI prefers
+  // it as the auth source; an invalid/placeholder key then makes `claude -p`
+  // exit 1. Strip those vars from the child env so it uses the logged-in session.
+  const childEnv = { ...process.env }
+  delete childEnv.ANTHROPIC_API_KEY
+  delete childEnv.ANTHROPIC_AUTH_TOKEN
+
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(cmd, ["-p"], { shell, windowsHide: true })
+    const child = spawn(cmd, ["-p"], { shell, windowsHide: true, env: childEnv })
 
     let stdout = ""
     let stderr = ""

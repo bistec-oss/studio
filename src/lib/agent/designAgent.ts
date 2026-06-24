@@ -3,6 +3,7 @@ import type { MessageParam, ToolUseBlock, ToolResultBlockParam, Tool } from "@an
 import type { DesignAgentOptions, DesignAgentResult } from "./types"
 import { AgentToolLimitError } from "./types"
 import { toolGenerateImage, toolRenderHtml, toolGetBrandKitContext } from "./tools"
+import { restoreInlineAssets, missingTokens } from "./inlineAssets"
 import { MOCK_AI, buildMockHtml, buildMockConflict } from "@/lib/testHooks"
 
 const TOOL_DEFINITIONS: Tool[] = [
@@ -87,6 +88,7 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     briefId,
     model = "claude-sonnet-4-6",
     maxToolCalls = 15,
+    inlineAssets,
   } = options
 
   // Test seam: skip the Anthropic tool-use loop entirely. Emits deterministic
@@ -126,7 +128,7 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
       // No more tool calls — agent is done
       const textBlock = response.content.find((b) => b.type === "text")
       if (textBlock && "text" in textBlock && lastHtml === "") {
-        lastHtml = textBlock.text
+        lastHtml = restoreInlineAssets(textBlock.text, inlineAssets)
       }
       break
     }
@@ -143,6 +145,17 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     for (const block of toolUseBlocks) {
       toolCallCount++
       try {
+        // Re-inline any externalized assets before rendering, so the model never
+        // had to carry the (huge) inline data and the PNG still matches the template.
+        if (block.name === "renderHtml" && inlineAssets) {
+          const html = (block.input as { html: string }).html
+          const dropped = missingTokens(html, inlineAssets)
+          if (dropped.length > 0) {
+            console.warn(`[designAgent] model dropped ${dropped.length} asset placeholder(s): ${dropped.join(", ")}`)
+          }
+          ;(block.input as { html: string }).html = restoreInlineAssets(html, inlineAssets)
+        }
+
         const result = await executeTool(block.name, block.input as ToolInput, briefId)
 
         if (block.name === "renderHtml") {

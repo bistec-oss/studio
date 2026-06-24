@@ -12,7 +12,6 @@ import {
   X,
   Image as ImageIcon,
   Link as LinkIcon,
-  Layers,
   Loader2,
   Check,
 } from 'lucide-react'
@@ -56,6 +55,12 @@ interface Template {
   previewColor: string
 }
 
+interface BrandKitOption {
+  id: string
+  name: string
+  previewColor: string
+}
+
 interface ResolvedKit {
   id: string
   name: string
@@ -79,7 +84,9 @@ interface UploadedImage {
 // Constants
 // ---------------------------------------------------------------------------
 
-const STEPS = ['Platform & Path', 'Campaign', 'Content', 'Images', 'Review']
+// Campaign comes first so its assigned brand kit (campaign → project) can default
+// the brand-kit selection on the next step, which in turn filters the templates.
+const STEPS = ['Campaign', 'Platform & Design', 'Content', 'Images', 'Review']
 
 const GOAL_OPTIONS = [
   { value: 'awareness', label: 'Awareness' },
@@ -97,6 +104,7 @@ const TONE_OPTIONS = [
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
+  explicit: 'Selected for this post',
   campaign: 'Campaign override',
   project: 'Inherited from project',
   system: 'System default',
@@ -216,19 +224,21 @@ export default function NewBriefPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Step 0 — Platform & Path
-  const [channels, setChannels] = useState<Channel[]>(['instagram'])
-  const [designMode, setDesignMode] = useState<DesignMode>('TEMPLATE')
-  const [templateId, setTemplateId] = useState('')
-  const [referenceTemplateId, setReferenceTemplateId] = useState('')
-  const [templates, setTemplates] = useState<Template[]>([])
-
-  // Step 1 — Campaign
+  // Step 0 — Campaign
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [campaignId, setCampaignId] = useState('')
   const [resolvedKit, setResolvedKit] = useState<ResolvedKit | null>(null)
   const [kitLoading, setKitLoading] = useState(false)
+
+  // Step 1 — Platform & Design
+  const [channels, setChannels] = useState<Channel[]>(['instagram'])
+  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
+  const [brandKitId, setBrandKitId] = useState('')
+  const [designMode, setDesignMode] = useState<DesignMode>('TEMPLATE')
+  const [templateId, setTemplateId] = useState('')
+  const [referenceTemplateId, setReferenceTemplateId] = useState('')
+  const [templates, setTemplates] = useState<Template[]>([])
 
   // Step 2 — Content
   const [prompt, setPrompt] = useState('')
@@ -249,6 +259,7 @@ export default function NewBriefPage() {
     apiFetch<Template[]>('/api/templates').then(setTemplates).catch(console.error)
     apiFetch<Campaign[]>('/api/campaigns').then(setCampaigns).catch(console.error)
     apiFetch<Project[]>('/api/projects').then(setProjects).catch(console.error)
+    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
 
     Promise.all([
       apiFetch<Provider[]>('/api/providers/available?slot=COPY').catch(() => [] as Provider[]),
@@ -262,6 +273,15 @@ export default function NewBriefPage() {
     })
   }, [])
 
+  // Keep template selections consistent with the chosen brand kit: any template
+  // that doesn't belong to the selected kit is cleared.
+  useEffect(() => {
+    if (!brandKitId) return
+    const belongs = (id: string) => templates.find(t => t.id === id)?.brandKitId === brandKitId
+    setTemplateId(prev => (prev && !belongs(prev) ? '' : prev))
+    setReferenceTemplateId(prev => (prev && !belongs(prev) ? '' : prev))
+  }, [brandKitId, templates])
+
   // ── Brand kit resolution on campaign change ────────────────────────────
   const resolveKit = useCallback(async (id: string) => {
     if (!id) {
@@ -274,6 +294,12 @@ export default function NewBriefPage() {
         `/api/campaigns/${id}/brandkit`,
       )
       setResolvedKit(kit ? { ...kit, source: source ?? 'system' } : null)
+      // Default the brief's brand kit from the campaign/project assignment only.
+      // A bare system-default (or no kit) leaves the selection empty so the user
+      // explicitly chooses one on the next step.
+      if (kit && (source === 'campaign' || source === 'project')) {
+        setBrandKitId(kit.id)
+      }
     } catch (e) {
       console.error(e)
       setResolvedKit(null)
@@ -335,10 +361,26 @@ export default function NewBriefPage() {
     )
   }
 
+  // ── Derived ────────────────────────────────────────────────────────────
+  // Templates filter to the selected brand kit (both Path A + Path B reference).
+  const visibleTemplates = brandKitId
+    ? templates.filter(t => t.brandKitId === brandKitId)
+    : templates
+
+  const brandKitOptions = [
+    { value: '', label: 'Select a brand kit…' },
+    ...brandKits.map(k => ({ value: k.id, label: k.name })),
+  ]
+
   // ── Per-step validation ────────────────────────────────────────────────
   function stepValid(s: number): boolean {
-    if (s === 0) return channels.length > 0 && (designMode === 'GENERATE' || templateId !== '')
-    if (s === 1) return true // Uncategorized is valid
+    if (s === 0) return true // campaign is optional (Uncategorized is valid)
+    if (s === 1)
+      return (
+        channels.length > 0 &&
+        brandKitId !== '' &&
+        (designMode === 'GENERATE' || templateId !== '')
+      )
     if (s === 2) return prompt.trim().length > 10
     if (s === 3) return !uploading
     return true
@@ -361,6 +403,7 @@ export default function NewBriefPage() {
         channels,
         designMode,
         campaignId: campaignId || undefined,
+        brandKitId: brandKitId || undefined,
         copyProviderKey,
         imageProviderKey: imageProviderKey || undefined,
         briefImages: images.length > 0 ? images.map(({ url, intent, filename }) => ({ url, intent, filename })) : undefined,
@@ -409,6 +452,7 @@ export default function NewBriefPage() {
   const selectedCampaign = campaigns.find(c => c.id === campaignId) ?? null
   const selectedTemplate = templates.find(t => t.id === templateId) ?? null
   const selectedRefTemplate = templates.find(t => t.id === referenceTemplateId) ?? null
+  const selectedBrandKit = brandKits.find(k => k.id === brandKitId) ?? null
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -423,14 +467,103 @@ export default function NewBriefPage() {
       <GlassPanel className="p-6">
         <Stepper step={step} onJump={setStep} />
 
-        {/* ============================ Step 0 — Platform & Path ============= */}
+        {/* ============================ Step 0 — Campaign =================== */}
         {step === 0 && (
           <div>
+            <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">Select Campaign</h2>
+            <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-5">
+              Group this post under a campaign. Its brand kit (or the parent project&apos;s) becomes the
+              default on the next step — you can still change it.
+            </p>
+
+            {/* Resolved brand-kit banner */}
+            {campaignId && (
+              <div className="flex items-center gap-2.5 mb-4 p-3 rounded-xl bg-primary/8 dark:bg-primary-light/10 border border-primary/20 dark:border-primary-light/20">
+                {kitLoading ? (
+                  <span className="text-sm text-light-text-muted dark:text-dark-text-muted flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin" /> Resolving brand kit…
+                  </span>
+                ) : resolvedKit ? (
+                  <>
+                    <span className="text-sm font-semibold text-primary dark:text-primary-light">{resolvedKit.name}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[0.62rem] font-semibold bg-white/50 dark:bg-white/10 text-light-text-muted dark:text-dark-text-muted">
+                      {SOURCE_LABEL[resolvedKit.source] ?? resolvedKit.source}
+                    </span>
+                    <span className="text-xs text-light-text-muted dark:text-dark-text-muted ml-auto">Default for this post</span>
+                  </>
+                ) : (
+                  <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No brand kit resolved.</span>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              {/* Uncategorized */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCampaignId('')
+                  setResolvedKit(null)
+                }}
+                className={cardCls(campaignId === '', 'w-full flex items-center gap-3 p-3.5')}
+              >
+                <span className="w-3 h-3 rounded border-2 border-dashed border-light-text-muted dark:border-dark-text-muted flex-shrink-0" />
+                <span className="flex-1">
+                  <span className={['block text-sm font-semibold', campaignId === '' ? 'text-primary dark:text-primary-light' : 'text-light-text dark:text-dark-text'].join(' ')}>
+                    No campaign (Uncategorized)
+                  </span>
+                  <span className="block text-xs text-light-text-muted dark:text-dark-text-muted">
+                    Pick a brand kit yourself on the next step.
+                  </span>
+                </span>
+                {campaignId === '' && <Check size={15} className="text-primary dark:text-primary-light flex-shrink-0" />}
+              </button>
+
+              {/* Grouped by project */}
+              {projectsWithCampaigns.map(({ project, campaigns: pcs }) => (
+                <div key={project.id}>
+                  <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+                    {project.name}
+                  </div>
+                  {pcs.map(c => (
+                    <CampaignRow
+                      key={c.id}
+                      campaign={c}
+                      selected={campaignId === c.id}
+                      onSelect={() => selectCampaign(c.id)}
+                    />
+                  ))}
+                </div>
+              ))}
+
+              {/* Standalone */}
+              {standaloneCampaigns.length > 0 && (
+                <div>
+                  <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+                    Standalone
+                  </div>
+                  {standaloneCampaigns.map(c => (
+                    <CampaignRow
+                      key={c.id}
+                      campaign={c}
+                      selected={campaignId === c.id}
+                      onSelect={() => selectCampaign(c.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ====================== Step 1 — Platform & Design =============== */}
+        {step === 1 && (
+          <div>
             <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">
-              Platform &amp; Generation Path
+              Platform &amp; Design
             </h2>
             <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-6">
-              Choose where this post will be published and how the design is generated.
+              Choose where this post will be published, which brand kit to use, and how the design is generated.
             </p>
 
             {/* Channels (multi-select) */}
@@ -460,6 +593,24 @@ export default function NewBriefPage() {
               </div>
               {channels.length === 0 && (
                 <p className="text-xs text-red-500 dark:text-red-400 mt-2">Select at least one platform.</p>
+              )}
+            </div>
+
+            {/* Brand kit */}
+            <div className="mb-6">
+              <FieldLabel>Brand Kit</FieldLabel>
+              <Select
+                options={brandKitOptions}
+                value={brandKitId}
+                onChange={e => setBrandKitId(e.target.value)}
+              />
+              <p className="mt-1.5 text-xs text-light-text-muted dark:text-dark-text-muted">
+                {campaignId && resolvedKit && brandKitId === resolvedKit.id
+                  ? `Defaulted from “${selectedCampaign?.name ?? 'campaign'}” (${SOURCE_LABEL[resolvedKit.source] ?? resolvedKit.source}). Override here if needed.`
+                  : 'Templates below are filtered to the selected brand kit.'}
+              </p>
+              {brandKitId === '' && (
+                <p className="text-xs text-red-500 dark:text-red-400 mt-1">Select a brand kit to continue.</p>
               )}
             </div>
 
@@ -504,13 +655,17 @@ export default function NewBriefPage() {
             {designMode === 'TEMPLATE' && (
               <div className="mt-5">
                 <FieldLabel>Template</FieldLabel>
-                {templates.length === 0 ? (
+                {!brandKitId ? (
                   <div className="glass-input rounded-xl px-3 py-3 text-sm text-light-text-muted dark:text-dark-text-muted">
-                    No templates available. Add one under Admin → Brand Kits, or switch to Path B.
+                    Select a brand kit above to see its templates.
+                  </div>
+                ) : visibleTemplates.length === 0 ? (
+                  <div className="glass-input rounded-xl px-3 py-3 text-sm text-light-text-muted dark:text-dark-text-muted">
+                    This brand kit has no templates. Add one under Admin → Brand Kits, pick another kit, or switch to Path B.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {templates.map(t => (
+                    {visibleTemplates.map(t => (
                       <TemplateCard
                         key={t.id}
                         template={t}
@@ -543,7 +698,7 @@ export default function NewBriefPage() {
                     </span>
                     <span className="text-sm font-semibold text-light-text dark:text-dark-text">No reference</span>
                   </button>
-                  {templates.map(t => (
+                  {visibleTemplates.map(t => (
                     <TemplateCard
                       key={t.id}
                       template={t}
@@ -554,94 +709,6 @@ export default function NewBriefPage() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* ============================ Step 1 — Campaign =================== */}
-        {step === 1 && (
-          <div>
-            <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">Select Campaign</h2>
-            <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-5">
-              Group this post under a campaign. Brand kit and tone are auto-populated from the campaign or its parent project.
-            </p>
-
-            {/* Resolved brand-kit banner */}
-            {campaignId && (
-              <div className="flex items-center gap-2.5 mb-4 p-3 rounded-xl bg-primary/8 dark:bg-primary-light/10 border border-primary/20 dark:border-primary-light/20">
-                {kitLoading ? (
-                  <span className="text-sm text-light-text-muted dark:text-dark-text-muted flex items-center gap-2">
-                    <Loader2 size={14} className="animate-spin" /> Resolving brand kit…
-                  </span>
-                ) : resolvedKit ? (
-                  <>
-                    <span className="text-sm font-semibold text-primary dark:text-primary-light">{resolvedKit.name}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[0.62rem] font-semibold bg-white/50 dark:bg-white/10 text-light-text-muted dark:text-dark-text-muted">
-                      {SOURCE_LABEL[resolvedKit.source] ?? resolvedKit.source}
-                    </span>
-                    <span className="text-xs text-light-text-muted dark:text-dark-text-muted ml-auto">Auto-populated</span>
-                  </>
-                ) : (
-                  <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No brand kit resolved.</span>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              {/* Uncategorized */}
-              <button
-                type="button"
-                onClick={() => {
-                  setCampaignId('')
-                  setResolvedKit(null)
-                }}
-                className={cardCls(campaignId === '', 'w-full flex items-center gap-3 p-3.5')}
-              >
-                <span className="w-3 h-3 rounded border-2 border-dashed border-light-text-muted dark:border-dark-text-muted flex-shrink-0" />
-                <span className="flex-1">
-                  <span className={['block text-sm font-semibold', campaignId === '' ? 'text-primary dark:text-primary-light' : 'text-light-text dark:text-dark-text'].join(' ')}>
-                    No campaign (Uncategorized)
-                  </span>
-                  <span className="block text-xs text-light-text-muted dark:text-dark-text-muted">
-                    Uses the system default brand kit. Can be assigned later.
-                  </span>
-                </span>
-                {campaignId === '' && <Check size={15} className="text-primary dark:text-primary-light flex-shrink-0" />}
-              </button>
-
-              {/* Grouped by project */}
-              {projectsWithCampaigns.map(({ project, campaigns: pcs }) => (
-                <div key={project.id}>
-                  <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-                    {project.name}
-                  </div>
-                  {pcs.map(c => (
-                    <CampaignRow
-                      key={c.id}
-                      campaign={c}
-                      selected={campaignId === c.id}
-                      onSelect={() => selectCampaign(c.id)}
-                    />
-                  ))}
-                </div>
-              ))}
-
-              {/* Standalone */}
-              {standaloneCampaigns.length > 0 && (
-                <div>
-                  <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-                    Standalone
-                  </div>
-                  {standaloneCampaigns.map(c => (
-                    <CampaignRow
-                      key={c.id}
-                      campaign={c}
-                      selected={campaignId === c.id}
-                      onSelect={() => selectCampaign(c.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -754,6 +821,8 @@ export default function NewBriefPage() {
             </p>
 
             <div className="space-y-0">
+              <ReviewRow label="Campaign" value={selectedCampaign?.name ?? 'Uncategorized'} />
+              <ReviewRow label="Brand kit" value={selectedBrandKit?.name ?? '—'} />
               <ReviewRow label="Platforms" value={channels.map(c => (c === 'instagram' ? 'Instagram' : 'LinkedIn')).join(', ') || '—'} />
               <ReviewRow label="Path" value={`Path ${designMode === 'TEMPLATE' ? 'A — Template fill' : 'B — Freeform design'}`} />
               <ReviewRow
@@ -766,8 +835,6 @@ export default function NewBriefPage() {
                       : 'None'
                 }
               />
-              <ReviewRow label="Campaign" value={selectedCampaign?.name ?? 'Uncategorized'} />
-              {resolvedKit && <ReviewRow label="Brand kit" value={`${resolvedKit.name} (${SOURCE_LABEL[resolvedKit.source] ?? resolvedKit.source})`} />}
               <ReviewRow label="Goal" value={goal} />
               <ReviewRow label="Tone" value={tone} />
               <ReviewRow

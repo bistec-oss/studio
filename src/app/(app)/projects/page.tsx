@@ -6,6 +6,7 @@ import { Plus, Trash2, RotateCcw, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 
 interface Project {
@@ -17,11 +18,19 @@ interface Project {
   _count: { campaigns: number }
 }
 
+interface BrandKitOption {
+  id: string
+  name: string
+  previewColor: string
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
+  const [newBrandKitId, setNewBrandKitId] = useState('')
+  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
   const [showDeleted, setShowDeleted] = useState(false)
 
   const fetchProjects = useCallback(async () => {
@@ -33,6 +42,14 @@ export default function ProjectsPage() {
   }, [])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
+  useEffect(() => {
+    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
+  }, [])
+
+  const brandKitOptions = [
+    { value: '', label: 'No default brand kit' },
+    ...brandKits.map(k => ({ value: k.id, label: k.name })),
+  ]
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
@@ -41,9 +58,9 @@ export default function ProjectsPage() {
       await apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({ name: newName.trim(), defaultBrandKitId: newBrandKitId || undefined }),
       })
-      setNewName(''); setCreating(false)
+      setNewName(''); setNewBrandKitId(''); setCreating(false)
       fetchProjects()
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
@@ -90,7 +107,7 @@ export default function ProjectsPage() {
 
       {creating && (
         <GlassPanel className="p-4 mb-4 animate-fade-in">
-          <form onSubmit={create} className="flex gap-3 items-end">
+          <form onSubmit={create} className="flex flex-col sm:flex-row gap-3 sm:items-end">
             <GlassInput
               label="Project name"
               value={newName}
@@ -99,8 +116,18 @@ export default function ProjectsPage() {
               className="flex-1"
               autoFocus
             />
-            <Button type="submit" disabled={!newName.trim()}>Create</Button>
-            <Button variant="ghost" type="button" onClick={() => { setCreating(false); setNewName('') }}>Cancel</Button>
+            <div className="sm:w-64">
+              <Select
+                label="Default brand kit"
+                options={brandKitOptions}
+                value={newBrandKitId}
+                onChange={e => setNewBrandKitId(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={!newName.trim()}>Create</Button>
+              <Button variant="ghost" type="button" onClick={() => { setCreating(false); setNewName(''); setNewBrandKitId('') }}>Cancel</Button>
+            </div>
           </form>
         </GlassPanel>
       )}

@@ -166,6 +166,8 @@ model Brief {
   user                User               @relation(fields: [userId], references: [id])
   campaignId          String?
   campaign            Campaign?          @relation(fields: [campaignId], references: [id])
+  brandKitId          String?
+  brandKit            BrandKit?          @relation("BriefBrandKit", fields: [brandKitId], references: [id])
   topic               String
   description         String?
   goal                String
@@ -183,6 +185,7 @@ model Brief {
 
   @@index([userId])
   @@index([campaignId])
+  @@index([brandKitId])
 }
 
 model Draft {
@@ -241,6 +244,7 @@ model BrandKit {
   templates BrandKitTemplate[]
   projects  Project[]           @relation("ProjectBrandKit")
   campaigns Campaign[]          @relation("CampaignBrandKit")
+  briefs    Brief[]             @relation("BriefBrandKit")
 
   @@index([isDefault, isDeleted])
 }

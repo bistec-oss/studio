@@ -7,9 +7,13 @@ import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
+import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
+import { extractInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
 
 export const maxDuration = 120
+
+const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
 interface PendingConflict {
   conflictId: string
@@ -62,12 +66,54 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return commitRevision(draft.id, draft.brief.id, instruction || 'Override brand kit conflict', pending.pendingHtml)
   }
 
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined)
+  // Explicit brief kit → campaign → project → system default.
+  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
   if (!kit) {
     return NextResponse.json(
       { code: 'NO_BRAND_KIT', message: 'No brand kit found for this draft.' },
       { status: 422 }
     )
+  }
+
+  // Externalize inline data: assets in the current HTML before the model sees it,
+  // so refining an asset-heavy draft (e.g. Hearts Talk, 1.81 MB) stays within the
+  // CLI prompt guard and the API context. Restored before render.
+  const { html: slimHtml, assets: inlineAssets } = extractInlineAssets(
+    draft.htmlContent ?? ''
+  )
+  const hasInlineAssets = Object.keys(inlineAssets).length > 0
+  const placeholderNote = hasInlineAssets
+    ? `\n\nThe HTML contains image placeholders like __INLINE_ASSET_0__ inside src="" or CSS url(). Keep every such token EXACTLY as-is — they are restored to real images after rendering.`
+    : ''
+
+  const userMessage = `Current HTML design:
+
+${draft.htmlContent ? slimHtml : '(no current HTML — start from a blank 1080×1080 canvas)'}
+
+Instruction: ${instruction}`
+
+  const model = draft.brief.designMode === 'TEMPLATE' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
+
+  // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic API,
+  // no API key). Conflict-card detection is an API-mode feature; CLI mode applies
+  // the edit directly.
+  if (CLI_MODE) {
+    const cliSystemPrompt = `You are a design refinement agent. Apply the user's instruction as a targeted edit to the HTML, staying on-brand. Preserve everything the instruction does not touch.
+
+${buildBrandKitSystemContext(kit)}${placeholderNote}`
+    try {
+      const result = await runDesignAgentCli({
+        systemPrompt: cliSystemPrompt,
+        userMessage,
+        briefId: draft.brief.id,
+        inlineAssets,
+        cliInstruction: CLI_INSTRUCTION.refine,
+      })
+      return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, result.exportUrl)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
+    }
   }
 
   const systemPrompt = `You are a design refinement agent. Here is the current HTML design. Apply the user's instruction as a targeted edit — change only what the instruction requires and preserve everything else.
@@ -78,15 +124,7 @@ Compliance instructions:
 Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, 1080, 1080) as your final step to produce the finished PNG.
 
 If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call renderHtml. Instead, your final text response must be ONLY a single JSON object, with no other text, in exactly this form:
-{ "conflict": true, "explanation": "<why this conflicts with the brand kit>", "pendingHtml": "<the full modified HTML as you would have applied it>" }`
-
-  const userMessage = `Current HTML design:
-
-${draft.htmlContent ?? '(no current HTML — start from a blank 1080×1080 canvas)'}
-
-Instruction: ${instruction}`
-
-  const model = draft.brief.designMode === 'TEMPLATE' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
+{ "conflict": true, "explanation": "<why this conflicts with the brand kit>", "pendingHtml": "<the full modified HTML as you would have applied it>" }${placeholderNote}`
 
   try {
     const result = await runDesignAgent({
@@ -95,6 +133,7 @@ Instruction: ${instruction}`
       briefId: draft.brief.id,
       model,
       maxToolCalls: 15,
+      inlineAssets,
     })
 
     const conflict = parseConflict(result.htmlContent)
@@ -105,7 +144,9 @@ Instruction: ${instruction}`
         data: {
           pendingConflict: {
             conflictId,
-            pendingHtml: conflict.pendingHtml,
+            // Restore externalized assets so the withheld HTML renders correctly
+            // if the user clicks Override later.
+            pendingHtml: restoreInlineAssets(conflict.pendingHtml, inlineAssets),
             explanation: conflict.explanation,
           },
         },

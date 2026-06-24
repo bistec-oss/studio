@@ -43,6 +43,12 @@ export async function toolGetBrandKitContext(briefId: string): Promise<BrandKitC
   const brief = await prisma.brief.findUniqueOrThrow({
     where: { id: briefId },
     include: {
+      brandKit: {
+        include: {
+          prompts: { where: { isActive: true }, take: 1 },
+          artifacts: { where: { feedToAI: true } },
+        },
+      },
       campaign: {
         include: {
           brandKit: {
@@ -71,11 +77,12 @@ export async function toolGetBrandKitContext(briefId: string): Promise<BrandKitC
     },
   })
 
-  // Resolve: campaign brand kit → project default → system default
+  // Resolve: explicit brief kit → campaign brand kit → project default → system default
+  const explicitKit = brief.brandKit && !brief.brandKit.isDeleted ? brief.brandKit : null
   const campaignKit = brief.campaign?.brandKit ?? null
   const projectKit = brief.campaign?.projects[0]?.project?.defaultBrandKit ?? null
 
-  let kit = campaignKit ?? projectKit
+  let kit = explicitKit ?? campaignKit ?? projectKit
 
   if (!kit) {
     kit = await prisma.brandKit.findFirst({

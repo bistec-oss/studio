@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   Check,
   ArrowLeft,
+  Sparkles,
+  Undo2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -119,6 +121,10 @@ function CopyEditor({
   const [value, setValue] = useState(draft.copyText)
   const [saved, setSaved] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  // Holds the copy that was live before the last regenerate, enabling one-click Undo.
+  const [undoCopy, setUndoCopy] = useState<string | null>(null)
+  const [undoing, setUndoing] = useState(false)
 
   useEffect(() => {
     setValue(draft.copyText)
@@ -149,25 +155,75 @@ function CopyEditor({
     }
   }
 
+  async function regenerate() {
+    setRegenerating(true)
+    try {
+      const data = await apiFetch<{ copyText: string; previousCopyText: string }>(
+        `/api/drafts/${draft.id}/regenerate-copy`,
+        { method: 'POST' }
+      )
+      setUndoCopy(data.previousCopyText)
+      setValue(data.copyText)
+      setSaved(true)
+      onSaved(data.copyText)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to regenerate copy')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  async function undo() {
+    if (undoCopy === null) return
+    setUndoing(true)
+    try {
+      await apiFetch(`/api/drafts/${draft.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ copyText: undoCopy }),
+      })
+      setValue(undoCopy)
+      setSaved(true)
+      onSaved(undoCopy)
+      setUndoCopy(null)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to undo')
+    } finally {
+      setUndoing(false)
+    }
+  }
+
+  const busy = regenerating || undoing
+
   return (
     <GlassPanel className="p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
           Copy
         </h3>
-        <span className="text-xs flex items-center gap-1.5">
-          {saving ? (
-            <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
-              <Loader2 size={12} className="animate-spin" /> Saving…
-            </span>
-          ) : saved ? (
-            <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-              <Check size={12} /> Saved
-            </span>
-          ) : (
-            <span className="text-amber-600 dark:text-amber-400">Unsaved changes</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs flex items-center gap-1.5">
+            {saving ? (
+              <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" /> Saving…
+              </span>
+            ) : saved ? (
+              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Check size={12} /> Saved
+              </span>
+            ) : (
+              <span className="text-amber-600 dark:text-amber-400">Unsaved changes</span>
+            )}
+          </span>
+          {undoCopy !== null && (
+            <Button variant="ghost" size="sm" onClick={undo} disabled={busy} title="Restore the previous copy">
+              {undoing ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />} Undo
+            </Button>
           )}
-        </span>
+          <Button variant="secondary" size="sm" onClick={regenerate} disabled={busy}>
+            {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Regenerate
+          </Button>
+        </div>
       </div>
       <textarea
         value={value}
@@ -176,8 +232,9 @@ function CopyEditor({
           setSaved(false)
         }}
         onBlur={save}
+        disabled={busy}
         rows={8}
-        className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-y leading-relaxed"
+        className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-y leading-relaxed disabled:opacity-60"
         placeholder="Post copy…"
       />
       <div className="flex justify-end mt-1.5">
@@ -359,6 +416,10 @@ export default function DraftDetailPage() {
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [regenDesign, setRegenDesign] = useState(false)
+  // revisionNumber of the design snapshot taken before the last regenerate (Undo target).
+  const [undoDesignRev, setUndoDesignRev] = useState<number | null>(null)
+  const [undoingDesign, setUndoingDesign] = useState(false)
 
   const fetchDraft = useCallback(async () => {
     try {
@@ -460,6 +521,39 @@ export default function DraftDetailPage() {
       setRestoringRev(null)
     }
   }
+
+  async function handleRegenerateDesign() {
+    setRegenDesign(true)
+    try {
+      const data = await apiFetch<{ exportUrl: string | null; previousRevisionNumber: number | null }>(
+        `/api/drafts/${draftId}/regenerate-design`,
+        { method: 'POST' }
+      )
+      // The prior design is snapshotted as a revision — offer it as a one-click Undo.
+      setUndoDesignRev(data.previousRevisionNumber)
+      refreshAfterChange()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to regenerate design')
+    } finally {
+      setRegenDesign(false)
+    }
+  }
+
+  async function handleUndoDesign() {
+    if (undoDesignRev === null) return
+    setUndoingDesign(true)
+    try {
+      await apiFetch(`/api/drafts/${draftId}/revisions/${undoDesignRev}/restore`, { method: 'POST' })
+      setUndoDesignRev(null)
+      refreshAfterChange()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Failed to undo')
+    } finally {
+      setUndoingDesign(false)
+    }
+  }
+
+  const isPathB = draft?.brief.designMode === 'GENERATE'
 
   if (loading) {
     return (
@@ -566,6 +660,41 @@ export default function DraftDetailPage() {
                 </Button>
               )}
             </div>
+
+            {/* Regenerate design — Path B (freeform) only. Produces a fresh design
+                variant; the prior one is saved to history and offered as Undo. */}
+            {isPathB && (
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={handleRegenerateDesign}
+                  disabled={regenDesign || undoingDesign || !draft.htmlContent}
+                  title="Generate a brand-new design from the same brief"
+                >
+                  {regenDesign ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  Regenerate design
+                </Button>
+                {undoDesignRev !== null && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleUndoDesign}
+                    disabled={regenDesign || undoingDesign}
+                    title="Go back to the previous design"
+                  >
+                    {undoingDesign ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
+                    Undo
+                  </Button>
+                )}
+              </div>
+            )}
+            {isPathB && regenDesign && (
+              <p className="mt-2 text-xs text-light-text-muted dark:text-dark-text-muted flex items-center gap-1.5">
+                <Loader2 size={11} className="animate-spin" /> Designing a new variant — up to a minute…
+              </p>
+            )}
           </GlassPanel>
 
           {/* Revision history */}
