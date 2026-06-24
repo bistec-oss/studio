@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { renderHtmlToPng } from "@/lib/renderer/puppeteer"
-import { uploadObject, publicUrl, resolveExportUrl, BUCKET_IMAGES, BUCKET_EXPORTS } from "@/lib/storage/minio"
+import { uploadObject, publicUrl, resolveExportUrl, BUCKET_IMAGES, BUCKET_EXPORTS, RASTER_IMAGE_TYPES } from "@/lib/storage/minio"
 import { resolveImageProvider } from "@/providers/registry"
 import type { BrandKitContext } from "./types"
 
@@ -15,6 +15,12 @@ export async function toolGenerateImage(
     const matches = result.url.match(/^data:([^;]+);base64,(.+)$/)
     if (!matches) throw new Error("Invalid base64 data URL from image provider")
     const [, contentType, b64] = matches
+    // Don't trust the provider-declared type: this lands in a public-read bucket
+    // and gets embedded into rendered HTML. A text/html or image/svg+xml payload
+    // served from our origin would be a stored-XSS primitive. Raster only.
+    if (!RASTER_IMAGE_TYPES.includes(contentType)) {
+      throw new Error(`Unsupported image content-type from provider: ${contentType}`)
+    }
     const buffer = Buffer.from(b64, "base64")
     const key = `img-${Date.now()}-${Math.random().toString(36).slice(2)}.png`
     await uploadObject(buffer, BUCKET_IMAGES, key, contentType)

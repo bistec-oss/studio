@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
+import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { DesignMode } from '@prisma/client'
 
 export async function POST(req: NextRequest) {
@@ -44,6 +45,27 @@ export async function POST(req: NextRequest) {
   }
   if (!copyProviderKey?.trim()) {
     return NextResponse.json({ error: 'copyProviderKey is required' }, { status: 400 })
+  }
+
+  // SSRF guard: image URLs are embedded into agent-generated HTML and fetched by
+  // headless Chromium at render time, so they must point at our own MinIO storage
+  // (these values only ever come from /api/briefs/images). Reject off-host or
+  // non-http(s) URLs before they are stored.
+  if (additionalImageUrl != null && !isAllowedAssetUrl(additionalImageUrl)) {
+    return NextResponse.json({ error: 'additionalImageUrl must be an uploaded image URL' }, { status: 400 })
+  }
+  if (briefImages != null) {
+    if (!Array.isArray(briefImages)) {
+      return NextResponse.json({ error: 'briefImages must be an array' }, { status: 400 })
+    }
+    for (const img of briefImages) {
+      if (!img || typeof img.url !== 'string' || !isAllowedAssetUrl(img.url)) {
+        return NextResponse.json({ error: 'each briefImages entry must have an uploaded image URL' }, { status: 400 })
+      }
+      if (img.intent !== 'embed' && img.intent !== 'reference') {
+        return NextResponse.json({ error: 'each briefImages entry must have intent "embed" or "reference"' }, { status: 400 })
+      }
+    }
   }
 
   // Verify referenced records in parallel (independent lookups).

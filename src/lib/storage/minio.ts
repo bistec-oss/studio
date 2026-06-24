@@ -17,6 +17,20 @@ const publicEndpoint = (process.env.MINIO_PUBLIC_ENDPOINT ?? endpoint).replace(/
 const accessKeyId = process.env.MINIO_ACCESS_KEY ?? "minioadmin"
 const secretAccessKey = process.env.MINIO_SECRET_KEY ?? "minioadmin"
 
+// Fail closed in production: the "minioadmin/minioadmin" default grants full
+// read/write/policy control of object storage to anyone who can reach MinIO.
+// Dev keeps the convenient default. Mirrors the placeholder rejection in
+// crypto.ts / auth.ts.
+if (
+  process.env.NODE_ENV === "production" &&
+  (accessKeyId === "minioadmin" || secretAccessKey === "minioadmin")
+) {
+  throw new Error(
+    "Refusing to start: set MINIO_ACCESS_KEY and MINIO_SECRET_KEY to non-default " +
+      "values in production (the built-in 'minioadmin' default must not be used).",
+  )
+}
+
 export const BUCKET_IMAGES = process.env.MINIO_BUCKET_IMAGES ?? "generated-images"
 export const BUCKET_EXPORTS = process.env.MINIO_BUCKET_EXPORTS ?? "exported-designs"
 export const BUCKET_BRANDKITS = process.env.MINIO_BUCKET_BRANDKITS ?? "brand-kits"
@@ -34,6 +48,38 @@ const s3 = new S3Client({
   credentials: { accessKeyId, secretAccessKey },
   forcePathStyle: true,
 })
+
+// Hosts our stored asset URLs are allowed to point at — the internal MinIO
+// endpoint and the browser-facing public endpoint. Brief image URLs are only
+// ever produced by /api/briefs/images (MinIO uploads), so legitimate values
+// always match one of these.
+const ASSET_HOSTS = new Set(
+  [endpoint, publicEndpoint]
+    .map((e) => {
+      try {
+        return new URL(e).host
+      } catch {
+        return null
+      }
+    })
+    .filter((h): h is string => h !== null),
+)
+
+// SSRF guard: validates that a user-supplied asset URL is http(s) and points at
+// our own MinIO storage. These URLs get embedded into agent-generated HTML and
+// fetched by headless Chromium during render (page.setContent + networkidle0),
+// so an unvalidated URL is a server-side request-forgery vector (cloud metadata,
+// internal services, other ports). Reject anything off-host before it is stored.
+export function isAllowedAssetUrl(value: string): boolean {
+  let u: URL
+  try {
+    u = new URL(value)
+  } catch {
+    return false
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false
+  return ASSET_HOSTS.has(u.host)
+}
 
 const SEVEN_DAYS = 60 * 60 * 24 * 7
 

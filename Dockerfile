@@ -2,7 +2,10 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# Install libc compat for @sparticuz/chromium-min on Alpine
+# libc compat for Prisma's OpenSSL engine on Alpine.
+# NOTE: this image does not install a Chromium binary; Puppeteer rendering
+# requires one (see src/lib/renderer/puppeteer.ts) — add `chromium` here (and
+# set PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium) before relying on render.
 RUN apk add --no-cache libc6-compat
 
 COPY package.json package-lock.json* ./
