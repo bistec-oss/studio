@@ -7,6 +7,50 @@
 
 ---
 
+## 2026-06-30 — Preflight fixes, Dockerfile fix, TypeScript fixes, E2E 19/19 green
+
+**Branch: `main`**
+
+### Dockerfile Chromium fix
+The `Dockerfile` was missing a Chromium binary in all three build stages (`deps`, `builder`, `runner`). `puppeteer.ts` resolves `/usr/bin/chromium` at runtime, so any production render would have failed silently. Fixed: added `apk add chromium` to all three `apk add` lines and `ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` to the runner stage.
+
+### TypeScript — 0 errors (was 10 errors)
+Two issues found and fixed:
+- **Prisma client stale** — H9/H12/brief_brandkit migrations had been applied to the schema but `prisma generate` had not been re-run. This left `retryCount`/`nextRetryAt` (H12, `Post` model) and `brandKit`/`campaign` relations (`Brief` model) absent from the generated types. Fix: `npx prisma migrate deploy` (applied the 3 pending migrations to dev DB) then `npx prisma generate`.
+- **`tests/helpers/api.ts:73`** — `headers` was inferred as `{ Cookie: string } | { Cookie?: undefined }`, which fails the `{ [key: string]: string }` index signature. Fix: explicit `Record<string, string>` annotation.
+
+### E2E tests — root cause + fix — 19/19 green
+**Root cause of 6 failures:** `.env.test` was missing entirely (git-ignored, never committed). `npm run test:e2e:db` creates it as part of the DB setup script, but the file had not yet been created on this machine. Created with all required vars.
+
+**Additional bug found in the template** (`docs/e2e-test-plan.md` §2): the documented `.env.test` snippet had `DESIGN_PROVIDER=cli`. With CLI mode active, `assemble-b` and the `refine` route dispatch through `runDesignAgentCli` (spawns a real `claude -p` subprocess, ~59s) instead of `runDesignAgent`. The `MOCK_AI=true` seam only short-circuits `runDesignAgent` — it never fires in CLI mode. Result: every test that called `assemble-b` (directly or via `createExportedDraft`) hit the 60s Playwright timeout. **Fix:** `DESIGN_PROVIDER=claude-html` in `.env.test`. The template in `docs/e2e-test-plan.md` has been corrected.
+
+**Result:** 19/19 passed in 52s (was 13/19, ~10 min, 6 timeouts).
+
+### `.env.test` contents (for new machines)
+```
+NEXT_PUBLIC_APP_URL=http://localhost:3001
+BETTER_AUTH_SECRET=<copy from .env>
+BETTER_AUTH_URL=http://localhost:3001
+DATABASE_URL=postgresql://bistec:bistec@localhost:5432/bistec_studio_test
+POSTGRES_DB=bistec_studio_test
+POSTGRES_USER=bistec
+POSTGRES_PASSWORD=bistec
+MINIO_ENDPOINT=http://localhost:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET_IMAGES=generated-images
+MINIO_BUCKET_EXPORTS=exported-designs
+MINIO_BUCKET_BRANDKITS=brand-kits
+DESIGN_PROVIDER=claude-html        # MUST be claude-html — cli bypasses MOCK_AI
+TOKEN_ENCRYPTION_KEY=<copy from .env>
+PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+MOCK_AI=true
+MOCK_PUPPETEER=true
+MOCK_SOCIAL=true
+```
+
+---
+
 ## Current status
 
 **Security pass + dead-code cleanup — 2026-06-24 (on `main`):** A full static security audit (4 parallel auditors: authz/IDOR, injection/SSRF, secrets/crypto/storage, dead-code) was run over the whole codebase and the findings independently verified. **The headline risk — command injection via the `claude -p` subprocess — is NOT present** (prompt piped via stdin; argv is the static `["-p"]`; no user input reaches the shell). SQL is parameterized; the system-wide IDOR remediation holds, including the four new 2026-06-24 routes.

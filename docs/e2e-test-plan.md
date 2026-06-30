@@ -53,17 +53,31 @@ E2E here means **black-box tests against a running app + real Postgres + real Mi
 4. Seed the baseline: `npm run db:seed` (admin user + Bistec kit + Hearts Talk kit) and `node --env-file=.env.test scripts/seed-cli-provider.mjs` if using CLI mode.
 
 ### Required `.env.test`
+
+> **⚠️ `DESIGN_PROVIDER` must be `claude-html`, NOT `cli`.** CLI mode routes `assemble-b` and the refine route through `runDesignAgentCli` (a real `claude -p` subprocess, ~59s per call). The `MOCK_AI` seam only short-circuits `runDesignAgent` (the API path). With `cli` mode the mock never fires and every generation test hits the 60s Playwright timeout.
+
 ```
-DATABASE_URL=postgresql://...@localhost:5432/bistec_studio_test
-BETTER_AUTH_SECRET=<32+ char test secret>
-TOKEN_ENCRYPTION_KEY=<test key>
+NEXT_PUBLIC_APP_URL=http://localhost:3001
+BETTER_AUTH_SECRET=<copy from .env>
+BETTER_AUTH_URL=http://localhost:3001
+DATABASE_URL=postgresql://bistec:bistec@localhost:5432/bistec_studio_test
+POSTGRES_DB=bistec_studio_test
+POSTGRES_USER=bistec
+POSTGRES_PASSWORD=bistec
 MINIO_ENDPOINT=http://localhost:9000
-MINIO_PUBLIC_ENDPOINT=http://localhost:9000
-DESIGN_PROVIDER=cli                # or unset if using MOCK_AI hooks
-MOCK_AI=true                       # see §3 — must be implemented first
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin
+MINIO_BUCKET_IMAGES=generated-images
+MINIO_BUCKET_EXPORTS=exported-designs
+MINIO_BUCKET_BRANDKITS=brand-kits
+DESIGN_PROVIDER=claude-html        # MUST be claude-html — cli bypasses MOCK_AI (see warning above)
+TOKEN_ENCRYPTION_KEY=<copy from .env>
+PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
+MOCK_AI=true
 MOCK_PUPPETEER=true
 MOCK_SOCIAL=true
-TEST_BASE_URL=http://localhost:3001
 ```
 
 ### Known seeded accounts

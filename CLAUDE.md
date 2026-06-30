@@ -2,7 +2,7 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-06-23)
+## ✅ Outstanding work — START HERE (updated 2026-06-30)
 
 The code review is **fully remediated — all 28 fixes are done** (pushed to `main`). Full details, file refs, and rationale in **[`docs/code-review-findings.md`](docs/code-review-findings.md) → Remediation Status**.
 
@@ -51,7 +51,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 - **[`docs/code-review-findings.md`](docs/code-review-findings.md)** — full code review (42 findings) + **Remediation Status** (✅ all 28 fixed as of 2026-06-23) plus the one open known issue (oversized "Hearts Talk" template breaks Path A). **Read this before picking up review/remediation work.**
 
 ### Testing
-- **[`docs/e2e-test-plan.md`](docs/e2e-test-plan.md)** — the authoritative E2E test design + catalog. **The 6-file skeleton (19 tests) is now implemented & green** (2026-06-23): mock seams live in `src/lib/testHooks.ts` (gated by `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL`, dormant in prod), specs corrected to the real route contracts, run against a dedicated `bistec_studio_test` DB. Reproduce: `npm run test:e2e:db` → `npm run test:e2e:serve` → `npm run test:e2e:mock` (plan §0 "Reproducing the green run"). The broader §6 catalog (RBAC/IDOR, §K remediation regressions, §L browser flows) is still to be written.
+- **[`docs/e2e-test-plan.md`](docs/e2e-test-plan.md)** — the authoritative E2E test design + catalog. **The 6-file skeleton (19 tests) is now implemented & green** (19/19, ~52s, confirmed 2026-06-30): mock seams live in `src/lib/testHooks.ts` (gated by `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL`, dormant in prod), specs corrected to the real route contracts, run against a dedicated `bistec_studio_test` DB. Reproduce: `npm run test:e2e:db` → `npm run test:e2e:serve` → `npm run test:e2e:mock` (plan §0 "Reproducing the green run"). **⚠️ `.env.test` must use `DESIGN_PROVIDER=claude-html` (not `cli`) — CLI mode bypasses the `MOCK_AI` seam and causes all generation tests to timeout.** The broader §6 catalog (RBAC/IDOR, §K remediation regressions, §L browser flows) is still to be written.
 
 ### Specification & planning
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary

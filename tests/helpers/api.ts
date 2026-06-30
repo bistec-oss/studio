@@ -70,7 +70,7 @@ export async function loginAs(
     data: { email, password },
   })
   const cookie = parseSessionCookie(res.headers()['set-cookie'] ?? '')
-  const headers = cookie ? { Cookie: cookie } : {}
+  const headers: Record<string, string> = cookie ? { Cookie: cookie } : {}
   return {
     cookie,
     post: (path, body) => request.post(`${BASE}${path}`, { data: body, headers: { ...headers } }),

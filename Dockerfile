@@ -2,11 +2,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 
-# libc compat for Prisma's OpenSSL engine on Alpine.
-# NOTE: this image does not install a Chromium binary; Puppeteer rendering
-# requires one (see src/lib/renderer/puppeteer.ts) — add `chromium` here (and
-# set PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium) before relying on render.
-RUN apk add --no-cache libc6-compat
+# libc compat for Prisma's OpenSSL engine on Alpine; chromium for Puppeteer rendering.
+RUN apk add --no-cache libc6-compat chromium
 
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
@@ -15,7 +12,7 @@ RUN npm ci --omit=dev
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat chromium
 
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -32,10 +29,11 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat chromium
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
