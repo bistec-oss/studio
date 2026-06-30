@@ -1,13 +1,26 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-30 (latest: brief size picker, publish dialog, CLI model fix — see top section below)
+**Date:** 2026-06-30 (latest: CLI timeout / credit-burn fix — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`; local: `C:\Users\DamianDeCruzBISTECCa\Documents\designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-06-30 (latest) — Brief size picker, publish dialog, CLI model fix
+## 2026-06-30 (latest) — CLI timeout + credit-burn-on-timeout fix
+
+**Branch: `main`.** Fixed in `src/lib/agent/claudeCli.ts`. Symptom: CLI-mode generation (`DESIGN_PROVIDER=cli`) would time out and produce no image **while still burning credits**. Investigated by reproducing the exact spawn directly with cheap prompts (trivial 5–20s; one real ~820-char Path B prompt → valid 6.2 KB HTML in **~76s**), so normal generation actually fits the 300s design / 120s copy budgets — the timeouts came from heavy prompts + per-spawn variance, and the credit waste from an un-killed subprocess.
+
+Three changes:
+1. **Tree-kill on timeout (the credit-burn cause).** On Windows the CLI runs as `spawn("claude.cmd", { shell: true })` → `cmd.exe → claude → node`. The old `child.kill()` only signaled the `cmd.exe` shell, so `claude` kept running to completion and **kept billing** after we'd already returned a timeout error. New `killTree()` runs `taskkill /pid <pid> /T /F` on win32 (SIGKILL elsewhere). **Verified:** `taskkill /T` on a shell parent kills the node child; `child.kill()` does not.
+2. **`--strict-mcp-config`** added to the spawn args (no `--mcp-config` ⇒ zero MCP servers). Without it each `claude -p` inherited the dev's full session config (Canva/Drive/Atlassian connectors), adding startup latency and bloating context/cost. **Verified** (exit 0, valid output).
+3. **Diagnostic logging** (`CLAUDE_CLI_DEBUG`, on by default; set `0` to silence): logs each spawn (cmd/model/prompt-size/timeout), streamed **stderr live**, a **20s heartbeat** (elapsed + bytes; flags "no output yet"), and final outcome + elapsed. Callers tag calls `label: "copy"` / `"design"`. Documented in `.env.example`.
+
+> Timeouts themselves are unchanged (design 300s in `designAgentCli.ts`, copy 120s in `copy/claude-cli.ts`). If heavy templates legitimately overrun 300s, raise the design budget — but an overrun no longer keeps billing. Typecheck clean. Not run through the full app route (would burn a real generation's credits); each link verified individually.
+
+---
+
+## 2026-06-30 — Brief size picker, publish dialog, CLI model fix
 
 **Branch: `main`** — commits `ec7ac4a`, `c684da7`, `f5120fc`.
 

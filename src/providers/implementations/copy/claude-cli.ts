@@ -17,7 +17,7 @@ Channels: ${channelList}
 
 Write engaging copy for the above brief. Return ONLY the post copy text — no preamble, no explanation, no markdown headings.`
 
-    const text = await runClaudeCli(prompt, { timeoutMs: 120_000 })
+    const text = await runClaudeCli(prompt, { timeoutMs: 120_000, label: "copy" })
     if (!text) throw new Error("Claude CLI returned empty copy")
     return text
   }

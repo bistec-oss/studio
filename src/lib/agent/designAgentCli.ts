@@ -90,7 +90,7 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
 
   // Freeform Path B design is a heavier single-shot than copy/template-fill and
   // can run past 3 min on the local CLI; allow more headroom before timing out.
-  const raw = await runClaudeCli(prompt, { timeoutMs: 300_000 })
+  const raw = await runClaudeCli(prompt, { timeoutMs: 300_000, label: "design" })
   let html = stripCodeFences(raw)
 
   const lower = html.toLowerCase()
