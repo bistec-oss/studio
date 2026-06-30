@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
+import { Logo } from '@/components/Logo'
 
 interface NavItem {
   label: string
@@ -47,9 +48,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
     <aside className="glass-panel flex flex-col h-full w-64 p-4 gap-1 rounded-none">
       {/* Logo / brand */}
       <div className="flex items-center justify-between mb-6 px-1">
-        <span className="font-semibold text-base tracking-tight text-light-text dark:text-dark-text">
-          bistec-studio
-        </span>
+        <Logo height={28} />
         {onClose && (
           <button
             onClick={onClose}
@@ -91,9 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-base tracking-tight text-light-text dark:text-dark-text">
-            bistec-studio
-          </span>
+          <Logo height={26} />
         </div>
 
         <ThemeToggle />

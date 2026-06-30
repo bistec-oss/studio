@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
 import { GlassPanel, GlassInput, Button } from "@/components/ui"
+import { Logo } from "@/components/Logo"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -32,9 +33,9 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-[var(--bg-base)]">
       <GlassPanel className="w-full max-w-sm p-8 space-y-6">
-        <div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">bistec-studio</h1>
-          <p className="text-sm text-[var(--text-tertiary)] mt-1">Sign in to continue</p>
+        <div className="flex flex-col items-center text-center">
+          <Logo height={48} />
+          <p className="text-sm text-[var(--text-tertiary)] mt-3">Sign in to continue</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <GlassInput
