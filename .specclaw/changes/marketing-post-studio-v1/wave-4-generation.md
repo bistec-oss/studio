@@ -161,6 +161,8 @@ After generation, the draft view (T21) allows:
 
 ## Wave 4 Complete When
 
+> **Note (2026-06-30, later extended):** the brief now picks a **size** (1:1 / 3:4), not platforms — `Brief.aspectRatio` (SQUARE 1080×1080 | PORTRAIT 1080×1350), resolved via `src/lib/aspectRatio.ts`. Where the criteria below say "1080×1080 logical", read it as the brief's chosen size; channels default to both feeds and are selected at publish time.
+
 - [ ] Brief wizard submits and creates a `Brief` row in the database
 - [ ] Path A: template-based draft generates copy and launches Claude design agent in template-fill mode
 - [ ] Path A: `Draft.htmlContent` is non-null after assembly

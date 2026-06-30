@@ -134,6 +134,8 @@ Ship the remaining admin surface (provider settings with API key registration + 
 - **FR references:** all functional requirements (smoke coverage)
 - **Test runner:** Playwright (recommended) or Vitest + Supertest for route-level tests
 
+> **Note (2026-06-30, later extended):** post size is now per-brief — `Brief.aspectRatio` (SQUARE 1080×1080 | PORTRAIT 1080×1350) + `BrandKitTemplate.aspectRatio`, resolved via `src/lib/aspectRatio.ts`. Where the assertions below say "1080×1080 logical", read it as the brief's chosen size. The implemented suite adds TC-GEN-A3/A4 (portrait + ratio-mismatch) and a portrait Path B case; the Publish button opens the shared `PublishDialog`. See `docs/e2e-test-plan.md`.
+
   **`path-a.test.ts`**
   - Create a brand kit with a linked HTML template + brand colors/fonts
   - Submit a brief selecting Path A + that template

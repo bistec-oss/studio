@@ -35,6 +35,8 @@ Build the two infrastructure modules that everything else depends on: the HTML r
   - Viewport set to `{ width, height, deviceScaleFactor: 2 }`
   - Returns PNG buffer; caller is responsible for uploading to MinIO
 
+> **Note (2026-06-30, later extended):** `renderHtmlToPng` already takes `width`/`height`, so the renderer needed no change. Post size is now configurable per brief — SQUARE 1080×1080 or PORTRAIT 1080×1350 (`Brief.aspectRatio`); callers resolve dimensions via `src/lib/aspectRatio.ts`. The 1080×1080 figures above reflect the original square-only scope.
+
   **2. `designAgent.ts` — Claude tool-use agent loop**
 
   Exports:
