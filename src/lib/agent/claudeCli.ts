@@ -8,6 +8,18 @@ function claudeCommand(): { cmd: string; shell: boolean } {
   return { cmd: "claude", shell: false }
 }
 
+// Model the spawned `claude -p` runs under. Without an explicit `--model` the CLI
+// uses the account default (the Opus tier), which is the main reason CLI-mode
+// generation is costly — Path B is a large single-shot. Default to Sonnet to match
+// the API path (runDesignAgent uses Sonnet for Path B / Haiku for Path A). Accepts
+// a CLI model alias ("sonnet"/"opus"/"haiku") or a full model id; set
+// CLAUDE_CLI_MODEL=default to omit the flag and use the account default.
+function claudeModelArgs(): string[] {
+  const model = (process.env.CLAUDE_CLI_MODEL ?? "sonnet").trim()
+  if (!model || model.toLowerCase() === "default") return []
+  return ["--model", model]
+}
+
 export interface ClaudeCliOptions {
   timeoutMs?: number
   maxBuffer?: number
@@ -45,8 +57,10 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
   delete childEnv.ANTHROPIC_API_KEY
   delete childEnv.ANTHROPIC_AUTH_TOKEN
 
+  const args = ["-p", ...claudeModelArgs()]
+
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(cmd, ["-p"], { shell, windowsHide: true, env: childEnv })
+    const child = spawn(cmd, args, { shell, windowsHide: true, env: childEnv })
 
     let stdout = ""
     let stderr = ""
