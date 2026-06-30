@@ -1,8 +1,8 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-23 (updated after Wave 5; security review pass added)
-**Repo:** https://github.com/bistec-oss/designer (local: `D:\Bistec\designer`)
-**Branch:** `specclaw/marketing-post-studio-v1`
+**Date:** 2026-06-30 (latest: brief size picker, publish dialog, CLI model fix — see top section below)
+**Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`; local: `C:\Users\DamianDeCruzBISTECCa\Documents\designer`)
+**Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
