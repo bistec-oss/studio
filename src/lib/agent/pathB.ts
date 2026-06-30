@@ -6,6 +6,7 @@ import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import type { DesignAgentResult } from '@/lib/agent/types'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
+import { extractInlineAssets } from '@/lib/agent/inlineAssets'
 
 const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
@@ -60,8 +61,18 @@ export async function runPathBDesign(
     ? `\n- Brand reference images: ${artifactUrls.join(', ')}`
     : ''
 
-  const referenceTemplateLine = referenceTemplate
-    ? `\n- Style reference: the following template shows the visual style to inspire your design (do NOT fill or copy it — design from scratch): ${referenceTemplate.htmlTemplate}`
+  // The reference template is style inspiration only — never filled, never
+  // rendered. Strip its inline `data:` assets (the same externalization Path A
+  // uses) before it enters the prompt: a heavy template (e.g. "Hearts Talk",
+  // 1.89 MB) would otherwise blow the CLI 600k guard / API ~200k context. Unlike
+  // Path A there is no restore step — the model only needs the structural
+  // HTML/CSS to grasp the visual style, not the base64 payloads it can't read.
+  const referenceTemplateHtml = referenceTemplate
+    ? extractInlineAssets(referenceTemplate.htmlTemplate).html
+    : null
+
+  const referenceTemplateLine = referenceTemplateHtml
+    ? `\n- Style reference: the following template shows the visual style to inspire your design (do NOT fill or copy it — design from scratch). Inlined assets appear as __INLINE_ASSET_n__ placeholders; ignore them and invent your own visuals: ${referenceTemplateHtml}`
     : ''
 
   const systemPrompt = `You are a professional social media design agent. Your task is to create a complete, original HTML/CSS social media post design from scratch.
