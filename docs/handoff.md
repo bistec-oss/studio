@@ -7,6 +7,18 @@
 
 ---
 
+## 2026-06-30 (latest) — Bistec Studio logo added to the UI
+
+**Branch: `main`**
+
+The app brand mark is now the **Bistec Studio logo** instead of the "bistec-studio" text.
+- **Asset:** `public/BistecStudioLogo.png` — a transparent, **pure-black** PNG (1536×1024). The wordmark occupies only the centre of the canvas (content box ≈ x[0.24–0.65] y[0.38–0.58], aspect ≈ 3:1).
+- **Component:** `src/components/Logo.tsx` — shared, used in the login hero and the app-shell sidebar + mobile top bar. It **CSS-crops** to the wordmark region (so the logo isn't a small mark in a big transparent box) and applies **`dark:invert`** so the black mark flips to white on the dark theme. Verified in both light (black on white) and dark (white on dark) themes.
+- **No favicon set:** a 3:1 wordmark at 16px is illegible. A square "S" monogram (transparent PNG/SVG) is the right favicon asset when available — drop it at `src/app/icon.png` (Next auto-detects).
+- Documented in `docs/ui-reference/DESIGN_SYSTEM.md` §1 (Brand & Aesthetic).
+
+---
+
 ## 2026-06-30 (later) — Full E2E §6 catalog implemented + green + CI gate
 
 **Branch: `main`**

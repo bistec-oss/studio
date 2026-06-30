@@ -54,6 +54,8 @@ Core techniques:
 - Ghost-fill buttons (low-opacity primary fill + more opaque border)
 - Depth via translucency and glow, **not** heavy drop shadows
 
+**Logo / brand mark:** the Bistec Studio logo is a transparent, **pure-black** PNG at `public/BistecStudioLogo.png`. Render it via the shared `src/components/Logo.tsx` component (used in the login hero and the app-shell sidebar + mobile top bar) — never re-type the brand as text. The asset is a mockup-style render whose wordmark occupies only the centre of a 1536×1024 canvas, so `Logo` CSS-crops to the content region (aspect ≈ 3:1) and applies **`dark:invert`** so the black mark flips to white on the dark theme. If a tight, transparent logo (PNG/SVG) and a square "S" monogram (for a favicon) become available, drop the logo in at the same path and simplify `Logo` to a plain `<img>`.
+
 ---
 
 ## 2. Color Tokens
@@ -195,7 +197,7 @@ our actual screens:
 
 | Reference element | bistec-studio screen |
 |---|---|
-| Top app bar (brand, nav, theme toggle, avatar) | Global shell — brand = "bistec-studio"; nav = Workspace / Projects / Campaigns / Library / Admin |
+| Top app bar (brand, nav, theme toggle, avatar) | Global shell — brand = the `Logo` component (see §1); nav = Workspace / Projects / Campaigns / Library / Admin |
 | Left sidebar nav | Primary nav: Brief, Projects, Campaigns, Library, Admin Settings (admin only) |
 | Prompt textarea (left, 8-col) | **Brief input** (topic, goal) + generated **copy** editor on the draft screen |
 | Image preview area | **Generated image / assembled Canva design** preview (thumbnail via `get-design-thumbnail`) |
