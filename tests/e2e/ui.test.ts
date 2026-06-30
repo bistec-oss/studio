@@ -46,7 +46,7 @@ test.describe('UI flows', () => {
     await pageLogin(page)
     await page.goto('/brief')
     // Step labels from src/app/(app)/brief/page.tsx STEPS.
-    for (const label of ['Campaign', 'Platform & Design', 'Content', 'Images', 'Review']) {
+    for (const label of ['Campaign', 'Size & Design', 'Content', 'Images', 'Review']) {
       await expect(page.getByText(label, { exact: false }).first()).toBeVisible()
     }
     // The wizard exposes a Continue affordance on the first step.
@@ -56,20 +56,24 @@ test.describe('UI flows', () => {
     // API-level generation tests (path-a/path-b).
   })
 
-  // TC-UI-03 — The Publish button actually fires POST /api/posts (not a nav). Guards H5.
+  // TC-UI-03 — Publish opens the publish dialog; picking a channel + Confirm fires
+  // POST /api/posts (not a nav). Guards H5 and the shared PublishDialog wiring.
   test('clicking Publish fires a POST /api/posts request', async ({ page, request }) => {
     if (!MOCKED()) { test.skip(); return }
     const draftId = await apiDraft(request, `UI-Publish-${Date.now()}`)
     await pageLogin(page)
-    // handlePublish() uses window.confirm — auto-accept it.
-    page.on('dialog', d => d.accept())
     await page.goto(`/drafts/${draftId}`)
 
     const publishBtn = page.getByRole('button', { name: /^publish$/i })
     await expect(publishBtn).toBeVisible({ timeout: 20_000 }) // client-rendered after fetch
+    await publishBtn.click()
+
+    // The dialog appears — select a channel and confirm.
+    await page.getByText('Publish Post').waitFor({ timeout: 5_000 })
+    await page.getByRole('checkbox').first().check()
     const [req] = await Promise.all([
       page.waitForRequest(r => r.url().includes('/api/posts') && r.method() === 'POST'),
-      publishBtn.click(),
+      page.getByRole('button', { name: /^confirm$/i }).click(),
     ])
     expect(req).toBeTruthy()
   })

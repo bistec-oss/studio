@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { apiFetch } from '@/lib/apiFetch'
+import type { AspectRatio } from '@prisma/client'
+import { ASPECT_LABELS, ASPECT_VALUES, dimensionsLabel } from '@/lib/aspectRatio'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,7 +24,7 @@ interface BrandKit {
 }
 
 interface Prompt { id: string; content: string; version: number; isActive: boolean; createdAt: string }
-interface Template { id: string; name: string; htmlTemplate: string; createdAt: string }
+interface Template { id: string; name: string; htmlTemplate: string; aspectRatio: AspectRatio; createdAt: string }
 interface Artifact { id: string; name: string; type: string; url: string; feedToAI: boolean }
 
 // ─── Google Fonts list (top 100) ─────────────────────────────────────────────
@@ -349,6 +351,7 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
   const [saving, setSaving] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [templateHtml, setTemplateHtml] = useState('')
+  const [templateRatio, setTemplateRatio] = useState<AspectRatio>('SQUARE')
   const [addingTemplate, setAddingTemplate] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const artifactRef = useRef<HTMLInputElement>(null)
@@ -435,9 +438,9 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
       await apiFetch(`/api/admin/brandkits/${kit.id}/templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: templateName, htmlTemplate: templateHtml }),
+        body: JSON.stringify({ name: templateName, htmlTemplate: templateHtml, aspectRatio: templateRatio }),
       })
-      setTemplateName(''); setTemplateHtml(''); setAddingTemplate(false)
+      setTemplateName(''); setTemplateHtml(''); setTemplateRatio('SQUARE'); setAddingTemplate(false)
       onRefresh()
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
@@ -580,6 +583,32 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
               placeholder="e.g. Event Announcement"
             />
             <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-light-text dark:text-dark-text">Size</label>
+              <div className="flex gap-2">
+                {ASPECT_VALUES.map(r => {
+                  const selected = templateRatio === r
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setTemplateRatio(r)}
+                      className={[
+                        'px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                        selected
+                          ? 'bg-primary/10 dark:bg-primary-light/15 text-primary dark:text-primary-light border-primary/30 dark:border-primary-light/30'
+                          : 'glass-input border-transparent text-light-text-muted dark:text-dark-text-muted',
+                      ].join(' ')}
+                    >
+                      {ASPECT_LABELS[r]} <span className="opacity-70">· {dimensionsLabel(r)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
+                The HTML should be sized for the chosen canvas. Briefs only offer this template at the matching size.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-light-text dark:text-dark-text">HTML/CSS</label>
               <textarea
                 value={templateHtml}
@@ -591,7 +620,7 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={addTemplate} disabled={!templateName.trim() || !templateHtml.trim()}>Save template</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setAddingTemplate(false); setTemplateName(''); setTemplateHtml('') }}>Cancel</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setAddingTemplate(false); setTemplateName(''); setTemplateHtml(''); setTemplateRatio('SQUARE') }}>Cancel</Button>
             </div>
           </div>
         )}
@@ -601,7 +630,12 @@ function KitDetail({ kit, onRefresh }: { kit: BrandKit; onRefresh: () => void })
           <ul className="space-y-2">
             {kit.templates.map(t => (
               <li key={t.id} className="flex items-center justify-between glass-input rounded-xl px-3 py-2">
-                <span className="text-sm text-light-text dark:text-dark-text">{t.name}</span>
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm text-light-text dark:text-dark-text truncate">{t.name}</span>
+                  <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[0.62rem] font-semibold bg-primary/10 dark:bg-primary-light/15 text-primary dark:text-primary-light">
+                    {ASPECT_LABELS[t.aspectRatio]}
+                  </span>
+                </span>
                 <Button variant="ghost" size="sm" onClick={() => deleteTemplate(t.id)}>
                   <Trash2 size={13} />
                 </Button>

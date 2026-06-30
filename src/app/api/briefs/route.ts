@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { DesignMode } from '@prisma/client'
+import { isAspectRatio } from '@/lib/aspectRatio'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
     goal,
     tone,
     channels,
+    aspectRatio,
     designMode,
     campaignId,
     brandKitId,
@@ -42,6 +44,10 @@ export async function POST(req: NextRequest) {
   }
   if (!designMode || !['TEMPLATE', 'GENERATE'].includes(designMode)) {
     return NextResponse.json({ error: 'designMode must be TEMPLATE or GENERATE' }, { status: 400 })
+  }
+  // aspectRatio is optional; defaults to SQUARE for backward compatibility.
+  if (aspectRatio != null && !isAspectRatio(aspectRatio)) {
+    return NextResponse.json({ error: 'aspectRatio must be SQUARE or PORTRAIT' }, { status: 400 })
   }
   if (!copyProviderKey?.trim()) {
     return NextResponse.json({ error: 'copyProviderKey is required' }, { status: 400 })
@@ -113,6 +119,7 @@ export async function POST(req: NextRequest) {
       goal: goal.trim(),
       tone: tone.trim(),
       channels,
+      aspectRatio: aspectRatio ?? 'SQUARE',
       designMode: designMode as DesignMode,
       campaignId: campaignId ?? null,
       brandKitId: brandKitId ?? null,

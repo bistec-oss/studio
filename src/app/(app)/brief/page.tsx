@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Instagram,
-  Linkedin,
+  Square,
+  RectangleVertical,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -19,14 +19,19 @@ import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
+import type { AspectRatio } from '@prisma/client'
+import { ASPECT_LABELS, dimensionsLabel } from '@/lib/aspectRatio'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type Channel = 'instagram' | 'linkedin'
 type DesignMode = 'TEMPLATE' | 'GENERATE'
 type ImageIntent = 'embed' | 'reference'
+
+// Channels are no longer chosen at brief time — the publish step picks them. Every
+// brief targets both feeds by default; the brief now captures the post SIZE instead.
+const DEFAULT_CHANNELS = ['instagram', 'linkedin']
 
 interface ProjectRef {
   id: string
@@ -51,6 +56,7 @@ interface Template {
   id: string
   name: string
   brandKitId: string
+  aspectRatio: AspectRatio
   brandKitName: string | null
   previewColor: string
 }
@@ -86,7 +92,14 @@ interface UploadedImage {
 
 // Campaign comes first so its assigned brand kit (campaign → project) can default
 // the brand-kit selection on the next step, which in turn filters the templates.
-const STEPS = ['Campaign', 'Platform & Design', 'Content', 'Images', 'Review']
+const STEPS = ['Campaign', 'Size & Design', 'Content', 'Images', 'Review']
+
+// Post size options shown on step 1. Dimensions/labels come from the shared lib so
+// the wizard, the render pipeline, and the previews never disagree.
+const ASPECT_OPTIONS: { value: AspectRatio; icon: React.ElementType; sub: string }[] = [
+  { value: 'SQUARE', icon: Square, sub: dimensionsLabel('SQUARE') },
+  { value: 'PORTRAIT', icon: RectangleVertical, sub: dimensionsLabel('PORTRAIT') },
+]
 
 const GOAL_OPTIONS = [
   { value: 'awareness', label: 'Awareness' },
@@ -231,8 +244,8 @@ export default function NewBriefPage() {
   const [resolvedKit, setResolvedKit] = useState<ResolvedKit | null>(null)
   const [kitLoading, setKitLoading] = useState(false)
 
-  // Step 1 — Platform & Design
-  const [channels, setChannels] = useState<Channel[]>(['instagram'])
+  // Step 1 — Size & Design
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('SQUARE')
   const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
   const [brandKitId, setBrandKitId] = useState('')
   const [designMode, setDesignMode] = useState<DesignMode>('TEMPLATE')
@@ -273,14 +286,17 @@ export default function NewBriefPage() {
     })
   }, [])
 
-  // Keep template selections consistent with the chosen brand kit: any template
-  // that doesn't belong to the selected kit is cleared.
+  // Keep template selections consistent with the chosen brand kit AND size: any
+  // template that doesn't belong to the selected kit, or doesn't match the chosen
+  // aspect ratio, is cleared (the picker only offers matching templates).
   useEffect(() => {
-    if (!brandKitId) return
-    const belongs = (id: string) => templates.find(t => t.id === id)?.brandKitId === brandKitId
-    setTemplateId(prev => (prev && !belongs(prev) ? '' : prev))
-    setReferenceTemplateId(prev => (prev && !belongs(prev) ? '' : prev))
-  }, [brandKitId, templates])
+    const matches = (id: string) => {
+      const t = templates.find(t => t.id === id)
+      return !!t && (!brandKitId || t.brandKitId === brandKitId) && t.aspectRatio === aspectRatio
+    }
+    setTemplateId(prev => (prev && !matches(prev) ? '' : prev))
+    setReferenceTemplateId(prev => (prev && !matches(prev) ? '' : prev))
+  }, [brandKitId, aspectRatio, templates])
 
   // ── Brand kit resolution on campaign change ────────────────────────────
   const resolveKit = useCallback(async (id: string) => {
@@ -317,10 +333,6 @@ export default function NewBriefPage() {
       if (match) setTone(match.value)
     }
     resolveKit(id)
-  }
-
-  function toggleChannel(c: Channel) {
-    setChannels(prev => (prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]))
   }
 
   // ── Image upload ───────────────────────────────────────────────────────
@@ -362,10 +374,12 @@ export default function NewBriefPage() {
   }
 
   // ── Derived ────────────────────────────────────────────────────────────
-  // Templates filter to the selected brand kit (both Path A + Path B reference).
-  const visibleTemplates = brandKitId
-    ? templates.filter(t => t.brandKitId === brandKitId)
-    : templates
+  // Templates filter to the selected brand kit AND the chosen size — so Path A
+  // never fills a mismatched template (no stretching) and Path B's style reference
+  // matches the target shape. Applies to both pickers.
+  const visibleTemplates = templates.filter(
+    t => (!brandKitId || t.brandKitId === brandKitId) && t.aspectRatio === aspectRatio,
+  )
 
   const brandKitOptions = [
     { value: '', label: 'Select a brand kit…' },
@@ -376,11 +390,7 @@ export default function NewBriefPage() {
   function stepValid(s: number): boolean {
     if (s === 0) return true // campaign is optional (Uncategorized is valid)
     if (s === 1)
-      return (
-        channels.length > 0 &&
-        brandKitId !== '' &&
-        (designMode === 'GENERATE' || templateId !== '')
-      )
+      return brandKitId !== '' && (designMode === 'GENERATE' || templateId !== '')
     if (s === 2) return prompt.trim().length > 10
     if (s === 3) return !uploading
     return true
@@ -400,7 +410,8 @@ export default function NewBriefPage() {
         topic: prompt.trim(),
         goal,
         tone,
-        channels,
+        channels: DEFAULT_CHANNELS,
+        aspectRatio,
         designMode,
         campaignId: campaignId || undefined,
         brandKitId: brandKitId || undefined,
@@ -560,40 +571,38 @@ export default function NewBriefPage() {
         {step === 1 && (
           <div>
             <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">
-              Platform &amp; Design
+              Size &amp; Design
             </h2>
             <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-6">
-              Choose where this post will be published, which brand kit to use, and how the design is generated.
+              Choose the post size, which brand kit to use, and how the design is generated.
+              You&apos;ll pick where to publish (Instagram / LinkedIn) at publish time.
             </p>
 
-            {/* Channels (multi-select) */}
+            {/* Post size */}
             <div className="mb-6">
-              <FieldLabel>Platforms</FieldLabel>
+              <FieldLabel>Post Size</FieldLabel>
               <div className="grid grid-cols-2 gap-3">
-                {([
-                  ['instagram', 'Instagram', Instagram],
-                  ['linkedin', 'LinkedIn', Linkedin],
-                ] as [Channel, string, React.ElementType][]).map(([c, label, Icon]) => {
-                  const selected = channels.includes(c)
+                {ASPECT_OPTIONS.map(({ value, icon: Icon, sub }) => {
+                  const selected = aspectRatio === value
                   return (
                     <button
-                      key={c}
+                      key={value}
                       type="button"
-                      onClick={() => toggleChannel(c)}
+                      onClick={() => setAspectRatio(value)}
                       className={cardCls(selected, 'flex items-center gap-3 p-4')}
                     >
                       <Icon size={20} className={selected ? 'text-primary dark:text-primary-light' : 'text-light-text-muted dark:text-dark-text-muted'} />
-                      <span className={['font-semibold text-sm', selected ? 'text-primary dark:text-primary-light' : 'text-light-text dark:text-dark-text'].join(' ')}>
-                        {label}
+                      <span className="min-w-0">
+                        <span className={['block font-semibold text-sm', selected ? 'text-primary dark:text-primary-light' : 'text-light-text dark:text-dark-text'].join(' ')}>
+                          {ASPECT_LABELS[value]}
+                        </span>
+                        <span className="block text-xs text-light-text-muted dark:text-dark-text-muted">{sub} px</span>
                       </span>
-                      {selected && <Check size={15} className="ml-auto text-primary dark:text-primary-light" />}
+                      {selected && <Check size={15} className="ml-auto text-primary dark:text-primary-light flex-shrink-0" />}
                     </button>
                   )
                 })}
               </div>
-              {channels.length === 0 && (
-                <p className="text-xs text-red-500 dark:text-red-400 mt-2">Select at least one platform.</p>
-              )}
             </div>
 
             {/* Brand kit */}
@@ -661,7 +670,7 @@ export default function NewBriefPage() {
                   </div>
                 ) : visibleTemplates.length === 0 ? (
                   <div className="glass-input rounded-xl px-3 py-3 text-sm text-light-text-muted dark:text-dark-text-muted">
-                    This brand kit has no templates. Add one under Admin → Brand Kits, pick another kit, or switch to Path B.
+                    This brand kit has no {ASPECT_LABELS[aspectRatio]} templates. Add one under Admin → Brand Kits, change the size or kit, or switch to Path B.
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -823,7 +832,7 @@ export default function NewBriefPage() {
             <div className="space-y-0">
               <ReviewRow label="Campaign" value={selectedCampaign?.name ?? 'Uncategorized'} />
               <ReviewRow label="Brand kit" value={selectedBrandKit?.name ?? '—'} />
-              <ReviewRow label="Platforms" value={channels.map(c => (c === 'instagram' ? 'Instagram' : 'LinkedIn')).join(', ') || '—'} />
+              <ReviewRow label="Size" value={`${ASPECT_LABELS[aspectRatio]} · ${dimensionsLabel(aspectRatio)} px`} />
               <ReviewRow label="Path" value={`Path ${designMode === 'TEMPLATE' ? 'A — Template fill' : 'B — Freeform design'}`} />
               <ReviewRow
                 label="Template"

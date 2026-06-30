@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
       id: true,
       name: true,
       brandKitId: true,
+      aspectRatio: true,
       createdAt: true,
       brandKit: { select: { name: true, colors: true } },
     },
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
       id: t.id,
       name: t.name,
       brandKitId: t.brandKitId,
+      aspectRatio: t.aspectRatio,
       brandKitName: t.brandKit?.name ?? null,
       previewColor: colors[0] ?? '#0284c7',
     }

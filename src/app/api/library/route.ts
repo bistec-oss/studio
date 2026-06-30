@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
     prisma.draft.findMany({
       where,
       include: {
-        brief: { select: { topic: true, channels: true } },
+        brief: { select: { topic: true, channels: true, aspectRatio: true } },
         posts: {
           orderBy: { createdAt: "desc" },
           select: {

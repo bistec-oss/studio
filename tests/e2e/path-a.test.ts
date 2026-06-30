@@ -164,4 +164,51 @@ test.describe('Path A — template-fill generation', () => {
     expect(res.status()).toBeLessThan(500)
     expect(res.status()).toBe(200)
   })
+
+  // TC-GEN-A3 — A 3:4 PORTRAIT brief + matching PORTRAIT template assembles cleanly.
+  // Guards the aspect-ratio threading through assemble-a / the design agent.
+  test('assemble-a produces an EXPORTED draft for a 3:4 portrait brief', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Portrait Kit', colors: ['#0284c7', '#0f172a'] })).json()
+    const template = await (await post(request, `/api/admin/brandkits/${kit.id}/templates`, {
+      name: 'Portrait Template',
+      htmlTemplate: '<html><body style="width:1080px;height:1350px;background:#0284c7;color:#fff">{{topic}}</body></html>',
+      aspectRatio: 'PORTRAIT',
+    })).json()
+    expect(template.aspectRatio).toBe('PORTRAIT')
+
+    const camp = await (await post(request, '/api/campaigns', { name: 'Portrait Campaign', brandKitId: kit.id })).json()
+    const brief = await (await post(request, '/api/briefs', {
+      topic: 'Portrait Launch', goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
+      aspectRatio: 'PORTRAIT', designMode: 'TEMPLATE', copyProviderKey: 'cli', campaignId: camp.id,
+    })).json()
+
+    const res = await post(request, '/api/generate/assemble-a', { briefId: brief.id, templateId: template.id })
+    expect(res.status()).toBe(200)
+    const draftRes = await get(request, `/api/drafts/${(await res.json()).draftId}`)
+    const draft = await draftRes.json()
+    expect(draft.status).toBe('EXPORTED')
+    expect(draft.brief.aspectRatio).toBe('PORTRAIT')
+  })
+
+  // TC-GEN-A4 — A template whose size differs from the brief's chosen size is
+  // rejected (the wizard only offers matching templates; the API enforces it).
+  test('assemble-a rejects a template whose aspect ratio differs from the brief', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Mismatch Kit', colors: ['#0284c7'] })).json()
+    // SQUARE template (default) …
+    const template = await (await post(request, `/api/admin/brandkits/${kit.id}/templates`, {
+      name: 'Square Template',
+      htmlTemplate: '<html><body style="width:1080px;height:1080px;background:#0284c7">{{topic}}</body></html>',
+    })).json()
+    const camp = await (await post(request, '/api/campaigns', { name: 'Mismatch Campaign', brandKitId: kit.id })).json()
+    // … against a PORTRAIT brief.
+    const brief = await (await post(request, '/api/briefs', {
+      topic: 'Mismatch', goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
+      aspectRatio: 'PORTRAIT', designMode: 'TEMPLATE', copyProviderKey: 'cli', campaignId: camp.id,
+    })).json()
+
+    const res = await post(request, '/api/generate/assemble-a', { briefId: brief.id, templateId: template.id })
+    expect(res.status()).toBe(400)
+  })
 })

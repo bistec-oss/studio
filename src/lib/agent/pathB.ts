@@ -7,6 +7,7 @@ import type { DesignAgentResult } from '@/lib/agent/types'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
+import { dimensionsFor } from '@/lib/aspectRatio'
 
 const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
@@ -48,6 +49,9 @@ export async function runPathBDesign(
   })
   const artifactUrls = artifacts.map((a) => a.url)
 
+  // Output canvas for this brief (1080×1080 square or 1080×1350 portrait).
+  const { width, height } = dimensionsFor(brief.aspectRatio)
+
   // Optional reference template for style inspiration.
   let referenceTemplate: { htmlTemplate: string } | null = null
   if (brief.referenceTemplateId) {
@@ -84,7 +88,7 @@ Design requirements:
 - Use the brand colors as CSS custom properties
 - Apply brand fonts via @font-face (use the provided URLs) or fall back to system fonts
 - If the logo URL is provided, include it in the design
-- Output dimensions: 1080×1080 pixels (square format)
+- Output dimensions: ${width}×${height} pixels
 - Use CSS/SVG for backgrounds, shapes, and geometric elements where possible
 - Only call generateImage when authentic photographic imagery genuinely improves the design
 - Always call renderHtml as the final step to produce the finished PNG
@@ -110,15 +114,17 @@ Channels: ${brief.channels.join(', ')}
 
 Copy text to use: ${copyText}${imageSection}
 
-Design a complete, original HTML/CSS post. Call renderHtml(html, 1080, 1080) as your final step.`
+Design a complete, original HTML/CSS post. Call renderHtml(html, ${width}, ${height}) as your final step.`
 
   return CLI_MODE
-    ? runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id })
+    ? runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id, width, height })
     : runDesignAgent({
         systemPrompt,
         userMessage,
         briefId: brief.id,
         model: 'claude-sonnet-4-6',
         maxToolCalls: 15,
+        width,
+        height,
       })
 }

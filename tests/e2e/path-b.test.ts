@@ -51,6 +51,27 @@ test.describe('Path B — freeform design generation', () => {
     expect(draft.htmlContent).toBeTruthy()
   })
 
+  test('assemble-b produces an EXPORTED draft for a 3:4 portrait brief', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+
+    const kit = await (await post(request, '/api/admin/brandkits', {
+      name: 'Path B Portrait Kit', colors: ['#7dd3fc', '#020617'],
+    })).json()
+    const camp = await (await post(request, '/api/campaigns', { name: 'Path B Portrait Campaign', brandKitId: kit.id })).json()
+    const brief = await (await post(request, '/api/briefs', {
+      topic: 'Portrait Freeform', goal: 'Generate buzz', tone: 'bold',
+      channels: ['LINKEDIN'], aspectRatio: 'PORTRAIT', designMode: 'GENERATE',
+      copyProviderKey: 'cli', campaignId: camp.id,
+    })).json()
+
+    const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+    expect(res.status()).toBe(200)
+    const draftRes = await get(request, `/api/drafts/${(await res.json()).draftId}`)
+    const draft = await draftRes.json()
+    expect(draft.status).toBe('EXPORTED')
+    expect(draft.brief.aspectRatio).toBe('PORTRAIT')
+  })
+
   test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async ({ request }) => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) {
       test.skip()

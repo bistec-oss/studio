@@ -10,6 +10,7 @@ import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
+import { dimensionsFor } from '@/lib/aspectRatio'
 
 const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
@@ -35,6 +36,18 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   }
+
+  // The template must be designed for the brief's chosen size — the wizard filters
+  // the picker to matching templates, so a mismatch would mean a stretched render.
+  if (template.aspectRatio !== brief.aspectRatio) {
+    return NextResponse.json(
+      { error: 'Template aspect ratio does not match the brief\'s selected size' },
+      { status: 400 }
+    )
+  }
+
+  // Output canvas for this brief (1080×1080 square or 1080×1350 portrait).
+  const { width, height } = dimensionsFor(brief.aspectRatio)
 
   // Resolve brand kit: explicit brief kit → campaign → project → system default.
   const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
@@ -84,7 +97,7 @@ Instructions:
 - Apply brand colors as CSS custom properties where appropriate.
 - If the design requires a raster image (and none is provided), call the generateImage tool. Otherwise use CSS gradients or SVG.
 - Always call renderHtml as the final step to produce the PNG.
-- Output dimensions: 1080×1080 pixels.${imageInstruction}${placeholderNote}`
+- Output dimensions: ${width}×${height} pixels.${imageInstruction}${placeholderNote}`
 
   const imageNote = brief.additionalImageUrl
     ? `\nUser-provided image URL (embed this into the main photo/subject slot): ${brief.additionalImageUrl}`
@@ -97,7 +110,7 @@ ${slimTemplate}
 
 Copy text: ${copyText}${imageNote}
 
-Fill the template with this content. Replace all placeholder text with the copy. Call renderHtml(html, 1080, 1080) when done.`
+Fill the template with this content. Replace all placeholder text with the copy. Call renderHtml(html, ${width}, ${height}) when done.`
 
   try {
     const result = CLI_MODE
@@ -107,6 +120,8 @@ Fill the template with this content. Replace all placeholder text with the copy.
           briefId,
           inlineAssets,
           cliInstruction: CLI_INSTRUCTION.templateFill,
+          width,
+          height,
         })
       : await runDesignAgent({
           systemPrompt,
@@ -115,6 +130,8 @@ Fill the template with this content. Replace all placeholder text with the copy.
           model: 'claude-haiku-4-5-20251001',
           maxToolCalls: 15,
           inlineAssets,
+          width,
+          height,
         })
 
     const draft = await prisma.draft.create({

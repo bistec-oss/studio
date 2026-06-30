@@ -89,6 +89,8 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     model = "claude-sonnet-4-6",
     maxToolCalls = 15,
     inlineAssets,
+    width = 1080,
+    height = 1080,
   } = options
 
   // Test seam: skip the Anthropic tool-use loop entirely. Emits deterministic
@@ -98,8 +100,8 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     if (userMessage.includes("conflict_test")) {
       return { htmlContent: buildMockConflict(), exportUrl: "", toolCallCount: 0 }
     }
-    const html = buildMockHtml(`${systemPrompt}\n${userMessage}`)
-    const { key } = await toolRenderHtml(html, 1080, 1080)
+    const html = buildMockHtml(`${systemPrompt}\n${userMessage}`, width, height)
+    const { key } = await toolRenderHtml(html, width, height)
     return { htmlContent: html, exportUrl: key, toolCallCount: 1 }
   }
 

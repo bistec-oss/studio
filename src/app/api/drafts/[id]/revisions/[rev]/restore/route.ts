@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { dimensionsFor } from '@/lib/aspectRatio'
 
 export const maxDuration = 120
 
@@ -26,7 +27,13 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   })
   if (!revision) return NextResponse.json({ error: 'Revision not found' }, { status: 404 })
 
-  const buffer = await renderHtmlToPng(revision.htmlSnapshot, 1080, 1080)
+  // Render the snapshot at the brief's chosen canvas size.
+  const draft = await prisma.draft.findUnique({
+    where: { id: params.id },
+    select: { brief: { select: { aspectRatio: true } } },
+  })
+  const { width, height } = dimensionsFor(draft?.brief.aspectRatio)
+  const buffer = await renderHtmlToPng(revision.htmlSnapshot, width, height)
   const key = `restore-${params.id}-${Date.now()}.png`
   await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 

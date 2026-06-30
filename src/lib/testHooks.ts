@@ -66,12 +66,12 @@ export const MOCK_PNG_BUFFER = Buffer.from(
  * to the design agent (the colour reaches the agent via the brand-kit system
  * context). Falls back to a neutral colour when none is present.
  */
-export function buildMockHtml(promptContext: string): string {
+export function buildMockHtml(promptContext: string, width = 1080, height = 1080): string {
   const hex = promptContext.match(/#[0-9a-fA-F]{6}/)?.[0] ?? '#0f172a'
   return `<!DOCTYPE html>
 <html>
 <head><style>
-body { margin: 0; width: 1080px; height: 1080px; background: ${hex}; display: flex; align-items: center; justify-content: center; }
+body { margin: 0; width: ${width}px; height: ${height}px; background: ${hex}; display: flex; align-items: center; justify-content: center; }
 .card { color: #ffffff; font-family: Inter, sans-serif; font-size: 48px; text-align: center; padding: 40px; }
 </style></head>
 <body><div class="card" data-mock="true">MOCK DESIGN</div></body>

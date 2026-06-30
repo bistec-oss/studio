@@ -18,7 +18,10 @@ import {
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
+import { PublishDialog } from '@/components/library/PublishDialog'
 import { apiFetch } from '@/lib/apiFetch'
+import type { AspectRatio } from '@prisma/client'
+import { aspectClassFor } from '@/lib/aspectRatio'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +49,7 @@ interface DraftDetail {
     goal: string
     tone: string
     channels: string[]
+    aspectRatio: AspectRatio
     designMode: string
   }
   posts: DraftPost[]
@@ -415,7 +419,7 @@ export default function DraftDetailPage() {
   const [exporting, setExporting] = useState(false)
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [publishing, setPublishing] = useState(false)
+  const [showPublish, setShowPublish] = useState(false)
   const [regenDesign, setRegenDesign] = useState(false)
   // revisionNumber of the design snapshot taken before the last regenerate (Undo target).
   const [undoDesignRev, setUndoDesignRev] = useState<number | null>(null)
@@ -479,34 +483,6 @@ export default function DraftDetailPage() {
       alert(e instanceof Error ? e.message : 'Error')
     } finally {
       setExporting(false)
-    }
-  }
-
-  async function handlePublish() {
-    if (!draft) return
-    const channels = (draft.brief.channels ?? [])
-      .map((c) => c.toUpperCase())
-      .filter((c) => c === 'INSTAGRAM' || c === 'LINKEDIN')
-    if (channels.length === 0) {
-      alert('This brief has no Instagram/LinkedIn channel to publish to.')
-      return
-    }
-    if (!confirm(`Publish this design to ${channels.join(' and ')}?`)) return
-    setPublishing(true)
-    try {
-      for (const channel of channels) {
-        await apiFetch('/api/posts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draftId, channel }),
-        })
-      }
-      await fetchDraft()
-      alert(`Published to ${channels.join(', ')}.`)
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Publish failed')
-    } finally {
-      setPublishing(false)
     }
   }
 
@@ -613,13 +589,13 @@ export default function DraftDetailPage() {
             <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted mb-3">
               Preview
             </h3>
-            <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-light-border/30 dark:bg-dark-border/30">
+            <div className={`relative ${aspectClassFor(draft.brief.aspectRatio)} w-full rounded-xl overflow-hidden bg-light-border/30 dark:bg-dark-border/30`}>
               {draft.exportUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={draft.exportUrl}
                   alt={draft.brief.topic}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2">
@@ -652,10 +628,9 @@ export default function DraftDetailPage() {
                   variant="primary"
                   size="sm"
                   className="flex-1"
-                  disabled={!draft.exportUrl || publishing}
-                  onClick={handlePublish}
+                  disabled={!draft.exportUrl}
+                  onClick={() => setShowPublish(true)}
                 >
-                  {publishing ? <Loader2 size={13} className="animate-spin" /> : null}
                   Publish
                 </Button>
               )}
@@ -744,6 +719,18 @@ export default function DraftDetailPage() {
           </GlassPanel>
         </div>
       </div>
+
+      {/* Publish dialog — channel + optional schedule (shared with Library). */}
+      {showPublish && (
+        <PublishDialog
+          draftId={draftId}
+          onClose={() => setShowPublish(false)}
+          onSuccess={() => {
+            setShowPublish(false)
+            fetchDraft()
+          }}
+        />
+      )}
     </>
   )
 }

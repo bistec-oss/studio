@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { dimensionsFor } from '@/lib/aspectRatio'
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser()
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   const draft = await prisma.draft.findUnique({
     where: { id: draftId },
-    include: { brief: { select: { userId: true } } },
+    include: { brief: { select: { userId: true, aspectRatio: true } } },
   })
   if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Draft has no HTML content to export' }, { status: 422 })
   }
 
-  const buffer = await renderHtmlToPng(draft.htmlContent, 1080, 1080)
+  const { width, height } = dimensionsFor(draft.brief.aspectRatio)
+  const buffer = await renderHtmlToPng(draft.htmlContent, width, height)
   const key = `exports/${draftId}.png`
   await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 

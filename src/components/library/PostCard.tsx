@@ -6,6 +6,8 @@ import { ImageIcon } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
+import type { AspectRatio } from '@prisma/client'
+import { aspectClassFor } from '@/lib/aspectRatio'
 
 interface PostSummary {
   id: string
@@ -21,7 +23,7 @@ interface PostCardDraft {
   copyText: string
   status: string
   createdAt: string
-  brief: { topic: string; channels: string[] }
+  brief: { topic: string; channels: string[]; aspectRatio?: AspectRatio }
   posts: PostSummary[]
   brandKitName: string | null
 }
@@ -58,10 +60,10 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
 
   return (
     <GlassPanel className="flex flex-col overflow-hidden">
-      {/* Image area — square aspect */}
+      {/* Image area — matches the post's aspect ratio */}
       <Link
         href={`/drafts/${draft.id}`}
-        className="relative aspect-square w-full bg-light-border/30 dark:bg-dark-border/30 overflow-hidden block group"
+        className={`relative ${aspectClassFor(draft.brief.aspectRatio)} w-full bg-light-border/30 dark:bg-dark-border/30 overflow-hidden block group`}
       >
         {draft.exportUrl ? (
           <img

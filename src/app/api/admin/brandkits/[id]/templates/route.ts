@@ -19,13 +19,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (auth instanceof NextResponse) return auth
 
   const body = await req.json()
-  const { name, htmlTemplate } = body
+  const { name, htmlTemplate, aspectRatio } = body
 
   if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
   if (!htmlTemplate?.trim()) return NextResponse.json({ error: 'htmlTemplate is required' }, { status: 400 })
+  if (aspectRatio != null && aspectRatio !== 'SQUARE' && aspectRatio !== 'PORTRAIT') {
+    return NextResponse.json({ error: 'aspectRatio must be SQUARE or PORTRAIT' }, { status: 400 })
+  }
 
   const template = await prisma.brandKitTemplate.create({
-    data: { brandKitId: params.id, name: name.trim(), htmlTemplate: htmlTemplate.trim() },
+    data: {
+      brandKitId: params.id,
+      name: name.trim(),
+      htmlTemplate: htmlTemplate.trim(),
+      aspectRatio: aspectRatio ?? 'SQUARE',
+    },
   })
 
   return NextResponse.json(template, { status: 201 })

@@ -12,6 +12,11 @@ export interface DesignAgentOptions {
   briefId: string
   model?: string
   maxToolCalls?: number
+  // Output canvas size. The real (API) path relies on the prompt to instruct the
+  // model to call renderHtml with these dimensions; the mock path renders at them
+  // directly. Default 1080×1080 keeps existing square behaviour.
+  width?: number
+  height?: number
   // Placeholder token → original `data:` URI. When present, the runner restores
   // these into the model's HTML before rendering (see lib/agent/inlineAssets.ts).
   // Lets oversized templates be sent to the model with their inline assets

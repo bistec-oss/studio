@@ -10,6 +10,7 @@ import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
+import { dimensionsFor } from '@/lib/aspectRatio'
 
 export const maxDuration = 120
 
@@ -57,13 +58,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
   if (forbidden) return forbidden
 
+  // Output canvas for this draft's brief (1080×1080 square or 1080×1350 portrait).
+  const { width, height } = dimensionsFor(draft.brief.aspectRatio)
+
   // ── Override path: apply the previously withheld HTML without re-running compliance.
   if (overrideConflictId) {
     const pending = draft.pendingConflict as unknown as PendingConflict | null
     if (!pending || pending.conflictId !== overrideConflictId) {
       return NextResponse.json({ error: 'Conflict not found or already resolved' }, { status: 409 })
     }
-    return commitRevision(draft.id, draft.brief.id, instruction || 'Override brand kit conflict', pending.pendingHtml)
+    return commitRevision(draft.id, draft.brief.id, instruction || 'Override brand kit conflict', pending.pendingHtml, width, height)
   }
 
   // Explicit brief kit → campaign → project → system default.
@@ -88,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const userMessage = `Current HTML design:
 
-${draft.htmlContent ? slimHtml : '(no current HTML — start from a blank 1080×1080 canvas)'}
+${draft.htmlContent ? slimHtml : `(no current HTML — start from a blank ${width}×${height} canvas)`}
 
 Instruction: ${instruction}`
 
@@ -108,8 +112,10 @@ ${buildBrandKitSystemContext(kit)}${placeholderNote}`
         briefId: draft.brief.id,
         inlineAssets,
         cliInstruction: CLI_INSTRUCTION.refine,
+        width,
+        height,
       })
-      return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, result.exportUrl)
+      return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, width, height, result.exportUrl)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
@@ -121,7 +127,7 @@ ${buildBrandKitSystemContext(kit)}${placeholderNote}`
 ${buildBrandKitSystemContext(kit)}
 
 Compliance instructions:
-Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, 1080, 1080) as your final step to produce the finished PNG.
+Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, ${width}, ${height}) as your final step to produce the finished PNG.
 
 If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call renderHtml. Instead, your final text response must be ONLY a single JSON object, with no other text, in exactly this form:
 { "conflict": true, "explanation": "<why this conflicts with the brand kit>", "pendingHtml": "<the full modified HTML as you would have applied it>" }${placeholderNote}`
@@ -134,6 +140,8 @@ If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call
       model,
       maxToolCalls: 15,
       inlineAssets,
+      width,
+      height,
     })
 
     const conflict = parseConflict(result.htmlContent)
@@ -154,7 +162,7 @@ If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call
       return NextResponse.json({ conflict: true, explanation: conflict.explanation, conflictId })
     }
 
-    return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, result.exportUrl)
+    return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, width, height, result.exportUrl)
   } catch (err) {
     if (err instanceof AgentToolLimitError) {
       return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
@@ -169,6 +177,8 @@ async function commitRevision(
   briefId: string,
   instruction: string,
   newHtml: string,
+  width: number,
+  height: number,
   exportUrl?: string
 ) {
   // finalExportUrl is an EXPORTS object key (from runDesignAgent's renderHtml).
@@ -177,7 +187,7 @@ async function commitRevision(
   if (!finalExportUrl) {
     const { renderHtmlToPng } = await import('@/lib/renderer/puppeteer')
     const { uploadObject, BUCKET_EXPORTS } = await import('@/lib/storage/minio')
-    const buffer = await renderHtmlToPng(newHtml, 1080, 1080)
+    const buffer = await renderHtmlToPng(newHtml, width, height)
     finalExportUrl = `refine-${draftId}-${Date.now()}.png`
     await uploadObject(buffer, BUCKET_EXPORTS, finalExportUrl, 'image/png')
   }

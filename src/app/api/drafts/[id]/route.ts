@@ -46,6 +46,7 @@ async function loadDraft(id: string) {
       goal: draft.brief.goal,
       tone: draft.brief.tone,
       channels: draft.brief.channels,
+      aspectRatio: draft.brief.aspectRatio,
       designMode: draft.brief.designMode,
     },
     posts: draft.posts,

@@ -17,6 +17,13 @@ enum DesignMode {
   GENERATE
 }
 
+// Output canvas shape. SQUARE = 1080×1080 (1:1), PORTRAIT = 1080×1350 (3:4).
+// Pixel dimensions live in src/lib/aspectRatio.ts (single source of truth).
+enum AspectRatio {
+  SQUARE
+  PORTRAIT
+}
+
 enum DraftStatus {
   IN_PROGRESS
   EXPORTED
@@ -173,6 +180,7 @@ model Brief {
   goal                String
   tone                String
   channels            String[]
+  aspectRatio         AspectRatio        @default(SQUARE)
   designMode          DesignMode
   copyProviderKey     String
   imageProviderKey    String?
@@ -255,6 +263,7 @@ model BrandKitTemplate {
   brandKit           BrandKit @relation(fields: [brandKitId], references: [id])
   name               String
   htmlTemplate       String   @db.Text
+  aspectRatio        AspectRatio @default(SQUARE)
   createdAt          DateTime @default(now())
   referencedByBriefs Brief[]  @relation("BriefReferenceTemplate")
 
