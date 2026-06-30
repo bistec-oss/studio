@@ -50,7 +50,9 @@ A Playwright skeleton existed under `tests/e2e/` but was **not functional as wri
 | 4 | **Port mismatch** (config `:3001` vs dev `:3000`). | ✅ Test app runs on **`:3001`** (`npm run test:e2e:serve`), matching the config default. |
 | 5 | **No DB isolation / teardown.** | ✅ Dedicated **`bistec_studio_test`** DB (`npm run test:e2e:db`); the dev DB is never touched. (Per-run truncation between runs still TODO — see §2.) |
 
-> **Bottom line:** the 6 spec files are now green coverage, not drafts. The much larger §6 catalog (RBAC/IDOR, the §K remediation regression suite, §L browser flows) is still to be written.
+> **Bottom line (2026-06-23):** the 6 spec files are now green coverage, not drafts. The much larger §6 catalog (RBAC/IDOR, the §K remediation regression suite, §L browser flows) was still to be written at this point.
+>
+> **Update (2026-06-30):** the full §6 catalog is now implemented and green — see the "Catalog implementation status" block at the top of this doc.
 
 ### Reproducing the green run
 
@@ -340,9 +342,9 @@ npm run test:e2e:mock
 npx playwright show-report
 ```
 
-Last green run: **19/19 passed** (~16s) on 2026-06-23.
+Last green run: **77 passed / 0 failed / 4 intentional skips** (~4 min) on 2026-06-30. (The original skeleton run was 19/19 on 2026-06-23.)
 
-CI gate (recommended): run §A–K with mocks on every PR; §L (browser) + CLI-mode smoke nightly. Block merge on §K (remediation regressions) failing.
+CI gate: **`.github/workflows/e2e.yml`** runs the whole suite (§A–§L, including §K) with mocks on every PR and push to `main`. To enforce it, mark the `e2e` check **required** in the `main` branch-protection settings.
 
 ---
 
