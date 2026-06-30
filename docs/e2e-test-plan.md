@@ -1,7 +1,36 @@
 # bistec-studio — E2E Test Plan
 
 **Created:** 2026-06-23
-**Status:** ✅ Skeleton implemented & green — the 6 existing spec files (19 tests) now run and pass against a dedicated test DB with the mock seams (2026-06-23). The broader catalog (§6 cases not yet written) remains as future work.
+**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last full run: **77 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`, ~4 min). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+
+### Catalog implementation status (2026-06-30)
+
+All §6 cases are now written. New/changed files:
+- **Existing specs extended:** `brand-kit.test.ts` (TC-BK-02/04/05/06/07/08), `publish.test.ts` (TC-PUB-03/04/06/07/08/09), `path-a.test.ts` (TC-GEN-A2/03/04/05/06), `path-b.test.ts` (TC-GEN-B2 strengthened via DB), `agui-refinement.test.ts` (TC-AGUI-06), `provider-registration.test.ts` (TC-PROV-06).
+- **New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K), `ui.test.ts` (§L).
+- **New infra:**
+  - `scripts/seed-editor.mjs` — the non-admin RBAC account (`editor@bisteccare.lk` / `BistecStudio2026!`), wired into `setup-test-db.mjs`.
+  - `tests/helpers/db.ts` — direct test-DB access for cases that can't be set up over HTTP. **It reads `DATABASE_URL` from `.env.test` FIRST**, because importing `@prisma/client` runs Prisma's bundled dotenv and loads the dev `.env` into `process.env` — so "process.env first" would wrongly hit the dev DB.
+  - **`loginAs` now creates an isolated `APIRequestContext`** (its own cookie jar). The previous version reused the shared `request` fixture, so the admin cookie leaked into editor calls and RBAC tests got 200 instead of 403.
+  - Two production-safe `testHooks.ts` seams — `buildMockCopy()` routes the brief topic into the mock caption, and `shouldMockPublishFail()` lets a `__FAIL_ALWAYS__`/`__FAIL_ONCE__` sentinel in the brief topic drive deterministic publish failures (TC-PUB-03/04, TC-REG-H12b) within a single serve.
+  - **`POST /api/test/scheduler-tick`** — a test-only seam that runs one `runScheduledJobs()` pass so §K H12 can drive the scheduler over HTTP (Playwright's loader can't resolve the transitive `@/` aliases in the app module graph). **Dormant in prod: hard-404 when `NODE_ENV==='production'` AND 404 unless `MOCK_SOCIAL` is set, plus admin-gated.**
+  - `playwright.config.ts`: the global `Content-Type: application/json` was **removed** (it overrode the multipart boundary and 500'd every upload route); `retries: 1` added (cold `next dev` route compiles flake under load).
+  - `.env.test` additions for this suite: `BISTEC_API_KEYS=e2e-test-key`, `BISTEC_ADMIN_API_KEYS=e2e-admin-key` (enables the §J ACP-auth cases). `.env.test` is git-ignored — the CI workflow sets these as job env.
+  - `npm run test:e2e:reg` runs the suite with `.env.test` loaded (handy for ad-hoc DB-aware runs); not required for a green run anymore (the H12 HTTP seam removed the reg-mode dependency).
+
+**Contract corrections baked in (differed from the original §6 wording):**
+- Unauthenticated API calls are **redirected to `/login` by middleware (3xx), not 401** (except `/api/acp`, which 401s at the route). TC-AUTH-03/07 assert the redirect.
+- TC-GEN-A1/B1 etc. return **200** `{draftId,exportUrl}` (not 201) — already corrected in the skeleton, kept.
+
+**The 4 intentional skips (everything else passes):**
+- **TC-GEN-05** (generated image → public URL): the MOCK_AI agent never calls `generateImage` and there is no mock IMAGE-provider seam; the public-IMAGES-bucket guarantee it targets is covered by TC-REG-H10a.
+- **TC-REG-H11b** (concurrency cap): needs a real-Chromium serve (`MOCK_PUPPETEER` unset); skips in the mock run.
+- **TC-REG-H11a / H11c** (one Chromium process per run / relaunch-after-kill): require host process observation / killing Chromium — not auto-driveable from a black-box test; `test.skip` with rationale.
+
+**Resolved infra dependencies (now run in the standard mock suite):**
+- **DB-dependent cases** (TC-PUB-07/08, TC-EXP-01/03, TC-GEN-B2, TC-REG-H9/H10b/c) self-resolve the test DB via `tests/helpers/db.ts` (reads `.env.test`), so they run under `test:e2e:mock` — no reg-mode needed.
+- **Scheduler** (TC-REG-H12a/b/c) drive the scheduler over the `/api/test/scheduler-tick` HTTP seam, so they run in the standard mock suite (no app-module import, no reg-mode).
+- **ACP authenticated** (TC-ACP-02/03/04/05) read `BISTEC_API_KEYS` from `.env.test` / job env. TC-ACP-05 is folded into the generate_post output-signing assertion (the MCP stdio surface isn't HTTP-reachable).
 **Owner:** _unassigned_
 **Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
 
@@ -78,6 +107,8 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 MOCK_AI=true
 MOCK_PUPPETEER=true
 MOCK_SOCIAL=true
+BISTEC_API_KEYS=e2e-test-key          # enables the §J ACP-auth cases (TC-ACP-02/03/04/05)
+BISTEC_ADMIN_API_KEYS=e2e-admin-key
 ```
 
 ### Known seeded accounts

@@ -26,7 +26,8 @@ try {
 run('npx prisma migrate deploy', { DATABASE_URL: TEST_DB_URL })
 
 // 3. Seed the baseline (each script reads DATABASE_URL etc. from .env.test).
-for (const script of ['seed-admin', 'seed-brandkit', 'seed-hearts-talk', 'seed-cli-provider']) {
+//    seed-editor adds the non-admin account the RBAC/IDOR E2E tests log in as.
+for (const script of ['seed-admin', 'seed-editor', 'seed-brandkit', 'seed-hearts-talk', 'seed-cli-provider']) {
   run(`node --env-file=.env.test scripts/${script}.mjs`)
 }
 

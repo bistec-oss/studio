@@ -187,7 +187,11 @@ async function commitRevision(
   // collide on @@unique([draftId, revisionNumber]) — catch P2002 and retry with
   // a freshly computed number rather than 500-ing.
   let revision: { id: string } | null = null
-  const MAX_ATTEMPTS = 4
+  // The unique([draftId, revisionNumber]) constraint serializes concurrent
+  // refines; each loser recomputes and retries. The budget must cover the worst
+  // case (every other in-flight refine commits first), so size it generously —
+  // a small budget (e.g. 4) 500s under ~10-way concurrency (see TC-REG-H7a).
+  const MAX_ATTEMPTS = 12
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       revision = await prisma.$transaction(async (tx) => {

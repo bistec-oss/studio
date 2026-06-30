@@ -12,6 +12,7 @@
     "db:seed": "node --env-file=.env scripts/seed-admin.mjs && node --env-file=.env scripts/seed-brandkit.mjs && node --env-file=.env scripts/seed-hearts-talk.mjs",
     "test:e2e": "playwright test",
     "test:e2e:mock": "cross-env TEST_BASE_URL=http://localhost:3001 MOCK_AI=true MOCK_PUPPETEER=true MOCK_SOCIAL=true playwright test",
+    "test:e2e:reg": "node --env-file=.env.test ./node_modules/@playwright/test/cli.js test",
     "test:e2e:db": "node scripts/setup-test-db.mjs",
     "test:e2e:serve": "node --env-file=.env.test ./node_modules/next/dist/bin/next dev -p 3001"
   },

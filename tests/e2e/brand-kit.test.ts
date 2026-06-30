@@ -1,5 +1,15 @@
 import { test, expect } from '@playwright/test'
-import { login, post, get, patch, del } from '../helpers/api'
+import { login, post, get, patch, del, authHeaders, loginAs } from '../helpers/api'
+
+const BASE = process.env.TEST_BASE_URL ?? 'http://localhost:3001'
+const EDITOR_EMAIL = 'editor@bisteccare.lk'
+const EDITOR_PASSWORD = 'BistecStudio2026!'
+
+// A tiny valid 1×1 PNG used as a real upload payload.
+const PNG_1x1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 test.describe('Brand kit management', () => {
   test.beforeEach(async ({ request }) => { await login(request) })
@@ -94,5 +104,112 @@ test.describe('Brand kit management', () => {
     const listRes = await get(request, '/api/admin/brandkits')
     const kits = await listRes.json()
     expect(kits.find((k: { id: string }) => k.id === kit.id)).toBeUndefined()
+  })
+
+  // TC-BK-02 — Single-default invariant (atomic toggle). Guards M1.
+  test('creating a second default kit unsets the first', async ({ request }) => {
+    const aRes = await post(request, '/api/admin/brandkits', { name: 'Default Kit A', isDefault: true })
+    const a = await aRes.json()
+    const bRes = await post(request, '/api/admin/brandkits', { name: 'Default Kit B', isDefault: true })
+    const b = await bRes.json()
+
+    const kits = await (await get(request, '/api/admin/brandkits')).json()
+    const defaults = kits.filter((k: { isDefault: boolean }) => k.isDefault)
+    // Exactly one default exists, and it is B (the most recent).
+    expect(defaults.length).toBe(1)
+    expect(defaults[0].id).toBe(b.id)
+    const fetchedA = kits.find((k: { id: string }) => k.id === a.id)
+    expect(fetchedA.isDefault).toBe(false)
+  })
+
+  // TC-BK-04 — Logo upload returns a public, anonymously-readable URL. Guards H10.
+  test('logo upload returns a public URL readable without auth', async ({ request }) => {
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Logo Upload Kit' })).json()
+
+    const uploadRes = await request.post(`${BASE}/api/admin/brandkits/${kit.id}/upload`, {
+      multipart: { file: { name: 'logo.png', mimeType: 'image/png', buffer: PNG_1x1 } },
+      headers: { ...authHeaders() },
+    })
+    expect(uploadRes.status()).toBe(200)
+    const uploaded = await uploadRes.json()
+    expect(uploaded.url).toMatch(/^https?:\/\//)
+    expect(uploaded.key).toBeTruthy()
+
+    // The returned URL is public — an anonymous GET (no session cookie; MinIO is a
+    // different origin so the :3001 cookie is never sent) returns the bytes.
+    const anon = await request.get(uploaded.url, { headers: {} })
+    expect(anon.status()).toBe(200)
+  })
+
+  // TC-BK-05 — LOGO artifact upload syncs BrandKit.logoUrl; url is public.
+  test('LOGO artifact upload syncs the kit logoUrl', async ({ request }) => {
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Artifact Sync Kit' })).json()
+
+    const artRes = await request.post(`${BASE}/api/admin/brandkits/${kit.id}/artifacts`, {
+      multipart: {
+        file: { name: 'brand-logo.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+        feedToAI: 'true',
+      },
+      headers: { ...authHeaders() },
+    })
+    expect(artRes.status()).toBe(201)
+    const artifact = await artRes.json()
+    expect(artifact.url).toMatch(/^https?:\/\//)
+    expect(artifact.type).toBe('LOGO')
+
+    // BrandKit.logoUrl now points at the uploaded artifact.
+    const detail = await (await get(request, `/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBe(artifact.url)
+  })
+
+  // TC-BK-06 — Deleting the LOGO artifact clears BrandKit.logoUrl. Guards M5.
+  test('deleting a LOGO artifact clears the kit logoUrl', async ({ request }) => {
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Artifact Delete Kit' })).json()
+    const artifact = await (await request.post(`${BASE}/api/admin/brandkits/${kit.id}/artifacts`, {
+      multipart: {
+        file: { name: 'logo.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      },
+      headers: { ...authHeaders() },
+    })).json()
+
+    // Precondition: logoUrl is set.
+    let detail = await (await get(request, `/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBe(artifact.url)
+
+    const delRes = await del(request, `/api/admin/brandkits/${kit.id}/artifacts/${artifact.id}`)
+    expect(delRes.status()).toBe(204)
+
+    detail = await (await get(request, `/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBeNull()
+  })
+
+  // TC-BK-07 — Upload size + MIME validation. Guards H8.
+  test('oversized upload and SVG to /briefs/images are rejected with 400', async ({ request }) => {
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Validation Kit' })).json()
+
+    // >10MB file → 400 (size cap).
+    const big = Buffer.alloc(11 * 1024 * 1024, 0)
+    const bigRes = await request.post(`${BASE}/api/admin/brandkits/${kit.id}/upload`, {
+      multipart: { file: { name: 'big.png', mimeType: 'image/png', buffer: big } },
+      headers: { ...authHeaders() },
+    })
+    expect(bigRes.status()).toBe(400)
+
+    // SVG to /briefs/images → 400 (MIME allow-list excludes script-bearing SVG).
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+    const svgRes = await request.post(`${BASE}/api/briefs/images`, {
+      multipart: { file: { name: 'x.svg', mimeType: 'image/svg+xml', buffer: svg } },
+      headers: { ...authHeaders() },
+    })
+    expect(svgRes.status()).toBe(400)
+  })
+
+  // TC-BK-08 — Non-admin (editor) cannot write brand kits. Guards H4.
+  test('non-admin cannot create or mutate a brand kit', async ({ request }) => {
+    const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
+    const createRes = await editor.post('/api/admin/brandkits', { name: 'Editor Kit Attempt' })
+    expect(createRes.status()).toBe(403)
   })
 })

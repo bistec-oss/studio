@@ -1,0 +1,119 @@
+name: E2E (security-fix regression gate)
+
+# Runs the full Playwright E2E suite — including the §K remediation regression
+# cases that guard the 28 code-review security/correctness fixes (H1–H13, M*, L*)
+# and §A RBAC/IDOR. Block merges on this so those fixes can never silently break.
+# See docs/e2e-test-plan.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bistec
+          POSTGRES_PASSWORD: bistec
+          POSTGRES_DB: bistec_studio_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bistec"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Mirror of .env.test (which is git-ignored). Test-only secrets.
+      NEXT_PUBLIC_APP_URL: http://localhost:3001
+      BETTER_AUTH_SECRET: ci-test-secret-0000000000000000000000000000000000000000000000000000000000000000
+      BETTER_AUTH_URL: http://localhost:3001
+      DATABASE_URL: postgresql://bistec:bistec@localhost:5432/bistec_studio_test
+      POSTGRES_DB: bistec_studio_test
+      POSTGRES_USER: bistec
+      POSTGRES_PASSWORD: bistec
+      MINIO_ENDPOINT: http://localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BUCKET_IMAGES: generated-images
+      MINIO_BUCKET_EXPORTS: exported-designs
+      MINIO_BUCKET_BRANDKITS: brand-kits
+      DESIGN_PROVIDER: claude-html
+      TOKEN_ENCRYPTION_KEY: ci0000000000000000000000000000000000000000000000000000000000000000
+      MOCK_AI: "true"
+      MOCK_PUPPETEER: "true"
+      MOCK_SOCIAL: "true"
+      BISTEC_API_KEYS: e2e-test-key
+      BISTEC_ADMIN_API_KEYS: e2e-admin-key
+      TEST_BASE_URL: http://localhost:3001
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          # Wait for MinIO to accept connections.
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
+            sleep 2
+          done
+
+      - name: Prisma generate + migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Seed baseline (admin, editor, kits, cli provider)
+        run: |
+          node scripts/seed-admin.mjs
+          node scripts/seed-editor.mjs
+          node scripts/seed-brandkit.mjs
+          node scripts/seed-hearts-talk.mjs
+          node scripts/seed-cli-provider.mjs
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Start app (:3001, dev mode) and wait
+        # Dev mode (NODE_ENV=development) so the test-only /api/test/scheduler-tick
+        # seam is active (it hard-404s in production by design). Matches the local
+        # `npm run test:e2e:serve` flow.
+        run: |
+          npx next dev -p 3001 &
+          for i in $(seq 1 60); do
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/login)" = "200" ]; then echo "app ready"; break; fi
+            sleep 2
+          done
+
+      - name: Run E2E suite
+        run: npx playwright test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7

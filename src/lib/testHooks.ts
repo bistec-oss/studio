@@ -20,6 +20,40 @@ export const MOCK_SOCIAL_FAIL = process.env.MOCK_SOCIAL_FAIL === 'true'
 export const MOCK_COPY_TEXT =
   'Mock copy text for E2E tests — deterministic output from the MOCK_AI seam.'
 
+/**
+ * Mock copy that embeds the brief topic. The topic flows into the caption the
+ * publishers receive (Draft.copyText), so a test can steer the mock publishers'
+ * success/failure per-post by placing a sentinel in the brief topic (see
+ * shouldMockPublishFail). Without a sentinel the behaviour is unchanged.
+ */
+export function buildMockCopy(topic: string): string {
+  return `${MOCK_COPY_TEXT} [${topic}]`
+}
+
+// Per-caption record so a __FAIL_ONCE__ post fails the first publish attempt and
+// succeeds on retry — module-level state lives for the life of the serve process.
+const mockFailedOnce = new Set<string>()
+
+/**
+ * Decide whether a mocked publish should throw. Active only when MOCK_SOCIAL is
+ * set (the publishers gate on that). Precedence:
+ *   - MOCK_SOCIAL_FAIL (global env)      → always fail (legacy behaviour, kept)
+ *   - caption contains "__FAIL_ALWAYS__" → always fail (deterministic FAILED)
+ *   - caption contains "__FAIL_ONCE__"   → fail first attempt, succeed after
+ *   - otherwise                          → succeed
+ * The caption must be unique per post (use a unique brief topic) for __FAIL_ONCE__.
+ */
+export function shouldMockPublishFail(caption: string): boolean {
+  if (MOCK_SOCIAL_FAIL) return true
+  if (caption.includes('__FAIL_ALWAYS__')) return true
+  if (caption.includes('__FAIL_ONCE__')) {
+    if (mockFailedOnce.has(caption)) return false
+    mockFailedOnce.add(caption)
+    return true
+  }
+  return false
+}
+
 /** Deterministic 1×1 transparent PNG returned by the mock Puppeteer renderer. */
 export const MOCK_PNG_BUFFER = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

@@ -69,4 +69,99 @@ test.describe('Path A — template-fill generation', () => {
     // No raster image was generated (mock agent uses CSS only).
     expect(draft.imageUrl).toBeNull()
   })
+
+  // TC-GEN-A2 — Path A with a non-existent template → 404.
+  test('assemble-a with a bad templateId returns 404', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'A2 Kit', colors: ['#0284c7'] })).json()
+    const camp = await (await post(request, '/api/campaigns', { name: 'A2 Campaign', brandKitId: kit.id })).json()
+    const brief = await (await post(request, '/api/briefs', {
+      topic: 'A2', goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
+      designMode: 'TEMPLATE', copyProviderKey: 'cli', campaignId: camp.id,
+    })).json()
+
+    const res = await post(request, '/api/generate/assemble-a', {
+      briefId: brief.id,
+      templateId: 'tmpl_does_not_exist',
+    })
+    expect(res.status()).toBe(404)
+  })
+
+  // TC-GEN-03 — Brief validation: missing required fields / bad FK → 4xx.
+  test('brief creation rejects missing fields and bad FKs', async ({ request }) => {
+    // Missing goal.
+    const noGoal = await post(request, '/api/briefs', {
+      topic: 'x', tone: 'professional', channels: ['INSTAGRAM'], designMode: 'GENERATE', copyProviderKey: 'cli',
+    })
+    expect(noGoal.status()).toBeGreaterThanOrEqual(400)
+    expect(noGoal.status()).toBeLessThan(500)
+
+    // Missing channels.
+    const noChannels = await post(request, '/api/briefs', {
+      topic: 'x', goal: 'g', tone: 'professional', designMode: 'GENERATE', copyProviderKey: 'cli',
+    })
+    expect(noChannels.status()).toBeGreaterThanOrEqual(400)
+    expect(noChannels.status()).toBeLessThan(500)
+
+    // Bad campaign FK.
+    const badCampaign = await post(request, '/api/briefs', {
+      topic: 'x', goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
+      designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: 'camp_missing',
+    })
+    expect(badCampaign.status()).toBeGreaterThanOrEqual(400)
+    expect(badCampaign.status()).toBeLessThan(500)
+  })
+
+  // TC-GEN-04 — Validation is parallelized & still correct: multiple bad FKs at once → 4xx. Guards M12.
+  test('brief with several invalid FKs is rejected', async ({ request }) => {
+    const res = await post(request, '/api/briefs', {
+      topic: 'x',
+      goal: 'g',
+      tone: 'professional',
+      channels: ['INSTAGRAM'],
+      designMode: 'TEMPLATE',
+      copyProviderKey: 'no_such_provider',
+      campaignId: 'camp_missing',
+      templateId: 'tmpl_missing',
+    })
+    expect(res.status()).toBeGreaterThanOrEqual(400)
+    expect(res.status()).toBeLessThan(500)
+  })
+
+  // TC-GEN-05 — Generated raster images are stored as public (anonymously-readable)
+  // URLs so a later re-render can fetch them. Guards H10.
+  test('generated image is stored as a public URL', async ({ request }) => {
+    // The MOCK_AI design agent short-circuits the tool-use loop and never calls
+    // generateImage, and no mock IMAGE-provider seam exists, so this cannot run
+    // deterministically today. The public-IMAGES-bucket guarantee it targets is
+    // exercised by TC-REG-H10a (brief-image upload → anonymous GET 200).
+    test.skip(true, 'needs a mock IMAGE-provider seam (see TC-REG-H10a for the H10 public-bucket guard)')
+    void request
+  })
+
+  // TC-GEN-06 — An oversized template (large inline data: assets) flows through the
+  // pipeline without crashing — guards the inline-asset externalization fix.
+  test('an oversized template does not crash Path A', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const kit = await (await post(request, '/api/admin/brandkits', { name: 'Oversized Kit', colors: ['#0284c7'] })).json()
+
+    // ~700KB inline data: URI — would blow the 600k CLI guard / API context if not
+    // externalized to a token before the prompt is built.
+    const huge = 'A'.repeat(700_000)
+    const template = await (await post(request, `/api/admin/brandkits/${kit.id}/templates`, {
+      name: 'Oversized Template',
+      htmlTemplate: `<html><body style="width:1080px;height:1080px;background:#0284c7"><img src="data:image/png;base64,${huge}"/>{{topic}}</body></html>`,
+    })).json()
+
+    const camp = await (await post(request, '/api/campaigns', { name: 'Oversized Campaign', brandKitId: kit.id })).json()
+    const brief = await (await post(request, '/api/briefs', {
+      topic: 'Oversized', goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
+      designMode: 'TEMPLATE', copyProviderKey: 'cli', campaignId: camp.id,
+    })).json()
+
+    const res = await post(request, '/api/generate/assemble-a', { briefId: brief.id, templateId: template.id })
+    // Must not 5xx — externalization keeps the prompt small; the pipeline completes.
+    expect(res.status()).toBeLessThan(500)
+    expect(res.status()).toBe(200)
+  })
 })

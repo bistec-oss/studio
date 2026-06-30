@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test'
 import type { APIRequestContext } from '@playwright/test'
-import { login, post, get } from '../helpers/api'
+import { login, post, get, loginAs } from '../helpers/api'
+
+const EDITOR_EMAIL = 'editor@bisteccare.lk'
+const EDITOR_PASSWORD = 'BistecStudio2026!'
 
 // Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment + seeded
 // 'cli' COPY provider. The MOCK_AI design agent returns deterministic HTML, or a
@@ -125,5 +128,16 @@ test.describe('AGUI design refinement', () => {
     expect(new Set(numbers).size).toBe(numbers.length) // all distinct
     // contiguous from 1
     numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1))
+  })
+
+  // TC-AGUI-06 — Refining another user's draft is forbidden. Guards H2 (IDOR).
+  test('an editor cannot refine a draft owned by the admin', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(request) // owned by the admin (beforeEach login)
+    if (!draft) { test.skip(); return }
+
+    const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
+    const res = await editor.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Make it pop' })
+    expect(res.status()).toBe(403)
   })
 })

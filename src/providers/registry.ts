@@ -9,7 +9,7 @@ import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 import { ClaudeCliCopyProvider } from "./implementations/copy/claude-cli"
 import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
 import { ClaudeHtmlOrchestrator } from "./implementations/orchestrator/claude-html"
-import { MOCK_AI, MOCK_COPY_TEXT } from "@/lib/testHooks"
+import { MOCK_AI, buildMockCopy } from "@/lib/testHooks"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -45,7 +45,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
   // copyProviderKey must still reference a real enabled COPY provider (validated
   // at brief creation) — only the generation call is stubbed here.
   if (MOCK_AI) {
-    return { generateCopy: async () => MOCK_COPY_TEXT }
+    return { generateCopy: async (brief) => buildMockCopy(brief?.topic ?? '') }
   }
 
   if (providerKey) {

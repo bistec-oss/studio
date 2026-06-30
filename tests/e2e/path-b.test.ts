@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { login, post, get } from '../helpers/api'
+import { prisma, dbAvailable } from '../helpers/db'
 
 // Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment + seeded
 // 'cli' COPY provider.
@@ -56,10 +57,11 @@ test.describe('Path B — freeform design generation', () => {
       return
     }
 
-    // A standalone brief (no campaign). This 422s only if there is no system
-    // default kit either; the seeded "Bistec" kit IS the default, so this brief
-    // resolves to it and succeeds. Guard accordingly: accept 200 (default kit
-    // present) or 422 (none) — the point is the route never 500s.
+    // A standalone brief (no campaign) resolves to the system default kit — the
+    // seeded "Bistec" kit. To exercise the NO_BRAND_KIT branch we must remove the
+    // system default. With DB access we temporarily unset every default, assert
+    // the 422, then restore. Without DB access we fall back to the lenient check
+    // (the route must never 500).
     const briefRes = await post(request, '/api/briefs', {
       topic: 'No-kit Brief',
       goal: 'Test fallback',
@@ -69,7 +71,25 @@ test.describe('Path B — freeform design generation', () => {
       copyProviderKey: 'cli',
     })
     const brief = await briefRes.json()
-    const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
-    expect([200, 422]).toContain(res.status())
+
+    if (!dbAvailable) {
+      const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+      expect([200, 422]).toContain(res.status())
+      return
+    }
+
+    const defaults = await prisma!.brandKit.findMany({ where: { isDefault: true, isDeleted: false } })
+    try {
+      await prisma!.brandKit.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
+      const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+      expect(res.status()).toBe(422)
+      const body = await res.json()
+      expect(JSON.stringify(body)).toContain('NO_BRAND_KIT')
+    } finally {
+      // Restore the original default(s) so the rest of the suite is unaffected.
+      for (const k of defaults) {
+        await prisma!.brandKit.update({ where: { id: k.id }, data: { isDefault: true } })
+      }
+    }
   })
 })

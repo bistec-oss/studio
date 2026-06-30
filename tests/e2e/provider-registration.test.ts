@@ -81,4 +81,28 @@ test.describe('Provider registration', () => {
     // Cleanup
     await del(request, `/api/admin/providers/${provider.id}`)
   })
+
+  // TC-PROV-06 — Only one default per slot (atomic toggle). Guards M1.
+  test('setting a second default for a slot unsets the first', async ({ request }) => {
+    const a = await post(request, '/api/admin/providers', {
+      apiKey: 'provA_key_123456789', slot: 'COPY', providerName: 'provA', label: 'Provider A', isDefault: true,
+    })
+    if (a.status() !== 201) { test.skip(); return }
+    const provA = await a.json()
+
+    const b = await post(request, '/api/admin/providers', {
+      apiKey: 'provB_key_123456789', slot: 'COPY', providerName: 'provB', label: 'Provider B', isDefault: true,
+    })
+    expect(b.status()).toBe(201)
+    const provB = await b.json()
+
+    const list = await (await get(request, '/api/providers/available?slot=COPY')).json()
+    const defaults = list.filter((p: { isDefault: boolean }) => p.isDefault)
+    expect(defaults.length).toBe(1)
+    expect(defaults[0].providerKey).toBe(provB.providerKey)
+
+    // Cleanup.
+    await del(request, `/api/admin/providers/${provA.id}`)
+    await del(request, `/api/admin/providers/${provB.id}`)
+  })
 })

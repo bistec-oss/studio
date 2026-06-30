@@ -1,7 +1,7 @@
 import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
-import { MOCK_SOCIAL, MOCK_SOCIAL_FAIL } from "@/lib/testHooks"
+import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
 
 async function resolveCredentials(): Promise<{ accessToken: string; organizationId: string }> {
   const row = await prisma.channelToken.findUnique({ where: { channel: "LINKEDIN" } })
@@ -32,10 +32,11 @@ export async function publish(
   exportUrl: string,
   copyText: string,
 ): Promise<{ platformId: string }> {
-  // Test seam: skip the LinkedIn UGC flow. MOCK_SOCIAL_FAIL forces the failure
-  // path for FAILED/retry coverage.
+  // Test seam: skip the LinkedIn UGC flow. The failure path (MOCK_SOCIAL_FAIL
+  // global, or a __FAIL_ALWAYS__/__FAIL_ONCE__ sentinel in the caption) drives
+  // FAILED/retry coverage deterministically.
   if (MOCK_SOCIAL) {
-    if (MOCK_SOCIAL_FAIL) throw new PublishError("LINKEDIN", "Mock LinkedIn publish failure")
+    if (shouldMockPublishFail(copyText)) throw new PublishError("LINKEDIN", "Mock LinkedIn publish failure")
     return { platformId: `mock-linkedin-${Date.now()}` }
   }
 

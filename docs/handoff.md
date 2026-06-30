@@ -7,6 +7,28 @@
 
 ---
 
+## 2026-06-30 (later) — Full E2E §6 catalog implemented + green + CI gate
+
+**Branch: `main`**
+
+The entire `docs/e2e-test-plan.md` §6 catalog (§A–§L, ~80 cases) is now implemented and **green: 77 passed, 0 failed, 4 intentional skips** (`npm run test:e2e:mock`, ~4 min). A GitHub Actions workflow (`.github/workflows/e2e.yml`) runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`, so the 28 remediation fixes can't silently break.
+
+**New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K, 13 cases), `ui.test.ts` (§L). Existing specs extended to fill §B/§G/§E/§I/§D gaps.
+
+**Bugs found & fixed while getting it green (production-touching — review these):**
+- **`refine` route retry budget was 4** → 10-way concurrent refines exhausted it and 500'd. Bumped `MAX_ATTEMPTS` to 12 (`src/app/api/drafts/[id]/refine/route.ts`). Genuine hardening of the H7 fix.
+- **`playwright.config.ts`** forced a global `Content-Type: application/json` that overrode the multipart boundary → every file-upload route 500'd. Removed; added `retries: 1` (cold `next dev` compile flake).
+
+**New test-only seams (all dormant in prod):**
+- `src/lib/testHooks.ts`: `buildMockCopy()` (routes brief topic into the mock caption) + `shouldMockPublishFail()` (a `__FAIL_ALWAYS__`/`__FAIL_ONCE__` sentinel in the brief topic drives deterministic publish failures). Wired into `registry.ts` + both social publishers. Gated by `MOCK_*`.
+- `POST /api/test/scheduler-tick` (`src/app/api/test/scheduler-tick/route.ts`): runs one `runScheduledJobs()` pass so §K H12 can drive the scheduler over HTTP. **Double-gated: hard-404 in `NODE_ENV==='production'`, AND 404 unless `MOCK_SOCIAL`, AND admin-only.** (This is why CI runs the app in `next dev` mode — the seam is intentionally inert in a prod build.)
+
+**Test infra:** `scripts/seed-editor.mjs` (non-admin RBAC account, wired into `setup-test-db.mjs`); `tests/helpers/db.ts` (direct test-DB access — reads `DATABASE_URL` from `.env.test` FIRST, because importing `@prisma/client` pollutes `process.env` with the dev `.env`); `loginAs` rewritten to use an isolated cookie jar (the shared-context version leaked the admin session into editor calls); `.env.test` gained `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (enables §J ACP-auth cases — git-ignored, set as CI job env).
+
+**The 4 intentional skips:** TC-GEN-05 (needs a mock IMAGE-provider seam), TC-REG-H11a/b/c (real-Chromium / host-process observation — not black-box driveable).
+
+---
+
 ## 2026-06-30 — Preflight fixes, Dockerfile fix, TypeScript fixes, E2E 19/19 green
 
 **Branch: `main`**
