@@ -383,7 +383,9 @@ model Brief {
   topic            String
   goal             String
   tone             String
-  channels         String[]   // ["instagram", "linkedin"]
+  channels         String[]   // ["instagram", "linkedin"] — defaults to both; the publish step picks the actual target(s)
+  aspectRatio      AspectRatio @default(SQUARE) // post size: SQUARE=1080×1080, PORTRAIT=1080×1350 (added 2026-06-30, migration 20260630094723_aspect_ratio)
+  brandKitId            String?    // explicit per-brief brand kit (added 2026-06-24, migration 20260624120000_brief_brandkit); precedence: brief → campaign → project → system default
   designMode            DesignMode
   copyProviderKey       String     // e.g. "openai" — user's choice at brief time
   imageProviderKey      String?    // preferred image provider if Claude calls generateImage; null = system default
@@ -398,6 +400,9 @@ model Brief {
 }
 
 enum DesignMode { TEMPLATE GENERATE }
+
+// Output canvas shape. Pixel dimensions live in src/lib/aspectRatio.ts.
+enum AspectRatio { SQUARE PORTRAIT } // SQUARE=1080×1080, PORTRAIT=1080×1350
 
 model Draft {
   id          String          @id @default(cuid())
@@ -465,6 +470,7 @@ model BrandKitTemplate {
   brandKit     BrandKit @relation(fields: [brandKitId], references: [id])
   name         String   // display name shown in brief picker
   htmlTemplate String   @db.Text  // base HTML/CSS template with content slots
+  aspectRatio  AspectRatio @default(SQUARE) // size this template was designed for; the brief picker filters to the chosen size (added 2026-06-30)
   createdAt    DateTime @default(now())
   referencedByBriefs Brief[] @relation("BriefReferenceTemplate")  // Path B style-reference back-relation
 }
@@ -683,7 +689,7 @@ POST   /api/admin/brandkits                             (admin) body: { name, co
 PATCH  /api/admin/brandkits/[id]                        (admin) body: { name?, colors?, fonts?, logoUrl?, isDefault? } → { brandKit }
 DELETE /api/admin/brandkits/[id]                        (admin) (soft-delete) → 204
 GET    /api/admin/brandkits/[id]/templates              (admin) → { templates: BrandKitTemplate[] }
-POST   /api/admin/brandkits/[id]/templates              (admin) body: { name, htmlTemplate } → { template }
+POST   /api/admin/brandkits/[id]/templates              (admin) body: { name, htmlTemplate, aspectRatio? } → { template }   // aspectRatio: SQUARE|PORTRAIT, default SQUARE
 PATCH  /api/admin/brandkits/[id]/templates/[tid]        (admin) body: { name?, htmlTemplate? } → { template }
 DELETE /api/admin/brandkits/[id]/templates/[tid]        (admin) → 204
 GET    /api/admin/brandkits/[id]/prompt                 (admin) → { active, versions: BrandKitPrompt[] }

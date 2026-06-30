@@ -1,12 +1,14 @@
 # bistec-studio — E2E Test Plan
 
 **Created:** 2026-06-23
-**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last full run: **77 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`, ~4 min). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last run: **80 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`, ~5 min). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+
+> **Update (2026-06-30, post size-picker):** the brief now picks a **size** (1:1 / 3:4) instead of platforms (channels default to both, chosen at publish time). Added **TC-GEN-A3** (3:4 portrait Path A → EXPORTED draft) and **TC-GEN-A4** (template/brief aspect-ratio mismatch → 400) in `path-a.test.ts`, plus a **3:4 portrait Path B** case in `path-b.test.ts`. **TC-UI-02/03** updated: step label is now "Size & Design" and Publish opens the shared `PublishDialog` (pick a channel + Confirm fires POST /api/posts). Net suite count 77 → 80 passed.
 
 ### Catalog implementation status (2026-06-30)
 
 All §6 cases are now written. New/changed files:
-- **Existing specs extended:** `brand-kit.test.ts` (TC-BK-02/04/05/06/07/08), `publish.test.ts` (TC-PUB-03/04/06/07/08/09), `path-a.test.ts` (TC-GEN-A2/03/04/05/06), `path-b.test.ts` (TC-GEN-B2 strengthened via DB), `agui-refinement.test.ts` (TC-AGUI-06), `provider-registration.test.ts` (TC-PROV-06).
+- **Existing specs extended:** `brand-kit.test.ts` (TC-BK-02/04/05/06/07/08), `publish.test.ts` (TC-PUB-03/04/06/07/08/09), `path-a.test.ts` (TC-GEN-A2/03/04/05/06 + A3/A4 portrait & ratio-mismatch), `path-b.test.ts` (TC-GEN-B2 strengthened via DB + B3 portrait), `agui-refinement.test.ts` (TC-AGUI-06), `provider-registration.test.ts` (TC-PROV-06).
 - **New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K), `ui.test.ts` (§L).
 - **New infra:**
   - `scripts/seed-editor.mjs` — the non-admin RBAC account (`editor@bisteccare.lk` / `BistecStudio2026!`), wired into `setup-test-db.mjs`.
@@ -230,6 +232,9 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 - **TC-GEN-04 — Brief validation is parallelized & correct.** S: brief with invalid campaign + invalid template + invalid provider. E: 4xx (any/all bad FKs reported). **Guards M12.**
 - **TC-GEN-05 — Generated image stored as public URL.** P: mock image provider returns a data URL. S: run generation that calls `generateImage`. E: image embedded in HTML is a **public** URL (anonymous GET 200), so re-render later works. **Guards H10.**
 - **TC-GEN-06 — Oversized template guard.** P: Hearts Talk template (1.81 MB). S: Path A with it. E: clean error (`Prompt too large…`), not a crash. **Known Issue regression.**
+- **TC-GEN-A3 — Path A 3:4 portrait.** P: kit + PORTRAIT template + brief (`aspectRatio:PORTRAIT`, `designMode:TEMPLATE`). S: assemble-a. E: 200; `status:EXPORTED`; `GET /api/drafts/[id]` → `brief.aspectRatio:PORTRAIT`. **Guards the aspect-ratio threading.**
+- **TC-GEN-A4 — Path A aspect-ratio mismatch rejected.** P: SQUARE template + PORTRAIT brief. S: assemble-a. E: 400 (no stretching; the wizard only offers matching templates, the API enforces it).
+- **TC-GEN-B3 — Path B 3:4 portrait.** P: kit + brief (`aspectRatio:PORTRAIT`, `designMode:GENERATE`). S: assemble-b. E: 200; `status:EXPORTED`; `brief.aspectRatio:PORTRAIT`.
 
 ### E. AGUI refinement
 
@@ -309,8 +314,8 @@ These are the highest-value additions — they guard the H7/H9/H10/H11/H12 fixes
 A thin layer of real-browser tests for the highest-risk UI regressions (the rest is API-covered above).
 
 - **TC-UI-01 — Login → dashboard.** Log in via the form, land on `/`, KPIs render (no 404 — the dashboard route exists).
-- **TC-UI-02 — Brief wizard 5-step happy path.** Walk Platform&Path → Campaign → Content → Images → Review → Generate; land on `/drafts/[id]` with a preview. (Path A blocks Continue until a template is chosen.)
-- **TC-UI-03 — Publish button actually publishes.** On a draft, click Publish → POST fires (not a navigation). **Guards H5.**
+- **TC-UI-02 — Brief wizard 5-step happy path.** Walk Campaign → Size&Design → Content → Images → Review → Generate; land on `/drafts/[id]` with a preview. (Path A blocks Continue until a template is chosen.) Step labels asserted: Campaign, **Size & Design**, Content, Images, Review.
+- **TC-UI-03 — Publish button opens the dialog and publishes.** On a draft, click Publish → the shared `PublishDialog` opens; pick a channel + Confirm → POST `/api/posts` fires (not a navigation). **Guards H5.**
 - **TC-UI-04 — Draft preview image loads.** The `<img src={exportUrl}>` returns 200 (signed URL works end-to-end in the browser). **Guards H10.**
 - **TC-UI-05 — AGUI chat refine round-trip.** Type an instruction, see the preview update + a new revision in history.
 
@@ -342,7 +347,7 @@ npm run test:e2e:mock
 npx playwright show-report
 ```
 
-Last green run: **77 passed / 0 failed / 4 intentional skips** (~4 min) on 2026-06-30. (The original skeleton run was 19/19 on 2026-06-23.)
+Last green run: **80 passed / 0 failed / 4 intentional skips** (~5 min) on 2026-06-30 (after the size-picker changes; 77 before). (The original skeleton run was 19/19 on 2026-06-23.)
 
 CI gate: **`.github/workflows/e2e.yml`** runs the whole suite (§A–§L, including §K) with mocks on every PR and push to `main`. To enforce it, mark the `e2e` check **required** in the `main` branch-protection settings.
 

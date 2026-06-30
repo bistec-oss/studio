@@ -17,7 +17,12 @@ The final 6 (the others landed earlier):
 | H11 | Puppeteer singleton browser + `p-limit` concurrency cap (`PUPPETEER_MAX_CONCURRENCY`, default 2). | no |
 | L2 | Shared `src/lib/apiFetch.ts` + `src/lib/brandkit/systemContext.ts`. | no |
 
-> After pulling these, run `npx prisma migrate deploy` (or `migrate dev`) to apply the new migrations before starting the app. As of 2026-06-24 there is a third migration, `20260624120000_brief_brandkit` (adds `Brief.brandKitId`).
+> After pulling these, run `npx prisma migrate deploy` (or `migrate dev`) to apply the new migrations before starting the app. As of 2026-06-24 there is a third migration, `20260624120000_brief_brandkit` (adds `Brief.brandKitId`); as of 2026-06-30 a fourth, `20260630094723_aspect_ratio` (adds the `AspectRatio` enum + `Brief.aspectRatio` + `BrandKitTemplate.aspectRatio`).
+
+**✅ Post size picker + publish dialog + CLI model — 2026-06-30:** Three related changes landed:
+- **The brief now picks a SIZE, not platforms.** Wizard step 1 ("Size & Design") offers **1:1 (1080×1080)** or **3:4 (1080×1350)**; channels default to both feeds and are chosen at *publish* time instead. New `AspectRatio` enum on `Brief` + `BrandKitTemplate`. Pixel dims/labels live in the single source **`src/lib/aspectRatio.ts`** and are threaded through every render site (assemble-a, pathB, the design agent API + CLI, and the export/refine/restore routes + their prompts) so the canvas, the model instruction, and the preview never drift. The Path A template picker filters to the chosen size and `assemble-a` rejects a ratio mismatch (no stretching). Draft preview + library tiles reflect the ratio. Admin template create gets a size selector + badge; `scripts/seed-portrait-template.mjs` seeds a 3:4 template on the default kit.
+- **Publish dialog on the draft page.** The library `PublishDialog` (channel checkboxes + optional schedule) is now a shared component (`src/components/library/PublishDialog.tsx`) wired into the draft review page's Publish button, replacing the old `confirm()`.
+- **CLI mode model is configurable (`CLAUDE_CLI_MODEL`, default `sonnet`).** `claudeCli.ts` now passes `--model` to `claude -p`; without it the CLI used the costly account default (Opus). This was the root cause of CLI Path B burning credits. Set `CLAUDE_CLI_MODEL=default` to omit the flag.
 
 **✅ Brand-kit selection + Hearts Talk fix — 2026-06-24:** Three related changes landed:
 - **Oversized templates now work (Hearts Talk Path A fixed).** The orchestrator externalizes inline `data:` assets before the prompt and re-inlines them before render — see "Inline-asset externalization" below. The 600k CLI guard and the API's ~200k context are no longer hit; no re-seed needed.
@@ -77,6 +82,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 
 - All AI calls are **server-side only** — the browser never calls an AI API or Puppeteer directly
 - **Brand kit precedence:** Explicit brief kit (`Brief.brandKitId`) → Campaign kit → Project default → system default (`BrandKit.isDefault = true`)
+- **Post size:** chosen per brief (`Brief.aspectRatio`: `SQUARE`=1080×1080, `PORTRAIT`=1080×1350); a brand template declares the size it was designed for (`BrandKitTemplate.aspectRatio`). Dimensions resolve through `src/lib/aspectRatio.ts` — the only place pixel sizes are defined.
 - **AI provider resolution order:** Brief's chosen key → `AvailableProvider.isDefault` → env var fallback
 - **API keys** stored AES-256-GCM encrypted; only `keyPrefix` shown in UI after registration; full key never returned
 - **MinIO** served to browser via pre-signed URLs only — MinIO port never publicly exposed

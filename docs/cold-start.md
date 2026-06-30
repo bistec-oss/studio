@@ -134,6 +134,12 @@ kit's `createdBy` resolves to a real admin id). Both are idempotent. Result:
 - Admin login: `admin@bisteccare.lk` / `BistecStudio2026!` (change after first login)
 - Default **"Bistec"** brand kit: Glacier palette, Inter + JetBrains Mono (Google Fonts), active brand-voice prompt v1
 
+Optional: seed a 3:4 portrait template on the default kit so Path A has a portrait option out of the box (the brief filters templates by the chosen size):
+
+```bash
+node --env-file=.env scripts/seed-portrait-template.mjs   # idempotent
+```
+
 ---
 
 ## 6. Start the dev server
@@ -155,6 +161,12 @@ Set `DESIGN_PROVIDER=cli` in `.env` to route design generation through the local
 Claude Code CLI (`claude -p`) instead of the Anthropic API. Brief flow, DB writes, and
 draft pages all work; Puppeteer rendering, `generateImage`, and MinIO upload are skipped
 (`exportUrl` is empty, preview shows a placeholder). Never use `cli` in production.
+
+> **CLI model / credit cost:** CLI mode runs under `CLAUDE_CLI_MODEL` (default `sonnet`).
+> Without it the CLI uses the account default (the Opus tier) — the reason CLI Path B
+> generation is expensive. Set `CLAUDE_CLI_MODEL=default` to omit `--model`. CLI mode
+> consumes your logged-in Claude credits, so prefer the API path (or the mock E2E suite)
+> for routine work.
 
 For E2E tests with everything stubbed (no AI, no Puppeteer, no social):
 

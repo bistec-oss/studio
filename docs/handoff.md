@@ -7,7 +7,20 @@
 
 ---
 
-## 2026-06-30 (latest) — Bistec Studio logo added to the UI
+## 2026-06-30 (latest) — Brief size picker, publish dialog, CLI model fix
+
+**Branch: `main`** — commits `ec7ac4a`, `c684da7`, `f5120fc`.
+
+1. **The brief picks a SIZE, not platforms.** Wizard step 1 is now "Size & Design" with **1:1 (1080×1080)** / **3:4 (1080×1350)**. Channels default to both feeds and are chosen at *publish* time. New `AspectRatio` enum on `Brief` + `BrandKitTemplate` (migration `20260630094723_aspect_ratio`). Pixel dims/labels are centralized in **`src/lib/aspectRatio.ts`** and threaded through every render site (assemble-a, pathB, the design agent API + CLI, and the export/refine/restore routes + their prompts). Path A template picker filters to the chosen size; `assemble-a` rejects a ratio mismatch (no stretching). Draft preview + library tiles reflect the ratio. Admin template create has a size selector + badge; `scripts/seed-portrait-template.mjs` seeds a 3:4 template.
+2. **Publish dialog on the draft page.** Extracted the library `PublishDialog` (channels + optional schedule) into a shared `src/components/library/PublishDialog.tsx`, wired into the draft review page's Publish button (replaces the old `confirm()`).
+3. **pathB.ts reference-template externalization** (`ec7ac4a`): a heavy style-reference template (e.g. Hearts Talk) is run through `extractInlineAssets()` before the prompt, so it no longer blows the CLI/API context.
+4. **CLI model fix** (`f5120fc`): `claudeCli.ts` now passes `--model` from **`CLAUDE_CLI_MODEL`** (default `sonnet`). Root cause of CLI Path B burning credits was the missing flag → account-default Opus. Set `CLAUDE_CLI_MODEL=default` to omit it. **Not runtime-verified** (would cost CLI credits).
+5. **E2E:** added TC-GEN-A3/A4 (portrait + ratio-mismatch) and a portrait Path B case; updated TC-UI-02/03 for the renamed step + dialog flow. Suite **80 passed / 0 failed / 4 skipped**.
+6. **Library cleaned** (dev DB): removed the "Bistec 5-year anniversary" draft + brief; only the "Announcing bistec-studio" intro post remains.
+
+---
+
+## 2026-06-30 — Bistec Studio logo added to the UI
 
 **Branch: `main`**
 
@@ -477,13 +490,13 @@ The design orchestrator is NOT user-selectable — env-configured only.
 - `Campaign` — name, brandKitId (override), defaultTone, isDeleted, deletedAt
 - `ProjectCampaign` — M2M join (project ↔ campaign)
 - `CampaignDraft` — M2M join (campaign ↔ draft, shared asset linking)
-- `Brief` — topic, **description** (AI prompt context — speaker bios, event details, key messages), goal, tone, channels[], designMode, **campaignId** (nullable = Uncategorized), copyProviderKey, **imageProviderKey** (optional — overrides system default image provider if Claude calls `generateImage`), **additionalImageUrl** (nullable — MinIO URL of user-uploaded image placed into template slot, Path A only), **briefImages** (Path B only — JSON array of `{ url: string, intent: "embed" | "reference" }` objects; MinIO URLs of user-supplied images; `"embed"` images are placed in the HTML layout, `"reference"` images are passed as compositional inspiration only), **referenceTemplateId** (nullable — FK → BrandKitTemplate; Path B only — the chosen template's HTML is passed to Claude as style inspiration, not filled)
+- `Brief` — topic, **description** (AI prompt context — speaker bios, event details, key messages), goal, tone, channels[] (default both; the publish step picks targets), **aspectRatio** (SQUARE=1080×1080 | PORTRAIT=1080×1350 — chosen in the wizard), designMode, **campaignId** (nullable = Uncategorized), **brandKitId** (nullable — explicit per-brief kit), copyProviderKey, **imageProviderKey** (optional — overrides system default image provider if Claude calls `generateImage`), **additionalImageUrl** (nullable — MinIO URL of user-uploaded image placed into template slot, Path A only), **briefImages** (Path B only — JSON array of `{ url: string, intent: "embed" | "reference" }` objects; MinIO URLs of user-supplied images; `"embed"` images are placed in the HTML layout, `"reference"` images are passed as compositional inspiration only), **referenceTemplateId** (nullable — FK → BrandKitTemplate; Path B only — the chosen template's HTML is passed to Claude as style inspiration, not filled)
 - `Draft` — copyText, **imageUrl?** (MinIO URL from `generateImage` tool call — null if Claude used CSS/SVG), **htmlContent** (current HTML state), templateId, exportUrl (MinIO), status
 - `Post` — channel (INSTAGRAM | LINKEDIN), status, scheduledAt, publishedAt, platformId, errorReason
 - `BrandKit` — name, **colors Json?** (hex palette), **fonts Json?** ({name, url}[]), **logoUrl String?**, isDefault, isDeleted — first-class, admin-managed; referenced by Project.defaultBrandKitId and Campaign.brandKitId
 - `BrandKitPrompt` — brandKitId, content, version, isActive (versioned brand voice for rollback — EC-13)
 - `BrandKitArtifact` — brandKitId, type, name, url (MinIO), feedToAI (whether passed to AI as brand context)
-- `BrandKitTemplate` — brandKitId, **htmlTemplate String** (HTML/CSS string), name
+- `BrandKitTemplate` — brandKitId, **htmlTemplate String** (HTML/CSS string), name, **aspectRatio** (SQUARE | PORTRAIT — the size this template is designed for; the brief picker filters to the chosen size)
 - `AvailableProvider` — slot (COPY | IMAGE), providerKey, providerName, label, keyPrefix (display only), encryptedApiKey, isEnabled, isDefault
 - `DraftRevision` — draftId, revisionNumber, **htmlSnapshot String** (full HTML at this revision), **exportUrl String** (MinIO PNG URL), instruction (the user's chat message that produced this revision), createdAt
 
