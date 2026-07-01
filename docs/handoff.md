@@ -1,9 +1,27 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-01 (latest: per-path CLI model split + generation diagnosis — see top section below)
+**Date:** 2026-07-01 (latest: Bistec brand kit refined with real master-brand identity — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`; local: `C:\Users\DamianDeCruzBISTECCa\Documents\designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## 2026-07-01 (latest) — Bistec brand kit refined with real BISTEC Global master-brand identity
+
+**Branch: `main`.** The system-default **"Bistec"** brand kit (`cmqroh4me…`) previously held *provisional placeholder* values (sky-blue `#0284c7…` palette, Inter/JetBrains Mono fonts, null logo, 0 artifacts). It's now populated with the **real BISTEC Global master-brand identity**, sourced from the `bistec-designer-v2` skill's Brand Identity Style Guide v1.1 (Sep 2025).
+
+| Field | Before | After |
+|---|---|---|
+| `colors` | placeholder sky-blue | Navy `#14377D`, Royal `#006FB9`, Grass Green `#2CB34A`, White `#FFFFFF`, Charcoal `#203232`, Pale Fawn `#F4F4F3` |
+| `fonts` | Inter + JetBrains Mono | **Lato** (primary brand font; Arial/Calibri are office alternates, not web fonts) |
+| `logoUrl` | `null` | master full-colour logo (public MinIO URL) |
+| artifacts | none | 3 `LOGO` artifacts (full / reversed / icon), all `feedToAI=true` |
+| active voice prompt | v1 (provisional) | **v2** — carries the "Hearts empowering business with technology" tagline, "our family", Australian-English rules, em-dashes, banned-phrase list |
+
+- **Reusable script:** [`scripts/refine-bistec-brandkit.mjs`](../scripts/refine-bistec-brandkit.mjs) — idempotent (`node --env-file=.env scripts/refine-bistec-brandkit.mjs`). Uploads the three master logos to the public-read `brand-kits` bucket, rewrites colours/fonts/logoUrl, rebuilds the LOGO artifacts, and publishes a new active voice-prompt version (skips the prompt if the tagline is already present). Mirrors `src/lib/storage/minio.ts` for the S3 upload + public-read policy.
+- **Verified:** all three logos return `200 image/png` on their stable URLs; the active prompt (v2) carries the tagline. Master brand only — Navy/Royal/Green.
+- **Scope note:** this is the **master** brand. The skill also defines six sub-brands (Bookkeeping/Accounting/AI+Software/IT Services/Consulting/Marketing), each with its own accent pair + logo set — not seeded yet. The **Consulting** palette has a known bug flag in guide v1.1 (Marketing's orange hex printed by mistake) — verify with Marketing before customer-facing use.
 
 ---
 
