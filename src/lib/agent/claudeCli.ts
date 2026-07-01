@@ -8,14 +8,19 @@ function claudeCommand(): { cmd: string; shell: boolean } {
   return { cmd: "claude", shell: false }
 }
 
-// Model the spawned `claude -p` runs under. Without an explicit `--model` the CLI
-// uses the account default (the Opus tier), which is the main reason CLI-mode
-// generation is costly — Path B is a large single-shot. Default to Sonnet to match
-// the API path (runDesignAgent uses Sonnet for Path B / Haiku for Path A). Accepts
-// a CLI model alias ("sonnet"/"opus"/"haiku") or a full model id; set
-// CLAUDE_CLI_MODEL=default to omit the flag and use the account default.
-function claudeModelArgs(): string[] {
-  const model = (process.env.CLAUDE_CLI_MODEL ?? "sonnet").trim()
+// Model the spawned `claude -p` runs under. Precedence:
+//   1. CLAUDE_CLI_MODEL env — a GLOBAL override across every `claude -p` call
+//      (handy for testing all stages on one model).
+//   2. the per-call `model` passed by the caller — this is where the per-path
+//      split lives (Path A design → "haiku", Path B design → "sonnet"; see the
+//      design call sites), matching the API path (runDesignAgent).
+//   3. fallback "haiku" for calls that pass no model (e.g. copy).
+// Accepts a CLI alias ("sonnet"/"opus"/"haiku") or a full model id. A value of
+// "default" (from either source) omits --model and uses the account default
+// (the costly Opus tier) — the reason we never want that implicitly.
+function claudeModelArgs(explicitModel?: string): string[] {
+  const override = (process.env.CLAUDE_CLI_MODEL ?? "").trim()
+  const model = override || (explicitModel ?? "haiku").trim()
   if (!model || model.toLowerCase() === "default") return []
   return ["--model", model]
 }
@@ -26,6 +31,9 @@ export interface ClaudeCliOptions {
   // Short tag for log lines so concurrent/sequential CLI calls are distinguishable
   // (e.g. "copy", "design:pathB"). Purely diagnostic.
   label?: string
+  // Per-call model (CLI alias or full id). Path A design passes "haiku", Path B
+  // "sonnet". Overridden by CLAUDE_CLI_MODEL when that env var is set.
+  model?: string
 }
 
 // Dev-mode diagnostics. CLI mode is a local dev convenience, so log by default;
@@ -73,7 +81,7 @@ const MAX_PROMPT_CHARS = 600_000
 
 export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}): Promise<string> {
   const { cmd, shell } = claudeCommand()
-  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "" } = opts
+  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model } = opts
 
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new Error(
@@ -96,15 +104,15 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
   // Drive, Atlassian, … connectors), adding startup latency, bloating the prompt
   // context with dozens of unused tool definitions, and raising token cost — none
   // of which a single-shot HTML/copy generation needs.
-  const modelArgs = claudeModelArgs()
+  const modelArgs = claudeModelArgs(model)
   const args = ["-p", "--strict-mcp-config", ...modelArgs]
-  const model = modelArgs.length ? modelArgs[1] : "(account default)"
+  const resolvedModel = modelArgs.length ? modelArgs[1] : "(account default)"
   const startedAt = Date.now()
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`
 
   cliLog(
     label,
-    `spawn ${cmd} ${args.join(" ")} · model=${model} · prompt=${prompt.length} chars · timeout=${timeoutMs}ms`,
+    `spawn ${cmd} ${args.join(" ")} · model=${resolvedModel} · prompt=${prompt.length} chars · timeout=${timeoutMs}ms`,
   )
 
   return new Promise<string>((resolve, reject) => {

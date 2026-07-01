@@ -69,6 +69,9 @@ export type CliInstructionBuilder = (width: number, height: number) => string
 type CliAgentOptions = Pick<DesignAgentOptions, "systemPrompt" | "userMessage" | "briefId" | "inlineAssets" | "width" | "height"> & {
   // Which trailing instruction block to append. Defaults to freeform (Path B).
   cliInstruction?: CliInstructionBuilder
+  // Design model for this run: Path A (template fill) passes "haiku", Path B
+  // (freeform) passes "sonnet". Overridden by CLAUDE_CLI_MODEL when set.
+  model?: string
 }
 
 // CLI-mode replacement for runDesignAgent. Drives a single-shot HTML generation
@@ -84,13 +87,14 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
     cliInstruction = cliFreeform,
     width = 1080,
     height = 1080,
+    model,
   } = options
 
   const prompt = `${systemPrompt}\n\n${userMessage}\n${cliInstruction(width, height)}`
 
   // Freeform Path B design is a heavier single-shot than copy/template-fill and
   // can run past 3 min on the local CLI; allow more headroom before timing out.
-  const raw = await runClaudeCli(prompt, { timeoutMs: 300_000, label: "design" })
+  const raw = await runClaudeCli(prompt, { timeoutMs: 300_000, label: "design", model })
   let html = stripCodeFences(raw)
 
   const lower = html.toLowerCase()

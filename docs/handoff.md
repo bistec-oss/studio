@@ -1,13 +1,33 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-06-30 (latest: CLI timeout / credit-burn fix — see top section below)
+**Date:** 2026-07-01 (latest: per-path CLI model split + generation diagnosis — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`; local: `C:\Users\DamianDeCruzBISTECCa\Documents\designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-06-30 (latest) — CLI timeout + credit-burn-on-timeout fix
+## 2026-07-01 (latest) — Per-path CLI model split + Path A/B generation diagnosis
+
+**Branch: `main`.** Verified both design paths end-to-end in CLI mode (keyless, on the local Claude Code account, real Chromium render — no mocks) and made the CLI design model **per-path**, matching the API path.
+
+**The model split (both orchestrators): Path A → Haiku, Path B → Sonnet.**
+- The **API path** (`DESIGN_PROVIDER=claude-html`) already did this: `assemble-a` passes `claude-haiku-4-5-20251001`, `pathB.ts` (used by `assemble-b` + `regenerate-design`) passes `claude-sonnet-4-6`, and `refine` picks by `designMode`. No change needed there.
+- The **CLI path** (`DESIGN_PROVIDER=cli`) previously used a single global `CLAUDE_CLI_MODEL` for everything. Now `runClaudeCli`/`runDesignAgentCli` accept a per-call `model`, wired at the three CLI design call sites: `assemble-a` → `haiku`, `pathB.ts` → `sonnet`, `refine` → `designMode==='TEMPLATE' ? 'haiku' : 'sonnet'`.
+- **`CLAUDE_CLI_MODEL` is now a *global override*, not the default source.** Unset ⇒ the per-path split applies (copy defaults to `haiku`). Set ⇒ forces one model across every `claude -p` call (useful for testing). `default` ⇒ omits `--model` and uses the costly account default (Opus) — avoid. Documented in `.env.example` + `docs/cold-start.md §7`.
+- Files: `src/lib/agent/claudeCli.ts`, `src/lib/agent/designAgentCli.ts`, `src/app/api/generate/assemble-a/route.ts`, `src/lib/agent/pathB.ts`, `src/app/api/drafts/[id]/refine/route.ts`. Typecheck clean. **Not runtime-verified after the wiring** (would re-burn credits) — the split logic is trivial and mirrors the runs below.
+
+**Diagnosis (what was actually run, once per path, monitored):**
+- **Path A** (template fill, small "Simple Gradient Card" template seeded on the default kit) → HTTP 200 in **54s**, valid **2160×2160** PNG, on-brand.
+- **Path B** (freeform) → **55s on Haiku** / **61s on Sonnet** (richer 1017-char brief), both valid **2160×2160** PNGs. Copy 16–26s, design 24–39s — every stage ~5× under its timeout (copy 120s / design 300s).
+- **Root cause of the earlier Path B timeouts + credit burn was the Opus default model, not Sonnet.** With Haiku/Sonnet pinned it never approaches the timeout, so the tree-kill safety net doesn't even engage.
+- **Quality:** Sonnet's Path B is markedly richer (feature-card grid, 3-stat band, decorative geometry; 9,363-char HTML → 2.09 MB PNG) vs Haiku's simpler layout (7,891 chars → 178 KB). Hence Sonnet for freeform, Haiku for the constrained template fill.
+
+> Testing left a small **"Simple Gradient Card" SQUARE** template on the default Bistec kit (the only other template is the 1.85 MB "Hearts Talk" oversized edge case) — kept as a normal-sized Path A fixture. Test briefs/drafts were cleaned up.
+
+---
+
+## 2026-06-30 — CLI timeout + credit-burn-on-timeout fix
 
 **Branch: `main`.** Fixed in `src/lib/agent/claudeCli.ts`. Symptom: CLI-mode generation (`DESIGN_PROVIDER=cli`) would time out and produce no image **while still burning credits**. Investigated by reproducing the exact spawn directly with cheap prompts (trivial 5–20s; one real ~820-char Path B prompt → valid 6.2 KB HTML in **~76s**), so normal generation actually fits the 300s design / 120s copy budgets — the timeouts came from heavy prompts + per-spawn variance, and the credit waste from an un-killed subprocess.
 

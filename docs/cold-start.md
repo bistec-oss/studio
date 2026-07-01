@@ -162,9 +162,11 @@ Claude Code CLI (`claude -p`) instead of the Anthropic API. Brief flow, DB write
 draft pages all work; Puppeteer rendering, `generateImage`, and MinIO upload are skipped
 (`exportUrl` is empty, preview shows a placeholder). Never use `cli` in production.
 
-> **CLI model / credit cost:** CLI mode runs under `CLAUDE_CLI_MODEL` (default `sonnet`).
-> Without it the CLI uses the account default (the Opus tier) — the reason CLI Path B
-> generation is expensive. Set `CLAUDE_CLI_MODEL=default` to omit `--model`. CLI mode
+> **CLI model / credit cost:** by default the CLI model is **per-path** — Path A
+> (template fill) runs on **haiku**, Path B (freeform) on **sonnet** (matching the API
+> path). `CLAUDE_CLI_MODEL`, when set, is a **global override** that forces one model
+> across every `claude -p` call (leave it unset to keep the split). `CLAUDE_CLI_MODEL=default`
+> omits `--model` and falls back to the costly account default (Opus) — avoid. CLI mode
 > consumes your logged-in Claude credits, so prefer the API path (or the mock E2E suite)
 > for routine work.
 

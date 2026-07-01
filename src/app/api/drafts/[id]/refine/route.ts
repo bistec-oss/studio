@@ -114,6 +114,9 @@ ${buildBrandKitSystemContext(kit)}${placeholderNote}`
         cliInstruction: CLI_INSTRUCTION.refine,
         width,
         height,
+        // Refine uses the same model as the originating path: Path A → haiku,
+        // Path B → sonnet (mirrors the API-path `model` computed above).
+        model: draft.brief.designMode === 'TEMPLATE' ? 'haiku' : 'sonnet',
       })
       return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, width, height, result.exportUrl)
     } catch (err) {

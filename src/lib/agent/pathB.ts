@@ -117,7 +117,9 @@ Copy text to use: ${copyText}${imageSection}
 Design a complete, original HTML/CSS post. Call renderHtml(html, ${width}, ${height}) as your final step.`
 
   return CLI_MODE
-    ? runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id, width, height })
+    ? // Path B (freeform) needs stronger layout reasoning — use Sonnet, matching
+      // the API path's claude-sonnet-4-6 below.
+      runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id, width, height, model: 'sonnet' })
     : runDesignAgent({
         systemPrompt,
         userMessage,

@@ -122,6 +122,9 @@ Fill the template with this content. Replace all placeholder text with the copy.
           cliInstruction: CLI_INSTRUCTION.templateFill,
           width,
           height,
+          // Path A (template fill) is a constrained task — use Haiku, matching
+          // the API path's claude-haiku-4-5 above.
+          model: 'haiku',
         })
       : await runDesignAgent({
           systemPrompt,
