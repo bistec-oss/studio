@@ -1,13 +1,23 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-03 (latest: whole-system improvement review fully remediated — see top section below)
+**Date:** 2026-07-03 (latest: dev-DB library cleanup — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-07-03 (latest) — Improvement review fully remediated (77 findings, 4 phases)
+## 2026-07-03 (latest) — Dev-DB library cleanup (pruned test debris)
+
+**Branch: `main`.** Housekeeping only — no code changes. After a CLI-mode (`DESIGN_PROVIDER=cli`) test session that generated a new draft, the dev DB was pruned down to two intentional drafts; the leftover 2026-06-24 test debris was removed.
+
+- **Kept (2 drafts, both `EXPORTED`, Path B):** the **IRP 2nd-cohort announcement** (generated this session) and the **Q3 product launch** post — plus their 2 briefs.
+- **Deleted (4 test drafts):** two "Hearts Talk speaker session" (Path A), the MS-Teams "Damian De Cruz" one (Path A), and "Hearts Talk: Spec-Driven Development" (Path A, was `IN_PROGRESS`) — together with their **1 post, 2 revisions, and 4 briefs**. Then swept **4 orphan test briefs** (no drafts attached: MS-Teams brief, 2× "Hearts Talk freeform launch", "precedence test topic xyz").
+- **Final dev-DB state:** exactly **2 drafts + 2 briefs**, no orphans. Deletions ran in a `$transaction` with the two keeper drafts/briefs guarded by ID (no cascade exists on `Post`/`DraftRevision`/`Draft`→`Brief`, so children were deleted first). Dev-only data change — no schema/migration/code impact; the only 2026-06-24 template fixtures on disk ("Hearts Talk" oversized + "Simple Gradient Card") are untouched.
+
+---
+
+## 2026-07-03 — Improvement review fully remediated (77 findings, 4 phases)
 
 **Branch: `main`.** A four-reviewer whole-system design/code review ([`docs/improvement-review-2026-07-02.md`](improvement-review-2026-07-02.md)) surfaced **77 findings** (pipeline P1–P18, API/data A1–A20, frontend F1–F20, infra I1–I19). **All 77 are remediated** across four phased, individually-gated commits on `main`: `689131cc` (Phase 0 — bug fixes), `74725f28` (Phase 1 — core refactors), `b6fe63dd` (Phase 2 — deployment + gates), `8a1b2fae` (Phase 3 — product quality). Each phase gate: tsc clean, lint clean, 45/45 vitest unit tests, full E2E (77 passed / 0 failed / 7 skipped — unchanged baseline), and from Phase 2 `npm run build` + `docker build .` green.
 
