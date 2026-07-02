@@ -1,23 +1,39 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-01 (latest: Bistec brand kit refined with real master-brand identity — see top section below)
-**Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`; local: `C:\Users\DamianDeCruzBISTECCa\Documents\designer`)
+**Date:** 2026-07-03 (latest: whole-system improvement review fully remediated — see top section below)
+**Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
+## 2026-07-03 (latest) — Improvement review fully remediated (77 findings, 4 phases)
+
+**Branch: `main`.** A four-reviewer whole-system design/code review ([`docs/improvement-review-2026-07-02.md`](improvement-review-2026-07-02.md)) surfaced **77 findings** (pipeline P1–P18, API/data A1–A20, frontend F1–F20, infra I1–I19). **All 77 are remediated** across four phased, individually-gated commits on `main`: `689131cc` (Phase 0 — bug fixes), `74725f28` (Phase 1 — core refactors), `b6fe63dd` (Phase 2 — deployment + gates), `8a1b2fae` (Phase 3 — product quality). Each phase gate: tsc clean, lint clean, 45/45 vitest unit tests, full E2E (77 passed / 0 failed / 7 skipped — unchanged baseline), and from Phase 2 `npm run build` + `docker build .` green.
+
+Structural changes worth knowing before touching the code:
+
+- **One design pipeline.** `DesignOrchestrator` deleted; web routes, CLI mode, and MCP/ACP all run the same `runPathBDesign` / assemble-a core. Prompts are pure builders in `src/lib/agent/prompts/` (`PROMPT_VERSION` stamped on each Draft); model policy is `modelFor(path, mode)` in `src/lib/agent/config.ts`.
+- **Shared route infrastructure.** All session-authed handlers use `withAuth`/`withAdmin` + zod `parseBody` (`src/lib/api/handler.ts`). Env is centralized + validated in `src/lib/env.ts` (32 vars; production fail-fast, skipped during `next build` via `NEXT_PHASE`).
+- **One publish service.** `src/lib/publish/publishDraft.ts` owns the channel map + PENDING→PUBLISHED/FAILED machine; duplicate `(draft, channel)` publishes 409; ACP publishes record FAILED rows and respect draft status.
+- **Frontend data layer.** React Query v5, typed `apiFetch<T = unknown>`, shared `src/lib/api-types.ts`, `useCurrentUser`; library on `useInfiniteQuery`. Overlays on Radix (`src/components/ui/Modal.tsx`); sonner toasts + `useConfirm()` (no `alert()`/`confirm()` left); admin role-gated (`admin/layout.tsx`). God components split into `src/components/{brief,admin/brandkits,drafts}/*`.
+- **Deployment + gates.** Docker prod image builds (`output: 'standalone'`, `.dockerignore`, esbuild-bundled scheduler worker at `dist/scheduler/worker.js`); compose has healthchecks, loopback Postgres, pinned MinIO. CI gates lint + unit + build + docker build + E2E. Renderer egress allowlisted to MinIO + Google Fonts (`src/lib/renderer/puppeteer.ts`), verified against real Chromium.
+- **After pulling:** `npm install` (new deps: zod, @tanstack/react-query, @radix-ui/react-dialog, sonner, tsx, vitest, esbuild) and `npx prisma migrate deploy` (migrations `20260702110000` channels-enum/updatedAt/drop-CampaignDraft, `20260702113000` Draft.promptVersion).
+- **Known follow-ups (documented, not blocking):** PostCard `<img>` → `next/image` (lint warning), `@anthropic-ai/sdk` upgrade off the 0.30.x line.
+
+---
+
 ## 2026-07-01 (latest) — Bistec brand kit refined with real BISTEC Global master-brand identity
 
-**Branch: `main`.** The system-default **"Bistec"** brand kit (`cmqroh4me…`) previously held *provisional placeholder* values (sky-blue `#0284c7…` palette, Inter/JetBrains Mono fonts, null logo, 0 artifacts). It's now populated with the **real BISTEC Global master-brand identity**, sourced from the `bistec-designer-v2` skill's Brand Identity Style Guide v1.1 (Sep 2025).
+**Branch: `main`.** The system-default **"Bistec"** brand kit (`cmqroh4me…`) previously held _provisional placeholder_ values (sky-blue `#0284c7…` palette, Inter/JetBrains Mono fonts, null logo, 0 artifacts). It's now populated with the **real BISTEC Global master-brand identity**, sourced from the `bistec-designer-v2` skill's Brand Identity Style Guide v1.1 (Sep 2025).
 
-| Field | Before | After |
-|---|---|---|
-| `colors` | placeholder sky-blue | Navy `#14377D`, Royal `#006FB9`, Grass Green `#2CB34A`, White `#FFFFFF`, Charcoal `#203232`, Pale Fawn `#F4F4F3` |
-| `fonts` | Inter + JetBrains Mono | **Lato** (primary brand font; Arial/Calibri are office alternates, not web fonts) |
-| `logoUrl` | `null` | master full-colour logo (public MinIO URL) |
-| artifacts | none | 3 `LOGO` artifacts (full / reversed / icon), all `feedToAI=true` |
-| active voice prompt | v1 (provisional) | **v2** — carries the "Hearts empowering business with technology" tagline, "our family", Australian-English rules, em-dashes, banned-phrase list |
+| Field               | Before                 | After                                                                                                                                            |
+| ------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `colors`            | placeholder sky-blue   | Navy `#14377D`, Royal `#006FB9`, Grass Green `#2CB34A`, White `#FFFFFF`, Charcoal `#203232`, Pale Fawn `#F4F4F3`                                 |
+| `fonts`             | Inter + JetBrains Mono | **Lato** (primary brand font; Arial/Calibri are office alternates, not web fonts)                                                                |
+| `logoUrl`           | `null`                 | master full-colour logo (public MinIO URL)                                                                                                       |
+| artifacts           | none                   | 3 `LOGO` artifacts (full / reversed / icon), all `feedToAI=true`                                                                                 |
+| active voice prompt | v1 (provisional)       | **v2** — carries the "Hearts empowering business with technology" tagline, "our family", Australian-English rules, em-dashes, banned-phrase list |
 
 - **Reusable script:** [`scripts/refine-bistec-brandkit.mjs`](../scripts/refine-bistec-brandkit.mjs) — idempotent (`node --env-file=.env scripts/refine-bistec-brandkit.mjs`). Uploads the three master logos to the public-read `brand-kits` bucket, rewrites colours/fonts/logoUrl, rebuilds the LOGO artifacts, and publishes a new active voice-prompt version (skips the prompt if the tagline is already present). Mirrors `src/lib/storage/minio.ts` for the S3 upload + public-read policy.
 - **Verified:** all three logos return `200 image/png` on their stable URLs; the active prompt (v2) carries the tagline. Master brand only — Navy/Royal/Green.
@@ -30,12 +46,14 @@
 **Branch: `main`.** Verified both design paths end-to-end in CLI mode (keyless, on the local Claude Code account, real Chromium render — no mocks) and made the CLI design model **per-path**, matching the API path.
 
 **The model split (both orchestrators): Path A → Haiku, Path B → Sonnet.**
+
 - The **API path** (`DESIGN_PROVIDER=claude-html`) already did this: `assemble-a` passes `claude-haiku-4-5-20251001`, `pathB.ts` (used by `assemble-b` + `regenerate-design`) passes `claude-sonnet-4-6`, and `refine` picks by `designMode`. No change needed there.
 - The **CLI path** (`DESIGN_PROVIDER=cli`) previously used a single global `CLAUDE_CLI_MODEL` for everything. Now `runClaudeCli`/`runDesignAgentCli` accept a per-call `model`, wired at the three CLI design call sites: `assemble-a` → `haiku`, `pathB.ts` → `sonnet`, `refine` → `designMode==='TEMPLATE' ? 'haiku' : 'sonnet'`.
-- **`CLAUDE_CLI_MODEL` is now a *global override*, not the default source.** Unset ⇒ the per-path split applies (copy defaults to `haiku`). Set ⇒ forces one model across every `claude -p` call (useful for testing). `default` ⇒ omits `--model` and uses the costly account default (Opus) — avoid. Documented in `.env.example` + `docs/cold-start.md §7`.
+- **`CLAUDE_CLI_MODEL` is now a _global override_, not the default source.** Unset ⇒ the per-path split applies (copy defaults to `haiku`). Set ⇒ forces one model across every `claude -p` call (useful for testing). `default` ⇒ omits `--model` and uses the costly account default (Opus) — avoid. Documented in `.env.example` + `docs/cold-start.md §7`.
 - Files: `src/lib/agent/claudeCli.ts`, `src/lib/agent/designAgentCli.ts`, `src/app/api/generate/assemble-a/route.ts`, `src/lib/agent/pathB.ts`, `src/app/api/drafts/[id]/refine/route.ts`. Typecheck clean. **Not runtime-verified after the wiring** (would re-burn credits) — the split logic is trivial and mirrors the runs below.
 
 **Diagnosis (what was actually run, once per path, monitored):**
+
 - **Path A** (template fill, small "Simple Gradient Card" template seeded on the default kit) → HTTP 200 in **54s**, valid **2160×2160** PNG, on-brand.
 - **Path B** (freeform) → **55s on Haiku** / **61s on Sonnet** (richer 1017-char brief), both valid **2160×2160** PNGs. Copy 16–26s, design 24–39s — every stage ~5× under its timeout (copy 120s / design 300s).
 - **Root cause of the earlier Path B timeouts + credit burn was the Opus default model, not Sonnet.** With Haiku/Sonnet pinned it never approaches the timeout, so the tree-kill safety net doesn't even engage.
@@ -50,6 +68,7 @@
 **Branch: `main`.** Fixed in `src/lib/agent/claudeCli.ts`. Symptom: CLI-mode generation (`DESIGN_PROVIDER=cli`) would time out and produce no image **while still burning credits**. Investigated by reproducing the exact spawn directly with cheap prompts (trivial 5–20s; one real ~820-char Path B prompt → valid 6.2 KB HTML in **~76s**), so normal generation actually fits the 300s design / 120s copy budgets — the timeouts came from heavy prompts + per-spawn variance, and the credit waste from an un-killed subprocess.
 
 Three changes:
+
 1. **Tree-kill on timeout (the credit-burn cause).** On Windows the CLI runs as `spawn("claude.cmd", { shell: true })` → `cmd.exe → claude → node`. The old `child.kill()` only signaled the `cmd.exe` shell, so `claude` kept running to completion and **kept billing** after we'd already returned a timeout error. New `killTree()` runs `taskkill /pid <pid> /T /F` on win32 (SIGKILL elsewhere). **Verified:** `taskkill /T` on a shell parent kills the node child; `child.kill()` does not.
 2. **`--strict-mcp-config`** added to the spawn args (no `--mcp-config` ⇒ zero MCP servers). Without it each `claude -p` inherited the dev's full session config (Canva/Drive/Atlassian connectors), adding startup latency and bloating context/cost. **Verified** (exit 0, valid output).
 3. **Diagnostic logging** (`CLAUDE_CLI_DEBUG`, on by default; set `0` to silence): logs each spawn (cmd/model/prompt-size/timeout), streamed **stderr live**, a **20s heartbeat** (elapsed + bytes; flags "no output yet"), and final outcome + elapsed. Callers tag calls `label: "copy"` / `"design"`. Documented in `.env.example`.
@@ -62,7 +81,7 @@ Three changes:
 
 **Branch: `main`** — commits `ec7ac4a`, `c684da7`, `f5120fc`.
 
-1. **The brief picks a SIZE, not platforms.** Wizard step 1 is now "Size & Design" with **1:1 (1080×1080)** / **3:4 (1080×1350)**. Channels default to both feeds and are chosen at *publish* time. New `AspectRatio` enum on `Brief` + `BrandKitTemplate` (migration `20260630094723_aspect_ratio`). Pixel dims/labels are centralized in **`src/lib/aspectRatio.ts`** and threaded through every render site (assemble-a, pathB, the design agent API + CLI, and the export/refine/restore routes + their prompts). Path A template picker filters to the chosen size; `assemble-a` rejects a ratio mismatch (no stretching). Draft preview + library tiles reflect the ratio. Admin template create has a size selector + badge; `scripts/seed-portrait-template.mjs` seeds a 3:4 template.
+1. **The brief picks a SIZE, not platforms.** Wizard step 1 is now "Size & Design" with **1:1 (1080×1080)** / **3:4 (1080×1350)**. Channels default to both feeds and are chosen at _publish_ time. New `AspectRatio` enum on `Brief` + `BrandKitTemplate` (migration `20260630094723_aspect_ratio`). Pixel dims/labels are centralized in **`src/lib/aspectRatio.ts`** and threaded through every render site (assemble-a, pathB, the design agent API + CLI, and the export/refine/restore routes + their prompts). Path A template picker filters to the chosen size; `assemble-a` rejects a ratio mismatch (no stretching). Draft preview + library tiles reflect the ratio. Admin template create has a size selector + badge; `scripts/seed-portrait-template.mjs` seeds a 3:4 template.
 2. **Publish dialog on the draft page.** Extracted the library `PublishDialog` (channels + optional schedule) into a shared `src/components/library/PublishDialog.tsx`, wired into the draft review page's Publish button (replaces the old `confirm()`).
 3. **pathB.ts reference-template externalization** (`ec7ac4a`): a heavy style-reference template (e.g. Hearts Talk) is run through `extractInlineAssets()` before the prompt, so it no longer blows the CLI/API context.
 4. **CLI model fix** (`f5120fc`): `claudeCli.ts` now passes `--model` from **`CLAUDE_CLI_MODEL`** (default `sonnet`). Root cause of CLI Path B burning credits was the missing flag → account-default Opus. Set `CLAUDE_CLI_MODEL=default` to omit it. **Not runtime-verified** (would cost CLI credits).
@@ -76,6 +95,7 @@ Three changes:
 **Branch: `main`**
 
 The app brand mark is now the **Bistec Studio logo** instead of the "bistec-studio" text.
+
 - **Asset:** `public/BistecStudioLogo.png` — a transparent, **pure-black** PNG (1536×1024). The wordmark occupies only the centre of the canvas (content box ≈ x[0.24–0.65] y[0.38–0.58], aspect ≈ 3:1).
 - **Component:** `src/components/Logo.tsx` — shared, used in the login hero and the app-shell sidebar + mobile top bar. It **CSS-crops** to the wordmark region (so the logo isn't a small mark in a big transparent box) and applies **`dark:invert`** so the black mark flips to white on the dark theme. Verified in both light (black on white) and dark (white on dark) themes.
 - **No favicon set:** a 3:1 wordmark at 16px is illegible. A square "S" monogram (transparent PNG/SVG) is the right favicon asset when available — drop it at `src/app/icon.png` (Next auto-detects).
@@ -92,10 +112,12 @@ The entire `docs/e2e-test-plan.md` §6 catalog (§A–§L, ~80 cases) is now imp
 **New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K, 13 cases), `ui.test.ts` (§L). Existing specs extended to fill §B/§G/§E/§I/§D gaps.
 
 **Bugs found & fixed while getting it green (production-touching — review these):**
+
 - **`refine` route retry budget was 4** → 10-way concurrent refines exhausted it and 500'd. Bumped `MAX_ATTEMPTS` to 12 (`src/app/api/drafts/[id]/refine/route.ts`). Genuine hardening of the H7 fix.
 - **`playwright.config.ts`** forced a global `Content-Type: application/json` that overrode the multipart boundary → every file-upload route 500'd. Removed; added `retries: 1` (cold `next dev` compile flake).
 
 **New test-only seams (all dormant in prod):**
+
 - `src/lib/testHooks.ts`: `buildMockCopy()` (routes brief topic into the mock caption) + `shouldMockPublishFail()` (a `__FAIL_ALWAYS__`/`__FAIL_ONCE__` sentinel in the brief topic drives deterministic publish failures). Wired into `registry.ts` + both social publishers. Gated by `MOCK_*`.
 - `POST /api/test/scheduler-tick` (`src/app/api/test/scheduler-tick/route.ts`): runs one `runScheduledJobs()` pass so §K H12 can drive the scheduler over HTTP. **Double-gated: hard-404 in `NODE_ENV==='production'`, AND 404 unless `MOCK_SOCIAL`, AND admin-only.** (This is why CI runs the app in `next dev` mode — the seam is intentionally inert in a prod build.)
 
@@ -110,14 +132,18 @@ The entire `docs/e2e-test-plan.md` §6 catalog (§A–§L, ~80 cases) is now imp
 **Branch: `main`**
 
 ### Dockerfile Chromium fix
+
 The `Dockerfile` was missing a Chromium binary in all three build stages (`deps`, `builder`, `runner`). `puppeteer.ts` resolves `/usr/bin/chromium` at runtime, so any production render would have failed silently. Fixed: added `apk add chromium` to all three `apk add` lines and `ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` to the runner stage.
 
 ### TypeScript — 0 errors (was 10 errors)
+
 Two issues found and fixed:
+
 - **Prisma client stale** — H9/H12/brief_brandkit migrations had been applied to the schema but `prisma generate` had not been re-run. This left `retryCount`/`nextRetryAt` (H12, `Post` model) and `brandKit`/`campaign` relations (`Brief` model) absent from the generated types. Fix: `npx prisma migrate deploy` (applied the 3 pending migrations to dev DB) then `npx prisma generate`.
 - **`tests/helpers/api.ts:73`** — `headers` was inferred as `{ Cookie: string } | { Cookie?: undefined }`, which fails the `{ [key: string]: string }` index signature. Fix: explicit `Record<string, string>` annotation.
 
 ### E2E tests — root cause + fix — 19/19 green
+
 **Root cause of 6 failures:** `.env.test` was missing entirely (git-ignored, never committed). `npm run test:e2e:db` creates it as part of the DB setup script, but the file had not yet been created on this machine. Created with all required vars.
 
 **Additional bug found in the template** (`docs/e2e-test-plan.md` §2): the documented `.env.test` snippet had `DESIGN_PROVIDER=cli`. With CLI mode active, `assemble-b` and the `refine` route dispatch through `runDesignAgentCli` (spawns a real `claude -p` subprocess, ~59s) instead of `runDesignAgent`. The `MOCK_AI=true` seam only short-circuits `runDesignAgent` — it never fires in CLI mode. Result: every test that called `assemble-b` (directly or via `createExportedDraft`) hit the 60s Playwright timeout. **Fix:** `DESIGN_PROVIDER=claude-html` in `.env.test`. The template in `docs/e2e-test-plan.md` has been corrected.
@@ -125,6 +151,7 @@ Two issues found and fixed:
 **Result:** 19/19 passed in 52s (was 13/19, ~10 min, 6 timeouts).
 
 ### `.env.test` contents (for new machines)
+
 ```
 NEXT_PUBLIC_APP_URL=http://localhost:3001
 BETTER_AUTH_SECRET=<copy from .env>
@@ -152,6 +179,7 @@ MOCK_SOCIAL=true
 ## Current status
 
 **Security pass + dead-code cleanup — 2026-06-24 (on `main`):** A full static security audit (4 parallel auditors: authz/IDOR, injection/SSRF, secrets/crypto/storage, dead-code) was run over the whole codebase and the findings independently verified. **The headline risk — command injection via the `claude -p` subprocess — is NOT present** (prompt piped via stdin; argv is the static `["-p"]`; no user input reaches the shell). SQL is parameterized; the system-wide IDOR remediation holds, including the four new 2026-06-24 routes.
+
 - **Fixed (this commit):**
   - **SSRF (High)** — `Brief.additionalImageUrl` / `briefImages[].url` were stored unvalidated, embedded into agent HTML, and fetched by Chromium (`setContent` + `networkidle0`), letting an authed user reach internal hosts (cloud metadata, `postgres:5432`, etc.). New `isAllowedAssetUrl()` in `src/lib/storage/minio.ts` (MinIO-host + http(s) allow-list — legit image URLs only ever come from `/api/briefs/images`), enforced in `POST /api/briefs`. Runtime-tested: legit MinIO URL → 201; metadata IP / internal host / `file://` → 400.
   - **MinIO default creds (Med)** — `minio.ts` now fails fast in production if `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are unset or `minioadmin` (was a silent fallback).
@@ -162,6 +190,7 @@ MOCK_SOCIAL=true
 - **Cleanup deferred (judgment calls):** `src/components/ui/SegmentedToggle.tsx` (unused but a deliberate design-system primitive); `docs/PRD.md` + `docs/bistec-studio-backlog.md` (stale — reference removed Canva/Clerk — but historical); the `src/mcp/` + `src/acp/` subsystem (only reachable via `npm run mcp` / `/api/acp/*`, not in docker-compose).
 
 **Brand-kit selection + Hearts Talk fix — 2026-06-24 (on `main`):**
+
 - **Hearts Talk Path A fixed** via orchestrator-level inline-asset externalization (see Resolved note below). No re-seed required.
 - **Brand kit selectable per brief**, independent of campaign. New `Brief.brandKitId` (migration `20260624120000_brief_brandkit`); `resolveBrandKit(campaignId, brandKitId)` precedence is now **explicit brief kit → campaign → project → system default** (also honored by `toolGetBrandKitContext`). New `GET /api/brandkits` (non-admin list); `GET /api/templates?brandKitId=` filter; `POST /api/briefs` validates+stores `brandKitId`; `assemble-a` rejects a template that doesn't belong to the pinned kit.
 - **Brand kits assignable on campaigns/projects** at create + edit. Brand-kit `<Select>` added to the campaign/project create forms and admin-gated inline editors on both detail pages (the PATCH/POST routes already accepted `brandKitId`/`defaultBrandKitId`).
@@ -169,12 +198,14 @@ MOCK_SOCIAL=true
 - **Deploy:** run `npx prisma migrate deploy` to apply the new migration, then restart the dev server (regenerated Prisma client).
 
 **Draft regeneration (copy + design) — 2026-06-24 (on `main`):** The draft page now offers independent **Regenerate** + one-click **Undo** for both copy and design.
+
 - `POST /api/drafts/[id]/regenerate-copy` (new) — re-runs the resolved copy provider against the brief, persists the new copy, and returns `{ copyText, previousCopyText }` for an immediate Undo. Design is untouched; an `EXPORTED` draft flips to `IN_PROGRESS` (a copy change invalidates the prior export, mirroring the PATCH route). Works for both paths.
-- `POST /api/drafts/[id]/regenerate-design` (new) — **Path B only** (returns `400 NOT_PATH_B` for a TEMPLATE draft). Runs the new design first (draft untouched on failure), then snapshots the *current* design as a `DraftRevision` (`instruction: "Design before regenerate"`) before pointing the draft at the new one — atomic, with the standard P2002 revision-number retry. Returns `{ exportUrl (signed), previousRevisionNumber }`; the snapshot is the Undo target and also shows in revision history.
+- `POST /api/drafts/[id]/regenerate-design` (new) — **Path B only** (returns `400 NOT_PATH_B` for a TEMPLATE draft). Runs the new design first (draft untouched on failure), then snapshots the _current_ design as a `DraftRevision` (`instruction: "Design before regenerate"`) before pointing the draft at the new one — atomic, with the standard P2002 revision-number retry. Returns `{ exportUrl (signed), previousRevisionNumber }`; the snapshot is the Undo target and also shows in revision history.
 - `src/lib/agent/pathB.ts` (new) — extracted `buildBriefInput(brief)` and `runPathBDesign(brief, kit, copyText)` as the single source of truth for the Path B pipeline (CLI vs API dispatch), shared by `assemble-b`, `regenerate-copy`, and `regenerate-design` so they never drift. `assemble-b/route.ts` was slimmed to call it.
 - Draft-page UI (`src/app/(app)/drafts/[id]/page.tsx`) wires both: Regenerate copy + Undo (`previousCopyText`), and Regenerate design (Path-B-gated) + Undo design (restores the `previousRevisionNumber` snapshot).
 
 **E2E verification of the 2026-06-24 additions — 2026-06-24 (CLI mode, real generation, no mocks):** All new endpoints verified end-to-end against the running app (`DESIGN_PROVIDER=cli`, admin session):
+
 - `GET /api/brandkits` → 200, both kits + preview swatches; `GET /api/templates?brandKitId=` filters correctly (empty kit → `[]`).
 - `regenerate-copy` → 200, returns new + `previousCopyText`, persists, flips `EXPORTED→IN_PROGRESS`.
 - `regenerate-design` (Path B) → 200 (~51s), snapshots old design as `DraftRevision #1`, produces a real **2160×2160** PNG via Puppeteer→MinIO with an H10-signed read URL; output is on-brand and incorporates the regenerated copy. Path A draft → `400 NOT_PATH_B` (guard verified).
@@ -182,39 +213,41 @@ MOCK_SOCIAL=true
 
 **Wave 5 — complete ✅**
 
-| Task | Status | Notes |
-|---|---|---|
-| T01 — Next.js 14 init | ✅ | `package.json`, TypeScript strict, Tailwind, Husky |
-| T02 — Docker Compose infra | ✅ | postgres + minio containers up; `docker run` workaround for WSL2 |
-| T03 — Prisma schema + migration | ✅ | `20260622191018_better_auth_swap` applied; 18 tables created |
-| T04 — better-auth + role middleware | ✅ | Login page, session cookie middleware, `requireRole`/`getCurrentUser` helpers |
-| T25 — Design system foundation | ✅ | Frozen Light theme, AppShell, Button/GlassPanel/GlassInput/Select/StatusChip/SegmentedToggle |
-| T05 — Provider interfaces | ✅ | `CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces + `BriefInput` type |
-| T06 — OpenAI copy provider | ✅ | `OpenAICopyProvider` — GPT-4o chat completions |
-| T07 — OpenAI image provider | ✅ | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL |
-| T08 — Provider registry | ✅ | `resolveCopyProvider` / `resolveImageProvider` / `resolveDesignOrchestrator` |
-| T10 — MinIO storage client | ✅ | `uploadObject` / `getPresignedUrl`; auto-creates buckets on cold start |
-| T09 — Puppeteer renderer + design agent | ✅ | `renderHtmlToPng` (2× DPI); `runDesignAgent` tool-use loop; 15-call hard limit |
-| T26 — BrandKit management (API + admin UI) | ✅ | 11 API routes; admin UI at `/admin/brandkits`; AI prompt assist |
-| T23 — Project & Campaign API routes | ✅ | CRUD + soft delete; brand kit resolution endpoint |
-| T24 — Projects & Campaigns UI | ✅ | List + detail pages; resolved brand kit badge with source label |
-| T11 — Brief creation (DB + API + UI) | ✅ | 3-step wizard; `POST /api/briefs`; `GET /api/providers/available` |
-| T12 — Copy + image generation routes | ✅ | `POST /api/generate/copy`; `POST /api/generate/image` (base64 → MinIO) |
-| T13 — Path A assembly route | ✅ | `POST /api/generate/assemble-a`; Haiku fills template → Puppeteer PNG |
-| T14 — Path B orchestrator | ✅ | `POST /api/generate/assemble-b`; `ClaudeHtmlOrchestrator`; registry wired |
-| T15 — Export route | ✅ | `POST /api/generate/export`; re-render path for copy edits |
-| T16 — Social publishers | ✅ | `src/lib/social/instagram.ts` + `linkedin.ts`; Graph API + UGC Posts API; `PublishError` typed |
-| T17 — Publish + schedule API routes | ✅ | `POST/GET /api/posts`; GET/DELETE `/api/posts/[id]`; retry at `/api/posts/[id]/publish` |
-| T18 — Scheduler worker | ✅ | `src/scheduler/worker.ts` + `src/lib/scheduler/jobRunner.ts`; 60s poll; sequential per tick |
-| T19 — Asset library UI | ✅ | `GET /api/library`; `/library` page; `PostCard` + `PublishHistoryDrawer` components |
+| Task                                       | Status | Notes                                                                                          |
+| ------------------------------------------ | ------ | ---------------------------------------------------------------------------------------------- |
+| T01 — Next.js 14 init                      | ✅     | `package.json`, TypeScript strict, Tailwind, Husky                                             |
+| T02 — Docker Compose infra                 | ✅     | postgres + minio containers up; `docker run` workaround for WSL2                               |
+| T03 — Prisma schema + migration            | ✅     | `20260622191018_better_auth_swap` applied; 18 tables created                                   |
+| T04 — better-auth + role middleware        | ✅     | Login page, session cookie middleware, `requireRole`/`getCurrentUser` helpers                  |
+| T25 — Design system foundation             | ✅     | Frozen Light theme, AppShell, Button/GlassPanel/GlassInput/Select/StatusChip/SegmentedToggle   |
+| T05 — Provider interfaces                  | ✅     | `CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces + `BriefInput` type           |
+| T06 — OpenAI copy provider                 | ✅     | `OpenAICopyProvider` — GPT-4o chat completions                                                 |
+| T07 — OpenAI image provider                | ✅     | `OpenAIImageProvider` — gpt-image-2, returns base64 data URL                                   |
+| T08 — Provider registry                    | ✅     | `resolveCopyProvider` / `resolveImageProvider` / `resolveDesignOrchestrator`                   |
+| T10 — MinIO storage client                 | ✅     | `uploadObject` / `getPresignedUrl`; auto-creates buckets on cold start                         |
+| T09 — Puppeteer renderer + design agent    | ✅     | `renderHtmlToPng` (2× DPI); `runDesignAgent` tool-use loop; 15-call hard limit                 |
+| T26 — BrandKit management (API + admin UI) | ✅     | 11 API routes; admin UI at `/admin/brandkits`; AI prompt assist                                |
+| T23 — Project & Campaign API routes        | ✅     | CRUD + soft delete; brand kit resolution endpoint                                              |
+| T24 — Projects & Campaigns UI              | ✅     | List + detail pages; resolved brand kit badge with source label                                |
+| T11 — Brief creation (DB + API + UI)       | ✅     | 3-step wizard; `POST /api/briefs`; `GET /api/providers/available`                              |
+| T12 — Copy + image generation routes       | ✅     | `POST /api/generate/copy`; `POST /api/generate/image` (base64 → MinIO)                         |
+| T13 — Path A assembly route                | ✅     | `POST /api/generate/assemble-a`; Haiku fills template → Puppeteer PNG                          |
+| T14 — Path B orchestrator                  | ✅     | `POST /api/generate/assemble-b`; `ClaudeHtmlOrchestrator`; registry wired                      |
+| T15 — Export route                         | ✅     | `POST /api/generate/export`; re-render path for copy edits                                     |
+| T16 — Social publishers                    | ✅     | `src/lib/social/instagram.ts` + `linkedin.ts`; Graph API + UGC Posts API; `PublishError` typed |
+| T17 — Publish + schedule API routes        | ✅     | `POST/GET /api/posts`; GET/DELETE `/api/posts/[id]`; retry at `/api/posts/[id]/publish`        |
+| T18 — Scheduler worker                     | ✅     | `src/scheduler/worker.ts` + `src/lib/scheduler/jobRunner.ts`; 60s poll; sequential per tick    |
+| T19 — Asset library UI                     | ✅     | `GET /api/library`; `/library` page; `PostCard` + `PublishHistoryDrawer` components            |
 
 **Cold-start testing fixes — 2026-06-23 (post-Wave-6, on `main`):**
+
 - `next.config.ts` → **`next.config.mjs`** — Next 14 does not support a TypeScript config file; `next dev` crashed on boot (`Configuring Next.js via 'next.config.ts' is not supported`).
 - **`requireRole`** (`src/lib/auth.ts`) now compares the role **case-insensitively**. The Prisma `Role` enum and the admin seed store uppercase `ADMIN`/`EDITOR`, but the check compared against lowercase `"admin"`, so every `/api/admin/*` route returned **403** for the admin (the UI already used `.toLowerCase()`).
 - **`docker-compose.override.yml`** (new) — publishes MinIO `:9000` to the host so a host-side `npm run dev` can reach it (the committed compose only `expose`s it internally; see `docs/cold-start.md` gotcha #2).
 - **Dashboard page added** (`src/app/(app)/page.tsx`) — the `/` route was specced (`docs/prototype-pages.md §1`) but **never implemented**, so post-login `router.push("/")` and the "Dashboard" nav item both **404'd**. New server component: KPIs (Drafts Ready = `EXPORTED` / Posts Published / Active Campaigns / AI Providers), Recent Drafts table (rows → `/drafts/[id]`), Quick Actions (`/brief`, `/library`, `/admin/brandkits`), and a merged activity feed. Uses the **real** routes (`/brief`, `/drafts/[id]`), not the spec's stale `/brief/new` / `/draft/[id]`.
 
 **Brief wizard — proto flow port — 2026-06-23 (on `main`):** The `/brief` wizard was rebuilt to match the prototype branch (`bistec-studio-proto/src/app/brief/new/page.tsx`) **exactly** in flow, wired to the real backend. Replaces the old 3-step (`Content / Brand & Design / Channels`) wizard.
+
 - **5 steps**, proto order: `Platform & Path` → `Campaign` → `Content` → `Images` → `Review` → **Generate Post**. Rendered with the real design system (GlassPanel/Select/Button, light+dark tokens), not the proto's standalone blue/light styling.
 - **Decisions** (confirmed with the user): channels are **multi-select** (IG + LI → `channels[]`); Content keeps the proto's single prompt **plus** Goal + Tone selects (prompt → `Brief.topic`, API unchanged); images are a **real MinIO upload** with embed/style-ref intent; "Generate Post" runs generation and lands on the draft.
 - **Generate flow:** `POST /api/briefs` → `POST /api/generate/assemble-a {briefId, templateId}` (Path A) or `/assemble-b {briefId}` (Path B) → redirect to `/drafts/{draftId}`. Copy/image providers are **auto-resolved** to the default behind the scenes (no provider step, to keep the proto's 5 steps). If no COPY provider exists, the Review step shows a warning and disables Generate.
@@ -226,6 +259,7 @@ MOCK_SOCIAL=true
 - **Not yet verifiable here:** end-to-end generation needs registered providers + API keys (env has 0 providers, `DESIGN_PROVIDER=cli`). Everything up to the Generate call is smoke-tested (page 200, all supporting endpoints 200, project grouping confirmed with real data). **→ Now solved via the CLI orchestrator below.**
 
 **CLI orchestrator (keyless generation) — 2026-06-23 (on `main`):** Routes the full pipeline — copy, design, and PNG render — through the local **Claude Code CLI** (`claude -p`) instead of the Anthropic/OpenAI APIs, so the brief flow runs **end-to-end without any API key**. Activated by `DESIGN_PROVIDER=cli`. Verified: Path A (75s) and Path B (81s) both produce real 2160×2160 PNGs and `EXPORTED` drafts.
+
 - `src/lib/agent/claudeCli.ts` — `runClaudeCli(prompt)` spawns the CLI and pipes the prompt via **STDIN** (argv would truncate at Windows' ~8191-char cmd limit). On win32 it runs `claude.cmd` via shell; override with `CLAUDE_CLI_PATH`. Guards prompts > 600k chars with an actionable error. `stripCodeFences()` cleans markdown-wrapped output.
 - `src/providers/implementations/copy/claude-cli.ts` — `ClaudeCliCopyProvider` (copy via CLI). Wired into `registry.ts` as the `cli` case; `providerApiKey()` skips `decrypt()` for the keyless `cli` provider.
 - `src/lib/agent/designAgentCli.ts` — `runDesignAgentCli()`: single-shot `claude -p` → HTML → `renderHtmlToPng` (Puppeteer) → MinIO `BUCKET_EXPORTS` → real `exportUrl`. Replaces the Anthropic tool-use loop (`runDesignAgent`) in CLI mode only.
@@ -235,13 +269,16 @@ MOCK_SOCIAL=true
 - **Template size limit:** single-shot prompts can't carry a giant template. The seeded **"Hearts Talk 1080×1080"** template is 1.81 MB (~475k tokens) and fails with the size guard (it would also exceed the API's 200k context). Use a normal-sized template — a **"Simple Gradient Card"** template was added to the Bistec kit for Path A testing.
 
 > ### ⤺ Reverting to API mode (once an API key is confirmed)
+>
 > The CLI path is **only** taken when `DESIGN_PROVIDER=cli`. To switch back to the real Anthropic/OpenAI providers, **no code changes are needed** — the API path (`runDesignAgent`, `AnthropicCopyProvider`/`OpenAICopyProvider`) is left fully intact:
+>
 > 1. In `.env`, set `DESIGN_PROVIDER=claude-html` (and add `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`). Restart the dev server so it re-reads the env (`CLI_MODE` is read at module load).
 > 2. Register the real provider(s) in the UI at **`/admin/settings`** (encrypted, stored as `AvailableProvider` rows), **or** rely on the env-var fallback in `registry.ts`.
 > 3. Disable/remove the seeded CLI provider so it isn't auto-selected as default: in `/admin/settings` toggle it off, or run SQL `UPDATE "AvailableProvider" SET "isEnabled"=false WHERE "providerKey"='cli';` (or `DELETE … WHERE "providerKey"='cli';`). Set your real provider as `isDefault`.
 > 4. (Optional) The CLI files (`claudeCli.ts`, `designAgentCli.ts`, `copy/claude-cli.ts`, the `cli` cases in `registry.ts`, and the `CLI_MODE` branches in the assemble routes) are dormant when `DESIGN_PROVIDER!=='cli'` and can stay for future keyless testing, or be deleted to fully remove the path.
 
 **Code review + remediation — 2026-06-23 (on `main`):** A full optimization/security code review was run and is documented in **[`docs/code-review-findings.md`](code-review-findings.md)** (42 findings: 16 High / 20 Medium / 6 Low). Remediation is **complete — all 28 tracked fixes applied & pushed**: the first 22 across commits `a7a1207`, `ca41815`, `278c8a0`, `fa3b862`; the final 6 (H7, H9, H10, H11, H12, L2) in the follow-up batch (two new migrations: `20260623153740_h9_indexes`, `20260623154752_h12_scheduler_claim`).
+
 - **Fixed (highlights):** ACP/MCP auth bypass (`isValidKey` allow-list + `/api/acp` exempted from session middleware, fails closed); system-wide IDOR (`forbiddenIfNotOwner`/`getDraftOwnerId` on all draft/brief/generate routes); library ownership filter; campaign/project mutations admin-gated; Publish button wired (+ `GET /api/me` for server-side role); upload size/MIME validation; atomic `isDefault` toggles; MinIO init race; artifact-delete kit sync; ACP input validation; draft polling; decrypt guard + `BETTER_AUTH_SECRET` fail-fast; masked last-4 `keyPrefix`; bounded list queries; parallelized brief validation; Instagram token → `Authorization` header; MCP system-user FK fix; `getCurrentUser` role-casing normalised.
 - **Final 6 (now done):**
   - **H7** transaction atomicity — refine revision #, prompt version, posts create→publish wrapped in `$transaction` (P2002 → retry/409); the unique constraints already existed so no migration was needed.
@@ -254,14 +291,16 @@ MOCK_SOCIAL=true
 - **Deferred on purpose:** Anthropic client → module scope (would throw at import in CLI mode — keep per-request); `requireRole('editor')` rename (editor is the auth floor, not a bug); icon-button aria-labels (cosmetic).
 
 > ### ✅ Resolved — oversized brand template (Hearts Talk) Path A — 2026-06-24
+>
 > Previously, Path A with the seeded **"Hearts Talk 1080×1080"** template failed: `Prompt too large for CLI mode (1899849 chars > 600000)`. The template is 1.81 MB because its assets are inlined as `data:` URIs (also exceeds the Anthropic API's ~200k context — not CLI-specific).
 > **Fix (orchestrator-level, no re-seed):** the assemble pipeline now externalizes inline `data:` assets before the prompt is built and re-inlines them before render. `src/lib/agent/inlineAssets.ts` — `extractInlineAssets()` swaps each `data:` URI for a short `__INLINE_ASSET_n__` token (Hearts Talk: 1.89 MB → **6.2 KB**, well under the 600k guard and the API context); `restoreInlineAssets()` splices the originals back just before Puppeteer renders (verified **byte-for-byte lossless**). Threaded through `DesignAgentOptions.inlineAssets`, `designAgentCli.ts` (with a template-fill CLI instruction telling Claude to preserve the placeholders verbatim), `designAgent.ts` (restores before the `renderHtml` Puppeteer call), and `assemble-a/route.ts`. Generic to any oversized template.
 
 **Security review — 2026-06-23 (on `main`):** After all 6 waves + the code-review remediation, a focused security review (`/security-review`) was run over the full remediation changeset (the 9 commits ahead of `origin`: H7, H9, H10, H11, H12, L2 + prototype removal). Method: one discovery pass over all modified files, then independent false-positive verification of each candidate, reporting only findings at **confidence ≥ 8/10**.
+
 - **Outcome: no high-confidence vulnerabilities found — no security fixes required.** All high-risk areas were examined and cleared:
   - **`jobRunner.ts` `$queryRaw` (`FOR UPDATE SKIP LOCKED`)** — safe; Prisma tagged-template parameterization, and interpolated values (`leaseUntil`, `CLAIM_BATCH`) are server-computed constants, not user input. No SQL injection.
   - **H7 `$transaction`** (refine, prompts, posts) — safe; `forbiddenIfNotOwner` / `requireRole('admin')` run **before** the transaction. No authz gap, no injection.
-  - **H10 read-signing refactor** (library, posts, drafts, revisions) — safe; `resolveExportUrl` mapping was added *after* the access-controlled queries, so every pre-existing ownership/role filter is preserved. EXPORTS stays private.
+  - **H10 read-signing refactor** (library, posts, drafts, revisions) — safe; `resolveExportUrl` mapping was added _after_ the access-controlled queries, so every pre-existing ownership/role filter is preserved. EXPORTS stays private.
   - **`resolveExportUrl` legacy `^https?://` passthrough** — not exploitable; `exportUrl` is only ever written server-side, no route accepts a user-supplied value.
   - **Upload key construction** (briefs/images, brandkit upload/artifacts) — safe; filenames sanitized with `replace(/[^a-zA-Z0-9._-]/g, '_')`, neutralizing `/` and `..`. No path traversal.
   - **H11 Puppeteer singleton** — no security-relevant change (the `setContent`/`networkidle0` SSRF surface is pre-existing, not introduced here).
@@ -271,6 +310,7 @@ MOCK_SOCIAL=true
   - **Optional hardening (not required, ~2 lines):** add a `randomUUID()` segment to brief-image keys (`briefs/{userId}/{uuid}-{filename}`) for parity with the unguessable generated-image keys.
 
 **E2E tests (T22) — implemented & green — 2026-06-23 (on `main`):** The `tests/e2e/` skeleton was non-functional (the `MOCK_*` hooks the specs gated on were never built, and the specs had drifted from the real route contracts). It is now **runnable and passing: 19/19 tests (~16s)**. Full design + reproduction steps in **[`docs/e2e-test-plan.md`](e2e-test-plan.md)** (§0 "Reproducing the green run").
+
 - **Mock seams — `src/lib/testHooks.ts`** (env-gated; dormant unless the flag is `true`, so production is untouched). Wired into 5 points:
   - `MOCK_AI` → stub copy provider in `resolveCopyProvider` (`providers/registry.ts`) + short-circuit `runDesignAgent` (`lib/agent/designAgent.ts`) to emit deterministic HTML (echoes the kit's first hex colour from the prompt) and a conflict marker when the refine instruction contains `conflict_test`; also short-circuits the admin brand-voice `prompts/generate` route.
   - `MOCK_PUPPETEER` → `renderHtmlToPng` (`lib/renderer/puppeteer.ts`) returns a fixed 1×1 PNG, skipping Chromium. The MinIO upload still runs, so EXPORTS keys stay real and signable (exercises H10).
@@ -282,11 +322,13 @@ MOCK_SOCIAL=true
 - **Still open:** the broader `docs/e2e-test-plan.md` §6 catalog is unwritten — §A RBAC/IDOR (now unblocked by `loginAs`), the §K remediation regression suite (H7 concurrency, H9 index plans, H10 anonymous-bucket reads, H11 Chromium singleton, H12 atomic scheduler claim), and §L browser flows.
 
 **Post-Wave-2 addition (out of band):**
+
 - `AnthropicCopyProvider` added (`src/providers/implementations/copy/anthropic.ts`) — uses `claude-haiku-4-5-20251001`
 - Registry updated: `"anthropic"` case wired in; env fallback now tries `ANTHROPIC_API_KEY` before `OPENAI_API_KEY`
 - `src/lib/crypto.ts` — AES-256-GCM encrypt/decrypt implemented (`encryptApiKey` / `decryptApiKey`; key from `TOKEN_ENCRYPTION_KEY` env var)
 
 **Wave 3 details:**
+
 - `src/lib/storage/minio.ts` — S3-compatible client wrapping `@aws-sdk/client-s3`; `BUCKET_IMAGES` (7-day pre-signed URLs) / `BUCKET_EXPORTS` / `BUCKET_BRANDKITS`; `initBuckets()` idempotent
 - `src/lib/renderer/puppeteer.ts` — `renderHtmlToPng(html, w, h): Promise<Buffer>`; `deviceScaleFactor: 2`; `waitUntil: "networkidle0"`; resolves Chromium from `PUPPETEER_EXECUTABLE_PATH` → common Linux paths
 - `src/lib/agent/types.ts` — `DesignAgentOptions`, `DesignAgentResult`, `BrandKitContext`, `AgentToolLimitError`
@@ -296,6 +338,7 @@ MOCK_SOCIAL=true
 - `src/providers/registry.ts` — `resolveDesignOrchestrator()` added; dispatches cli → `ClaudeCliOrchestrator`; `claude-html` → `ClaudeHtmlOrchestrator` (wired in T14)
 
 **Wave 3b details:**
+
 - `src/lib/brandkit/resolve.ts` — `resolveBrandKit(campaignId?)`: campaign→project→system default; returns `ResolvedBrandKit` + source label; shared by tools.ts and API routes
 - `src/app/api/admin/brandkits/` — 11 routes: CRUD, file upload helper (`/upload` → MinIO URL), template CRUD, prompt versioning + activate/rollback, AI generate + improve (Sonnet; returns draft for admin review — not auto-saved), artifact upload with feedToAI toggle; LOGO/FONT artifacts sync to `BrandKit.logoUrl`/`fonts`
 - `src/app/(app)/admin/brandkits/page.tsx` — Frozen Light admin UI: kit list sidebar, detail panel with color palette editor, logo upload, font list, HTML template editor, prompt version history + AI assist panel, artifact manager with feedToAI toggle
@@ -308,6 +351,7 @@ Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStud
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
 **Seeding:**
+
 - `scripts/seed-admin.mjs` — creates the admin user via better-auth `auth.api.signUpEmail()` (writes the hashed-password `Account` row), then promotes role to ADMIN. **Must** go through better-auth — a directly-created `User` has no credential `Account` and cannot log in.
 - `scripts/seed-brandkit.mjs` — seeds the default **"Bistec"** brand kit (Glacier palette, Inter + JetBrains Mono as Google Fonts, brand-voice prompt v1 active). Idempotent (skips if a non-deleted default kit exists); mirrors the admin API's single-default invariant; sets `BrandKitPrompt.createdBy` to the seeded admin's id. The brand-voice prompt is **provisional** (inferred from Bistec Global's public positioning) — replace once the official style guide is available.
 - `scripts/seed-hearts-talk.mjs` — seeds the **"Hearts Talk"** brand kit (NOT default): navy/cyan/green palette, Orbitron + Poppins + Montserrat (Google Fonts), provisional voice prompt v1, a 1080×1080 HTML template, and LOGO artifacts. Reads assets from `scripts/seed-assets/` at runtime (`hearts-talk-1080x1080.html` required; `hearts-academy-logo.png` + `bistec-global-logo.png` optional). Logos are embedded as **`data:` URIs** (never expire, no MinIO needed). ⚠️ `hearts-academy-logo.png` is not yet present and `bistec-global-logo.png` is a best-guess copy — see `scripts/seed-assets/README.md`.
@@ -340,6 +384,7 @@ Report any preflight failures or smoke-test errors with the exact command output
 **Fonts:** brand fonts use **Google Fonts** (open-source, no licensing) — stored in `BrandKit.fonts` as `{name, url}[]` with auto-built `css2?family=…` URLs. The `/admin/brandkits` Fonts editor is a searchable picker over the top-100 Google Fonts (admins never paste URLs). The design agent embeds them via `@import` in generated HTML; Puppeteer fetches them at render (`waitUntil: "networkidle0"`).
 
 **Wave 5 details:**
+
 - `src/lib/social/instagram.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping Instagram Graph API two-step flow (create container → publish container). Reads `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID` from env. Throws `PublishError("INSTAGRAM", reason)` on API error.
 - `src/lib/social/linkedin.ts` — `publish(exportUrl, copyText): Promise<{ platformId }>` wrapping LinkedIn Marketing API (register asset → upload bytes → create UGC post). Reads `LINKEDIN_ACCESS_TOKEN` + `LINKEDIN_ORGANIZATION_ID`. `platformId` from `x-restli-id` header.
 - `src/lib/social/types.ts` — `PublishError extends Error` with `channel` + `reason` fields; shared by both publishers.
@@ -354,6 +399,7 @@ Report any preflight failures or smoke-test errors with the exact command output
 - `src/components/library/PublishHistoryDrawer.tsx` — slide-in drawer showing all Post rows for a draft: channel, status, dates, platform link, errorReason, retry button.
 
 **Wave 4 details:**
+
 - `src/app/api/briefs/route.ts` — `POST /api/briefs`: creates Brief with full validation (topic, goal, tone, channels, designMode, copyProviderKey required; FK checks for campaign, template, providers)
 - `src/app/api/providers/available/route.ts` — `GET /api/providers/available?slot=COPY|IMAGE`: lists enabled providers ordered defaults-first
 - `src/app/(app)/brief/page.tsx` — 3-step wizard: Step 1 content (topic/desc/goal/tone), Step 2 brand+design (campaign selector with brand-kit badge, design mode toggle, template/image pickers), Step 3 channels+providers (channel toggles, copy provider select, advanced image provider disclosure)
@@ -384,20 +430,20 @@ publish-now or schedule-for-later.
 
 ## Tech stack (decided)
 
-| Concern | Choice | Rationale |
-|---|---|---|
-| Framework | Next.js 14 (App Router) + TypeScript | Requested |
-| Hosting | VPS — Docker Compose | Removed all Azure dependencies |
-| Auth | better-auth (self-hosted, email + password) | No SaaS dependency; sessions in PostgreSQL |
-| Database | PostgreSQL (Docker container) + Prisma ORM | Type-safe, migration tooling, PG arrays |
-| Object storage | MinIO (Docker container, S3-compatible) | Self-hosted, replaces Azure Blob Storage |
-| Secrets | `.env` file on VPS (`chmod 600`, never in git) | Replaces Azure Key Vault |
-| Scheduler | Dedicated Docker container (same image as app) | Polls DB every 60s, replaces Azure Container Apps Job |
-| Copy AI | OpenAI GPT (user-selectable) | Provider abstraction allows future swap |
-| Image AI | OpenAI gpt-image-2 (on-demand agent tool; admin-configured default) | Called by Claude when raster imagery is needed; CSS/SVG used otherwise |
-| Design rendering | Puppeteer (headless Chromium) | HTML/CSS → PNG, 2× DPI, self-contained VPS |
-| Design (Path A) | Claude agent harness fills HTML/CSS template | Brand template stored as HTML string in DB |
-| Design (Path B) | Claude agent harness generates freeform HTML/CSS | Claude designs from scratch, calls generateImage tool |
+| Concern          | Choice                                                              | Rationale                                                              |
+| ---------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Framework        | Next.js 14 (App Router) + TypeScript                                | Requested                                                              |
+| Hosting          | VPS — Docker Compose                                                | Removed all Azure dependencies                                         |
+| Auth             | better-auth (self-hosted, email + password)                         | No SaaS dependency; sessions in PostgreSQL                             |
+| Database         | PostgreSQL (Docker container) + Prisma ORM                          | Type-safe, migration tooling, PG arrays                                |
+| Object storage   | MinIO (Docker container, S3-compatible)                             | Self-hosted, replaces Azure Blob Storage                               |
+| Secrets          | `.env` file on VPS (`chmod 600`, never in git)                      | Replaces Azure Key Vault                                               |
+| Scheduler        | Dedicated Docker container (same image as app)                      | Polls DB every 60s, replaces Azure Container Apps Job                  |
+| Copy AI          | OpenAI GPT (user-selectable)                                        | Provider abstraction allows future swap                                |
+| Image AI         | OpenAI gpt-image-2 (on-demand agent tool; admin-configured default) | Called by Claude when raster imagery is needed; CSS/SVG used otherwise |
+| Design rendering | Puppeteer (headless Chromium)                                       | HTML/CSS → PNG, 2× DPI, self-contained VPS                             |
+| Design (Path A)  | Claude agent harness fills HTML/CSS template                        | Brand template stored as HTML string in DB                             |
+| Design (Path B)  | Claude agent harness generates freeform HTML/CSS                    | Claude designs from scratch, calls generateImage tool                  |
 
 ---
 
@@ -411,6 +457,7 @@ minio       — MinIO S3-compatible storage, console on 127.0.0.1:9001 only
 ```
 
 **Secrets security protocol:**
+
 - `.env` file: `chmod 600`, owned by root, never committed to git
 - `.gitignore` blocks all `.env*` except `.env.example`
 - Husky pre-commit hook as extra guard
@@ -429,6 +476,7 @@ Standalone post → "Uncategorized" (no campaign assigned)
 ```
 
 **Brand kits (first-class, admin-managed):**
+
 - A `BrandKit` is its own entity — owns a name, a **versioned brand voice prompt** (`BrandKitPrompt`, rollback per EC-13), a folder of **artifacts** (`BrandKitArtifact` in MinIO — reference images), `colors Json?` (hex palette), `fonts Json?` ({name, url}[]), `logoUrl String?`, and a list of **linked brand templates** (`BrandKitTemplate` rows — each stores an `htmlTemplate` string).
 - Artifacts flagged `feedToAI` are passed to the Path B design agent as additional brand context.
 - **Template linking**: when creating or editing a brand kit, the admin manages HTML/CSS templates directly. Each template is stored as an `htmlTemplate` string in the DB — no external IDs needed.
@@ -439,6 +487,7 @@ Standalone post → "Uncategorized" (no campaign assigned)
   **Campaign brand kit → Project default brand kit → system default brand kit** (`BrandKit.isDefault`).
 
 **Key rules:**
+
 - Projects and campaigns: created/edited/deleted by any role (admin or editor)
 - Campaign → project reassignment: **admin-only**
 - Soft-delete with recovery for both; scheduled posts under a deleted campaign still fire
@@ -464,6 +513,7 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 ## The two design paths
 
 ### Path A — HTML/CSS brand template
+
 1. User writes brief, selects "Use a template"; campaign auto-populates brand kit
 2. User picks from HTML/CSS templates linked to the brand kit (admin-managed, stored in DB as `htmlTemplate` strings)
 3. User selects copy model; optionally uploads Additional Image (image model hidden by default — system default used if Claude calls generateImage)
@@ -477,6 +527,7 @@ dark/light screenshots). Glassmorphic aesthetic, ice-blue accents.
 **Brief fields (Path A):** topic · description (AI prompt context — speaker bios, event details, key messages) · goal/CTA · tone · channels · template selection · additional image (optional upload)
 
 ### Path B — Claude-generated freeform design
+
 1. User writes a brief (design mode = "Generate new design"); user may optionally:
    - Upload one or more **images**, each tagged with intent: **"Embed in design"** (Claude must include it in the layout via `<img>`) or **"Style reference only"** (Claude uses it for compositional inspiration but doesn't embed it)
    - Pick an optional **template reference** from the brand kit's linked templates — passed to Claude as loose style inspiration ("design in this spirit, not a template to fill")
@@ -496,6 +547,7 @@ The generation backend runs as a Claude tool-use agent (`src/lib/agent/designAge
 The same pattern is used for both paths and for AGUI refinement.
 
 Tools available:
+
 - `generateImage(prompt, brandKitId)` — calls resolved ImageProvider → MinIO URL
 - `renderHtml(html, width, height)` — Puppeteer headless Chrome → PNG → MinIO URL
 - `getBrandKitContext(briefId)` — resolves brand kit (campaign→project→default), returns colors/fonts/logoUrl/voicePrompt
@@ -524,6 +576,7 @@ DesignOrchestrator{ orchestrate(brief, brandKitId): Promise<{ htmlContent: strin
 ```
 
 **Provider resolution order:**
+
 - **Copy:** `Brief.copyProviderKey` → `AvailableProvider.isDefault` for COPY slot → `COPY_PROVIDER` env var
 - **Image** (when Claude calls `generateImage` tool): `Brief.imageProviderKey` (optional, user override) → `AvailableProvider.isDefault` for IMAGE slot → `IMAGE_PROVIDER` env var
 
@@ -534,7 +587,6 @@ The design orchestrator is NOT user-selectable — env-configured only.
 ## Database schema (Prisma) — key models
 
 > Visual ERD: [`docs/erd.svg`](docs/erd.svg)
-
 
 - `User` — id, name, email, emailVerified, image, role (ADMIN | EDITOR), sessions[], accounts[]
 - `Project` — name, defaultBrandKitId, defaultTone, isDeleted, deletedAt
@@ -555,19 +607,19 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 ## Specclaw files (all committed)
 
-| File | Location |
-|---|---|
-| `proposal.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `spec.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `design.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `tasks.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-1-scaffold.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-2-providers.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-3-canva-minio.md` | `.specclaw/changes/marketing-post-studio-v1/` |
+| File                          | Location                                      |
+| ----------------------------- | --------------------------------------------- |
+| `proposal.md`                 | `.specclaw/changes/marketing-post-studio-v1/` |
+| `spec.md`                     | `.specclaw/changes/marketing-post-studio-v1/` |
+| `design.md`                   | `.specclaw/changes/marketing-post-studio-v1/` |
+| `tasks.md`                    | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-1-scaffold.md`          | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-2-providers.md`         | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-3-canva-minio.md`       | `.specclaw/changes/marketing-post-studio-v1/` |
 | `wave-3b-brand-data-layer.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-4-generation.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-5-publishing.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-6-admin-e2e.md` | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-4-generation.md`        | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-5-publishing.md`        | `.specclaw/changes/marketing-post-studio-v1/` |
+| `wave-6-admin-e2e.md`         | `.specclaw/changes/marketing-post-studio-v1/` |
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 
@@ -577,15 +629,15 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 ## Task breakdown (30 tasks, 6 waves + Wave 3b)
 
-| Wave | Focus | Tasks |
-|---|---|---|
-| 1 ✅ | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation |
-| 2 ✅ | Provider abstraction layer | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry |
-| 3 ✅ | HTML renderer (Puppeteer) + Claude design agent, MinIO | T09 Puppeteer renderer + design agent, T10 MinIO client |
-| 3b ✅ | Brand kits, Projects & Campaigns (data layer) | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI |
-| 4 ✅ | Core generation + design assembly | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route |
-| 5 ✅ | Publishing, scheduling, library | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down) |
-| 6 ✅ | Admin settings + E2E | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
+| Wave  | Focus                                                   | Tasks                                                                                                                                               |
+| ----- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 ✅  | Project scaffold + Docker Compose infra + design system | T01 Next.js init, T02 Docker Compose, T03 Prisma schema, T04 better-auth, T25 Design system foundation                                              |
+| 2 ✅  | Provider abstraction layer                              | T05 Interfaces, T06 OpenAI copy, T07 OpenAI image, T08 Registry                                                                                     |
+| 3 ✅  | HTML renderer (Puppeteer) + Claude design agent, MinIO  | T09 Puppeteer renderer + design agent, T10 MinIO client                                                                                             |
+| 3b ✅ | Brand kits, Projects & Campaigns (data layer)           | T26 BrandKit management (API + admin UI), T23 Project/Campaign API routes, T24 Projects/Campaigns UI                                                |
+| 4 ✅  | Core generation + design assembly                       | T11 Brief UI + model/campaign select, T12 Copy route + image tool handler, T13 Path A assembly, T14 Path B orchestrator, T15 Export route           |
+| 5 ✅  | Publishing, scheduling, library                         | T16 Social publishers, T17 Publish/schedule routes, T18 Scheduler worker, T19 Library UI (drill-down)                                               |
+| 6 ✅  | Admin settings + E2E                                    | T20 Admin provider settings, T21 Draft refinement UI + AGUI backend, T22 E2E Playwright tests, T27 Schema migration, T28 MCP server, T29 ACP server |
 
 **Highest-risk item:** Instagram Graph API Meta Business app review (can take weeks).
 Start the Meta Business app registration **before** Wave 1 code begins — it blocks AC-3.
@@ -608,6 +660,7 @@ Start the Meta Business app registration **before** Wave 1 code begins — it bl
 After a design is returned (Path A or Path B), the draft page exposes a **chat-driven refinement panel**. The user types natural language instructions; Claude interprets them, updates the HTML, and Puppeteer re-renders. The user never directly manipulates design elements.
 
 **How it works:**
+
 1. User types an instruction (e.g. "reposition the topic to the bottom", "change the background to something darker")
 2. Backend runs Claude design agent with `draft.htmlContent` as context + instruction
 3. Claude checks brand kit compliance, updates the HTML
@@ -620,6 +673,7 @@ After a design is returned (Path A or Path B), the draft page exposes a **chat-d
 **Undo:** each committed refinement stores the full `htmlSnapshot` in `DraftRevision`. Restore = load `htmlSnapshot`, call `renderHtml`, update `Draft.htmlContent` + `Draft.exportUrl`.
 
 **Brand kit enforcement:**
+
 - Before committing any edit, Claude checks whether the instruction conflicts with the resolved brand kit (colours, fonts, logo placement)
 - If a conflict is detected, Claude returns a **conflict card** in the chat panel with the explanation and two buttons: **Override** and **Cancel** — the user never types "override"
 - The pending conflict is stored on the Draft row (`pendingConflict Json?`) so the backend knows what to apply if Override is clicked
@@ -627,6 +681,7 @@ After a design is returned (Path A or Path B), the draft page exposes a **chat-d
 - Clicking Cancel dismisses the card; no request is sent; `pendingConflict` is cleared on the next instruction
 
 **What the refinement panel does NOT do (FR-33e):**
+
 - The refinement panel does not allow direct element manipulation or asset uploads mid-refinement. All changes are applied server-side via Claude HTML generation + Puppeteer rendering only.
 
 **New DB model:** `DraftRevision` — draftId, revisionNumber, htmlSnapshot (the full HTML at this revision), exportUrl (MinIO PNG), instruction (the user's chat message that produced this revision), createdAt. Supports the undo stack.
@@ -638,6 +693,7 @@ After a design is returned (Path A or Path B), the draft page exposes a **chat-d
 Admins can register any AI provider directly from the bistec-studio settings UI — no redeploy or env var change required. A registered provider becomes available to users immediately.
 
 **Registration flow:**
+
 1. Admin enters an API key
 2. The system inspects the key prefix and auto-identifies the provider where possible:
    - `sk-ant-` → Anthropic (Claude)
@@ -722,11 +778,13 @@ Set `DESIGN_PROVIDER=cli` in `.env` (or `.env.local`) to use the **Claude Code C
 **File:** `src/providers/implementations/orchestrator/claude-cli.ts`
 
 **What still works in CLI mode:**
+
 - Full brief wizard flow, DB writes, draft page, library, publish UI
 - Real Claude-generated HTML/CSS design output
 - Brand kit context is included in the prompt (colors, fonts, voice)
 
 **What is skipped:**
+
 - Tool-use loop — single-shot call only
 - Puppeteer rendering — `exportUrl` returns empty string; draft preview shows a placeholder
 - `generateImage` tool — no raster image generation
