@@ -4,8 +4,8 @@
 > subsystems were remediated in four phases, committed to `main` as:
 > `689131cc` (Phase 0 — 16 latent bug fixes), `74725f28` (Phase 1 — one design
 > pipeline, withAuth/zod route wrapper, central env config), `b6fe63dd`
-> (Phase 2 — working Docker prod path, ESLint, vitest, CI gates), and the
-> Phase 3 commit (publishDraft service + idempotency, React Query data layer,
+> (Phase 2 — working Docker prod path, ESLint, vitest, CI gates), and
+> `8a1b2fae` (Phase 3 — publishDraft service + idempotency, React Query data layer,
 > Radix overlays + toast, a11y sweep, god-component split, renderer egress
 > allowlist). Every phase was gated on: tsc clean, lint clean, 45/45 unit
 > tests, the full E2E suite (77 passed / 0 failed / 7 skipped — unchanged

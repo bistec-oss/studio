@@ -4,7 +4,7 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-03)
 
-**✅ Improvement review fully remediated — 2026-07-02/03.** A four-reviewer whole-system design/code review found **77 findings** ([`docs/improvement-review-2026-07-02.md`](docs/improvement-review-2026-07-02.md)); **all 77 are remediated** across four phased commits on `main` (`689131cc`, `74725f28`, `b6fe63dd`, + Phase 3). Structural changes to know about:
+**✅ Improvement review fully remediated — 2026-07-02/03.** A four-reviewer whole-system design/code review found **77 findings** ([`docs/improvement-review-2026-07-02.md`](docs/improvement-review-2026-07-02.md)); **all 77 are remediated** across four phased commits on `main` (`689131cc`, `74725f28`, `b6fe63dd`, `8a1b2fae`). Structural changes to know about:
 
 - **One design pipeline.** The `DesignOrchestrator` layer is deleted; web routes, CLI mode, and the MCP/ACP surface all run the same `runPathBDesign`/assemble-a core. Prompts are pure builders in `src/lib/agent/prompts/` (a `PROMPT_VERSION` is stamped on every Draft); model policy is `modelFor(path, mode)` in `src/lib/agent/config.ts` (Path A haiku / Path B sonnet, API + CLI variants).
 - **Shared route infrastructure.** All session-authed API handlers use `withAuth`/`withAdmin` + zod `parseBody` (`src/lib/api/handler.ts`). Env config is centralized + validated in `src/lib/env.ts` (32 vars, fail-fast in production, skipped during `next build`).
