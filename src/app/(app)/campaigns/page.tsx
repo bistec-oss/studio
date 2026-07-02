@@ -1,58 +1,52 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Plus, Trash2, RotateCcw, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { Select } from '@/components/ui/Select'
+import { QueryError } from '@/components/ui/QueryError'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
-
-interface Campaign {
-  id: string
-  name: string
-  defaultTone: string | null
-  isDeleted: boolean
-  brandKit: { id: string; name: string } | null
-  _count: { briefs: number }
-}
-
-interface BrandKitOption {
-  id: string
-  name: string
-  previewColor: string
-}
-
-interface ProjectOption {
-  id: string
-  name: string
-}
+import type { Campaign, BrandKitSummary, ProjectSummary } from '@/lib/api-types'
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newBrandKitId, setNewBrandKitId] = useState('')
   const [newProjectId, setNewProjectId] = useState('')
-  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
-  const [projects, setProjects] = useState<ProjectOption[]>([])
   const [showDeleted, setShowDeleted] = useState(false)
 
-  const fetchCampaigns = useCallback(async () => {
-    try {
-      const data = await apiFetch('/api/campaigns')
-      setCampaigns(data)
-    } catch (e: unknown) { console.error(e) }
-    finally { setLoading(false) }
-  }, [])
+  const {
+    data: campaigns = [],
+    isLoading: loading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['campaigns'],
+    queryFn: () => apiFetch<Campaign[]>('/api/campaigns'),
+  })
 
-  useEffect(() => { fetchCampaigns() }, [fetchCampaigns])
-  useEffect(() => {
-    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
-    apiFetch<ProjectOption[]>('/api/projects').then(setProjects).catch(console.error)
-  }, [])
+  const { data: brandKits = [] } = useQuery({
+    queryKey: ['brandkits'],
+    queryFn: () => apiFetch<BrandKitSummary[]>('/api/brandkits'),
+  })
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => apiFetch<ProjectSummary[]>('/api/projects'),
+  })
+
+  function invalidateCampaigns() {
+    return queryClient.invalidateQueries({ queryKey: ['campaigns'] })
+  }
 
   const brandKitOptions = [
     { value: '', label: 'No brand kit (inherit / system default)' },
@@ -77,16 +71,20 @@ export default function CampaignsPage() {
         }),
       })
       setNewName(''); setNewBrandKitId(''); setNewProjectId(''); setCreating(false)
-      fetchCampaigns()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateCampaigns()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   async function softDelete(id: string) {
-    if (!confirm('Delete this campaign?')) return
+    if (!(await confirm({
+      title: 'Delete this campaign?',
+      description: 'You can restore it later from "Show deleted".',
+      confirmLabel: 'Delete',
+    }))) return
     try {
       await apiFetch(`/api/campaigns/${id}`, { method: 'DELETE' })
-      fetchCampaigns()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateCampaigns()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   async function restore(id: string) {
@@ -96,8 +94,8 @@ export default function CampaignsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isDeleted: false }),
       })
-      fetchCampaigns()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateCampaigns()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   const visible = campaigns.filter(c => showDeleted ? c.isDeleted : !c.isDeleted)
@@ -160,7 +158,11 @@ export default function CampaignsPage() {
         <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8 text-center">Loading…</div>
       )}
 
-      {!loading && visible.length === 0 && (
+      {isError && (
+        <QueryError error={error} onRetry={() => refetch()} />
+      )}
+
+      {!loading && !isError && visible.length === 0 && (
         <GlassPanel className="p-8 text-center">
           <Megaphone size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
           <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
@@ -169,43 +171,45 @@ export default function CampaignsPage() {
         </GlassPanel>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map(campaign => (
-          <GlassPanel key={campaign.id} className="p-4 flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-2">
-              <Link
-                href={`/campaigns/${campaign.id}`}
-                className="text-base font-semibold text-light-text dark:text-dark-text hover:text-primary dark:hover:text-primary-light transition-colors"
-              >
-                {campaign.name}
-              </Link>
-              {campaign.isDeleted ? (
-                <Button variant="ghost" size="sm" onClick={() => restore(campaign.id)}>
-                  <RotateCcw size={13} /> Restore
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => softDelete(campaign.id)}>
-                  <Trash2 size={13} />
-                </Button>
-              )}
-            </div>
+      {!isError && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map(campaign => (
+            <GlassPanel key={campaign.id} className="p-4 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/campaigns/${campaign.id}`}
+                  className="text-base font-semibold text-light-text dark:text-dark-text hover:text-primary dark:hover:text-primary-light transition-colors"
+                >
+                  {campaign.name}
+                </Link>
+                {campaign.isDeleted ? (
+                  <Button variant="ghost" size="sm" onClick={() => restore(campaign.id)}>
+                    <RotateCcw size={13} /> Restore
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => softDelete(campaign.id)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
+              </div>
 
-            <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
-              <span>{campaign._count.briefs} brief{campaign._count.briefs !== 1 ? 's' : ''}</span>
-              {campaign.brandKit && (
-                <span className="bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full">
-                  {campaign.brandKit.name}
-                </span>
-              )}
-              {campaign.defaultTone && (
-                <span className="bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize">
-                  {campaign.defaultTone}
-                </span>
-              )}
-            </div>
-          </GlassPanel>
-        ))}
-      </div>
+              <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
+                <span>{campaign._count.briefs} brief{campaign._count.briefs !== 1 ? 's' : ''}</span>
+                {campaign.brandKit && (
+                  <span className="bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full">
+                    {campaign.brandKit.name}
+                  </span>
+                )}
+                {campaign.defaultTone && (
+                  <span className="bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize">
+                    {campaign.defaultTone}
+                  </span>
+                )}
+              </div>
+            </GlassPanel>
+          ))}
+        </div>
+      )}
     </>
   )
 }

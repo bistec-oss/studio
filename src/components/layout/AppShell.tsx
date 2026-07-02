@@ -3,14 +3,18 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import * as Dialog from '@radix-ui/react-dialog'
 import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
+import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 
 interface NavItem {
   label: string
   href: string
   icon: React.ReactNode
+  adminOnly?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -18,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Library',   href: '/library',            icon: <BookOpen size={18} /> },
   { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
   { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
-  { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} /> },
+  { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
 ]
 
 function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
@@ -44,6 +48,11 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
 }
 
 function Sidebar({ onClose }: { onClose?: () => void }) {
+  // Hide admin-only entries from non-admins (server-side enforcement lives in
+  // the /admin layout — this is just honest navigation).
+  const { isAdmin } = useCurrentUser()
+  const items = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin)
+
   return (
     <aside className="glass-panel flex flex-col h-full w-64 p-4 gap-1 rounded-none">
       {/* Logo / brand */}
@@ -52,6 +61,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         {onClose && (
           <button
             onClick={onClose}
+            aria-label="Close sidebar"
             className="md:hidden p-1.5 rounded-lg text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10"
           >
             <X size={16} />
@@ -60,7 +70,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
       </div>
 
       <nav className="flex flex-col gap-1">
-        {NAV_ITEMS.map(item => (
+        {items.map(item => (
           <NavLink key={item.href} item={item} onClick={onClose} />
         ))}
       </nav>
@@ -75,54 +85,56 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ background: 'var(--background)' }}
-    >
-      {/* Top app bar */}
-      <header className="glass fixed top-0 inset-x-0 z-40 h-16 flex items-center justify-between px-4 md:px-6">
-        <div className="flex items-center gap-3">
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-2 rounded-xl text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10"
-            aria-label="Open sidebar"
-          >
-            <Menu size={20} />
-          </button>
-          <Logo height={26} />
-        </div>
-
-        <ThemeToggle />
-      </header>
-
-      {/* Body below app bar */}
-      <div className="flex flex-1 pt-16">
-        {/* Desktop sidebar */}
-        <div className="hidden md:flex w-64 fixed left-0 top-16 bottom-0">
-          <Sidebar />
-        </div>
-
-        {/* Mobile sidebar overlay */}
-        {sidebarOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm md:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-            <div className="fixed left-0 top-0 bottom-0 z-50 w-64 md:hidden">
-              <Sidebar onClose={() => setSidebarOpen(false)} />
-            </div>
-          </>
-        )}
-
-        {/* Main content */}
-        <main className="flex-1 md:ml-64 overflow-y-auto">
-          <div className="max-w-canvas mx-auto px-4 md:px-8 py-6">
-            {children}
+    <ConfirmProvider>
+      <div
+        className="min-h-screen flex flex-col"
+        style={{ background: 'var(--background)' }}
+      >
+        {/* Top app bar */}
+        <header className="glass fixed top-0 inset-x-0 z-40 h-16 flex items-center justify-between px-4 md:px-6">
+          <div className="flex items-center gap-3">
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="md:hidden p-2 rounded-xl text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10"
+              aria-label="Open sidebar"
+            >
+              <Menu size={20} />
+            </button>
+            <Logo height={26} />
           </div>
-        </main>
+
+          <ThemeToggle />
+        </header>
+
+        {/* Body below app bar */}
+        <div className="flex flex-1 pt-16">
+          {/* Desktop sidebar */}
+          <div className="hidden md:flex w-64 fixed left-0 top-16 bottom-0">
+            <Sidebar />
+          </div>
+
+          {/* Mobile sidebar overlay — Radix Dialog provides the focus trap,
+              Escape-to-close, and aria-modal; the backdrop + slide-in styling
+              match the previous hand-rolled markup. */}
+          <Dialog.Root open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm md:hidden" />
+              <Dialog.Content className="fixed left-0 top-0 bottom-0 z-50 w-64 md:hidden focus:outline-none">
+                <Dialog.Title className="sr-only">Navigation</Dialog.Title>
+                <Sidebar onClose={() => setSidebarOpen(false)} />
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+
+          {/* Main content */}
+          <main className="flex-1 md:ml-64 overflow-y-auto">
+            <div className="max-w-canvas mx-auto px-4 md:px-8 py-6">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ConfirmProvider>
   )
 }

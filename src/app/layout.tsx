@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { ThemeProvider, themeInitScript } from '@/components/theme/ThemeProvider'
+import { QueryProvider } from '@/components/providers/QueryProvider'
+import { ToastProvider } from '@/components/providers/ToastProvider'
 import './globals.css'
 
 const inter = Inter({
@@ -29,7 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={`${inter.variable} ${jetbrains.variable} font-sans`}>
         <ThemeProvider>
-          {children}
+          <QueryProvider>
+            {children}
+            <ToastProvider />
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

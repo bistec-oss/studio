@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function apiFetch<T = any>(url: string, opts?: RequestInit): Promise<T> {
+export async function apiFetch<T = unknown>(url: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(url, opts)
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))

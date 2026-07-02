@@ -1,40 +1,44 @@
 import { prisma } from '@/lib/prisma'
-import * as instagram from '@/lib/social/instagram'
-import * as linkedin from '@/lib/social/linkedin'
-import { resolveExportUrl } from '@/lib/storage/minio'
 import { getSystemUserId } from '@/mcp/systemUser'
+import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
 
+// ACP publish — a thin adapter over the same publish state machine as the API
+// path, so every attempt (success or failure) leaves a Post row (FR-20/NFR-9)
+// and stale/incomplete drafts can't be pushed to a platform.
 export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' | 'LINKEDIN' }) {
   const draft = await prisma.draft.findUnique({
     where: { id: args.draftId },
-    select: { exportUrl: true, copyText: true, status: true },
+    select: { exportUrl: true, status: true },
   })
   if (!draft) throw new Error(`Draft ${args.draftId} not found`)
+  // An IN_PROGRESS draft's exportUrl predates its latest edit — refuse to
+  // publish a stale image (the web UI enforces the same state gate).
+  if (draft.status !== 'EXPORTED' && draft.status !== 'PUBLISHED') {
+    throw new Error(
+      `Draft ${args.draftId} is ${draft.status} — export it first (only EXPORTED/PUBLISHED drafts can be published)`
+    )
+  }
   if (!draft.exportUrl) throw new Error('Draft has no exportUrl — run export first')
 
-  // Sign the stored export key for the publisher's one-off image fetch.
-  const signedExportUrl = await resolveExportUrl(draft.exportUrl)
-  if (!signedExportUrl) throw new Error('Draft has no exportUrl — run export first')
-
-  let platformId: string
-  if (args.channel === 'INSTAGRAM') {
-    const result = await instagram.publish(signedExportUrl, draft.copyText)
-    platformId = result.platformId
-  } else {
-    const result = await linkedin.publish(signedExportUrl, draft.copyText)
-    platformId = result.platformId
+  // Same duplicate guard as the API path: a live post for this draft+channel
+  // means this would double-post.
+  const existing = await findLivePost(args.draftId, args.channel)
+  if (existing) {
+    throw new Error(
+      `A ${existing.status} post already exists for draft ${args.draftId} on ${args.channel} (post ${existing.id})`
+    )
   }
 
-  await prisma.post.create({
-    data: {
-      draftId: args.draftId,
-      userId: await getSystemUserId(),
-      channel: args.channel,
-      status: 'PUBLISHED',
-      publishedAt: new Date(),
-      platformId,
-    },
+  const { post, error } = await createAndPublishPost({
+    draftId: args.draftId,
+    channel: args.channel,
+    userId: await getSystemUserId(),
   })
 
-  return { platformId }
+  // The FAILED row is recorded either way; surface the failure to the caller.
+  if (error) {
+    throw new Error(`Publish failed (${error.reason}) — recorded as post ${post.id} with status FAILED`)
+  }
+
+  return { platformId: post.platformId! }
 }

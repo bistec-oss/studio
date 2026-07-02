@@ -8,45 +8,49 @@ interface StatusChipProps {
   className?: string
 }
 
+// Colors come from the status-* tokens in tailwind.config.ts (single source of
+// truth): DEFAULT drives the light theme, the `dark` shade drives dark mode.
+// Tailwind can't build class names from template strings, so each status spells
+// its utilities out.
 const statusConfig: Record<PostStatus, { label: string; classes: string }> = {
   draft: {
     label: 'Draft',
     classes: [
-      'bg-slate-100 dark:bg-slate-800/60',
-      'text-slate-500 dark:text-slate-400',
-      'border border-slate-200 dark:border-slate-700',
+      'bg-status-draft/10 dark:bg-status-draft-dark/15',
+      'text-status-draft dark:text-status-draft-dark',
+      'border border-status-draft/25 dark:border-status-draft-dark/30',
     ].join(' '),
   },
   exported: {
     label: 'Exported',
     classes: [
-      'bg-violet-50 dark:bg-violet-900/20',
-      'text-violet-600 dark:text-violet-400',
-      'border border-violet-200 dark:border-violet-700/40',
+      'bg-status-exported/10 dark:bg-status-exported-dark/15',
+      'text-status-exported dark:text-status-exported-dark',
+      'border border-status-exported/25 dark:border-status-exported-dark/30',
     ].join(' '),
   },
   scheduled: {
     label: 'Scheduled',
     classes: [
-      'bg-sky-50 dark:bg-sky-900/20',
-      'text-sky-600 dark:text-sky-400',
-      'border border-sky-200 dark:border-sky-700/40',
+      'bg-status-scheduled/10 dark:bg-status-scheduled-dark/15',
+      'text-status-scheduled dark:text-status-scheduled-dark',
+      'border border-status-scheduled/25 dark:border-status-scheduled-dark/30',
     ].join(' '),
   },
   published: {
     label: 'Published',
     classes: [
-      'bg-emerald-50 dark:bg-emerald-900/20',
-      'text-emerald-700 dark:text-emerald-400',
-      'border border-emerald-200 dark:border-emerald-700/40',
+      'bg-status-published/10 dark:bg-status-published-dark/15',
+      'text-status-published dark:text-status-published-dark',
+      'border border-status-published/25 dark:border-status-published-dark/30',
     ].join(' '),
   },
   failed: {
     label: 'Failed',
     classes: [
-      'bg-red-50 dark:bg-red-900/20',
-      'text-red-600 dark:text-red-400',
-      'border border-red-200 dark:border-red-700/40',
+      'bg-status-failed/10 dark:bg-status-failed-dark/15',
+      'text-status-failed dark:text-status-failed-dark',
+      'border border-status-failed/25 dark:border-status-failed-dark/30',
     ].join(' '),
   },
 }

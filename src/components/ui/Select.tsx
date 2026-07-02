@@ -20,7 +20,9 @@ export function Select({
   className,
   ...props
 }: SelectProps) {
-  const selectId = id ?? (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
+  // Stable, collision-free fallback: an explicit id wins, otherwise React.useId.
+  const generatedId = React.useId()
+  const selectId = id ?? (label ? generatedId : undefined)
 
   return (
     <div className="flex flex-col gap-1.5">

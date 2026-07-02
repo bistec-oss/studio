@@ -1,16 +1,14 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import {
-  Send,
   Loader2,
   RotateCcw,
   Download,
   ImageIcon,
-  AlertTriangle,
-  Check,
   ArrowLeft,
   Sparkles,
   Undo2,
@@ -19,10 +17,14 @@ import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { PublishDialog } from '@/components/library/PublishDialog'
+import { CopyEditor } from '@/components/drafts/CopyEditor'
+import { RefinementPanel } from '@/components/drafts/RefinementPanel'
 import { apiFetch } from '@/lib/apiFetch'
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import { useUndoableAction } from '@/lib/hooks/useUndoableAction'
 import type { AspectRatio } from '@prisma/client'
 import { aspectClassFor } from '@/lib/aspectRatio'
-import { channelLabel, channelCopyLimit } from '@/lib/channels'
+import { formatDateTime } from '@/lib/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -64,350 +66,11 @@ interface Revision {
   createdAt: string
 }
 
-interface RefineMessage {
-  id: string
-  instruction: string
-  status: 'pending' | 'applied' | 'conflict' | 'error'
-  detail?: string
-}
-
-interface ConflictState {
-  conflictId: string
-  explanation: string
-  instruction: string
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function copyLimitFor(channels: string[]): { channel: string; limit: number } {
-  let chosen = { channel: 'LinkedIn', limit: 3000 }
-  for (const ch of channels) {
-    const limit = channelCopyLimit(ch)
-    if (limit !== undefined && limit < chosen.limit) {
-      chosen = { channel: channelLabel(ch), limit }
-    }
-  }
-  return chosen
-}
-
 const STATUS_TO_CHIP: Record<DraftDetail['status'], 'draft' | 'exported' | 'published' | 'failed'> = {
   IN_PROGRESS: 'draft',
   EXPORTED: 'exported',
   PUBLISHED: 'published',
   FAILED: 'failed',
-}
-
-function timeAgo(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-const SUGGESTIONS = [
-  'Make the background darker',
-  'Move the headline to top',
-  'Increase font size',
-]
-
-// ─── Copy editor ────────────────────────────────────────────────────────────
-
-function CopyEditor({
-  draft,
-  onSaved,
-}: {
-  draft: DraftDetail
-  onSaved: (copyText: string) => void
-}) {
-  const [value, setValue] = useState(draft.copyText)
-  const [saved, setSaved] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
-  // Holds the copy that was live before the last regenerate, enabling one-click Undo.
-  const [undoCopy, setUndoCopy] = useState<string | null>(null)
-  const [undoing, setUndoing] = useState(false)
-
-  useEffect(() => {
-    setValue(draft.copyText)
-    setSaved(true)
-  }, [draft.copyText])
-
-  const { channel, limit } = copyLimitFor(draft.brief.channels)
-  const over = value.length > limit
-
-  async function save() {
-    if (saved || value === draft.copyText) {
-      setSaved(true)
-      return
-    }
-    setSaving(true)
-    try {
-      await apiFetch(`/api/drafts/${draft.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ copyText: value }),
-      })
-      setSaved(true)
-      onSaved(value)
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function regenerate() {
-    setRegenerating(true)
-    try {
-      const data = await apiFetch<{ copyText: string; previousCopyText: string }>(
-        `/api/drafts/${draft.id}/regenerate-copy`,
-        { method: 'POST' }
-      )
-      setUndoCopy(data.previousCopyText)
-      setValue(data.copyText)
-      setSaved(true)
-      onSaved(data.copyText)
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to regenerate copy')
-    } finally {
-      setRegenerating(false)
-    }
-  }
-
-  async function undo() {
-    if (undoCopy === null) return
-    setUndoing(true)
-    try {
-      await apiFetch(`/api/drafts/${draft.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ copyText: undoCopy }),
-      })
-      setValue(undoCopy)
-      setSaved(true)
-      onSaved(undoCopy)
-      setUndoCopy(null)
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to undo')
-    } finally {
-      setUndoing(false)
-    }
-  }
-
-  const busy = regenerating || undoing
-
-  return (
-    <GlassPanel className="p-4">
-      <div className="flex items-center justify-between mb-3 gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-          Copy
-        </h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs flex items-center gap-1.5">
-            {saving ? (
-              <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
-                <Loader2 size={12} className="animate-spin" /> Saving…
-              </span>
-            ) : saved ? (
-              <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <Check size={12} /> Saved
-              </span>
-            ) : (
-              <span className="text-amber-600 dark:text-amber-400">Unsaved changes</span>
-            )}
-          </span>
-          {undoCopy !== null && (
-            <Button variant="ghost" size="sm" onClick={undo} disabled={busy} title="Restore the previous copy">
-              {undoing ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />} Undo
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={regenerate} disabled={busy}>
-            {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Regenerate
-          </Button>
-        </div>
-      </div>
-      <textarea
-        value={value}
-        onChange={(e) => {
-          setValue(e.target.value)
-          setSaved(false)
-        }}
-        onBlur={save}
-        disabled={busy}
-        rows={8}
-        className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-y leading-relaxed disabled:opacity-60"
-        placeholder="Post copy…"
-      />
-      <div className="flex justify-end mt-1.5">
-        <span
-          className={`text-xs font-mono ${
-            over ? 'text-red-500' : 'text-light-text-muted dark:text-dark-text-muted'
-          }`}
-        >
-          {value.length} / {limit} ({channel})
-        </span>
-      </div>
-    </GlassPanel>
-  )
-}
-
-// ─── Refinement panel ─────────────────────────────────────────────────────────
-
-function RefinementPanel({
-  draftId,
-  onRefined,
-}: {
-  draftId: string
-  onRefined: () => void
-}) {
-  const [messages, setMessages] = useState<RefineMessage[]>([])
-  const [input, setInput] = useState('')
-  const [running, setRunning] = useState(false)
-  const [conflict, setConflict] = useState<ConflictState | null>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages])
-
-  async function send(instruction: string, overrideConflictId?: string) {
-    if (!instruction.trim() && !overrideConflictId) return
-    const msgId = crypto.randomUUID()
-    setMessages((prev) => [...prev, { id: msgId, instruction, status: 'pending' }])
-    setInput('')
-    setRunning(true)
-    setConflict(null)
-    try {
-      const data = await apiFetch(`/api/drafts/${draftId}/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction, overrideConflictId }),
-      })
-      if (data?.conflict) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId ? { ...m, status: 'conflict', detail: data.explanation } : m
-          )
-        )
-        setConflict({ conflictId: data.conflictId, explanation: data.explanation, instruction })
-      } else {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, status: 'applied' } : m))
-        )
-        onRefined()
-      }
-    } catch (e: unknown) {
-      const detail = e instanceof Error ? e.message : 'Error'
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, status: 'error', detail } : m))
-      )
-    } finally {
-      setRunning(false)
-    }
-  }
-
-  return (
-    <GlassPanel className="p-4 flex flex-col">
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted mb-3">
-        Refine Design
-      </h3>
-
-      <div ref={listRef} className="space-y-2 max-h-72 overflow-y-auto mb-3">
-        {messages.length === 0 && (
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-            Describe a change in natural language and the design agent will apply it.
-          </p>
-        )}
-        {messages.map((m) => (
-          <div key={m.id} className="glass-input rounded-xl px-3 py-2">
-            <p className="text-sm text-light-text dark:text-dark-text">{m.instruction}</p>
-            <div className="mt-1 text-xs flex items-center gap-1.5">
-              {m.status === 'pending' && (
-                <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
-                  <Loader2 size={11} className="animate-spin" /> Applying…
-                </span>
-              )}
-              {m.status === 'applied' && (
-                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Check size={11} /> Applied
-                </span>
-              )}
-              {m.status === 'conflict' && (
-                <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                  <AlertTriangle size={11} /> Brand conflict
-                </span>
-              )}
-              {m.status === 'error' && (
-                <span className="text-red-500" title={m.detail}>
-                  Failed: {m.detail}
-                </span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {conflict && (
-        <div className="mb-3 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-3 animate-fade-in">
-          <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                This change conflicts with the brand kit
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400/90 mt-1">{conflict.explanation}</p>
-              <div className="flex gap-2 mt-3">
-                <Button
-                  size="sm"
-                  onClick={() => send(conflict.instruction, conflict.conflictId)}
-                  disabled={running}
-                >
-                  Override
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConflict(null)} disabled={running}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setInput(s)}
-            disabled={running}
-            className="text-xs px-2.5 py-1 rounded-lg bg-primary/5 dark:bg-primary-light/5 text-primary dark:text-primary-light hover:bg-primary/10 dark:hover:bg-primary-light/10 transition-colors disabled:opacity-50"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (!running) send(input)
-        }}
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={running}
-          placeholder="e.g. Make the logo larger…"
-          className="glass-input rounded-xl px-3 py-2 text-sm flex-1 text-light-text dark:text-dark-text"
-        />
-        <Button type="submit" size="sm" disabled={running || !input.trim()}>
-          {running ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-        </Button>
-      </form>
-    </GlassPanel>
-  )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -422,16 +85,18 @@ export default function DraftDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { isAdmin } = useCurrentUser()
   const [showPublish, setShowPublish] = useState(false)
   const [regenDesign, setRegenDesign] = useState(false)
-  // revisionNumber of the design snapshot taken before the last regenerate (Undo target).
-  const [undoDesignRev, setUndoDesignRev] = useState<number | null>(null)
-  const [undoingDesign, setUndoingDesign] = useState(false)
+  // Snapshot = revisionNumber of the design taken before the last regenerate (Undo target).
+  const designUndo = useUndoableAction<number>(async (rev) => {
+    await apiFetch(`/api/drafts/${draftId}/revisions/${rev}/restore`, { method: 'POST' })
+    refreshAfterChange()
+  })
 
   const fetchDraft = useCallback(async () => {
     try {
-      const data = await apiFetch(`/api/drafts/${draftId}`)
+      const data = await apiFetch<DraftDetail>(`/api/drafts/${draftId}`)
       setDraft(data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error')
@@ -442,7 +107,7 @@ export default function DraftDetailPage() {
 
   const fetchRevisions = useCallback(async () => {
     try {
-      setRevisions(await apiFetch(`/api/drafts/${draftId}/revisions`))
+      setRevisions(await apiFetch<Revision[]>(`/api/drafts/${draftId}/revisions`))
     } catch {
       // Non-fatal — revision list is supplementary.
     }
@@ -452,14 +117,6 @@ export default function DraftDetailPage() {
     fetchDraft()
     fetchRevisions()
   }, [fetchDraft, fetchRevisions])
-
-  useEffect(() => {
-    apiFetch('/api/me')
-      .then((d: { role?: string }) => {
-        setIsAdmin(typeof d?.role === 'string' && d.role.toLowerCase() === 'admin')
-      })
-      .catch(() => {})
-  }, [])
 
   // Poll while a draft is still generating so the preview updates without a
   // manual refresh.
@@ -484,7 +141,7 @@ export default function DraftDetailPage() {
       })
       await fetchDraft()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error')
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
       setExporting(false)
     }
@@ -496,7 +153,7 @@ export default function DraftDetailPage() {
       await apiFetch(`/api/drafts/${draftId}/revisions/${rev}/restore`, { method: 'POST' })
       await fetchDraft()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error')
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
       setRestoringRev(null)
     }
@@ -510,26 +167,16 @@ export default function DraftDetailPage() {
         { method: 'POST' }
       )
       // The prior design is snapshotted as a revision — offer it as a one-click Undo.
-      setUndoDesignRev(data.previousRevisionNumber)
+      if (data.previousRevisionNumber === null) {
+        designUndo.clear()
+      } else {
+        designUndo.capture(data.previousRevisionNumber)
+      }
       refreshAfterChange()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to regenerate design')
+      toast.error(e instanceof Error ? e.message : 'Failed to regenerate design')
     } finally {
       setRegenDesign(false)
-    }
-  }
-
-  async function handleUndoDesign() {
-    if (undoDesignRev === null) return
-    setUndoingDesign(true)
-    try {
-      await apiFetch(`/api/drafts/${draftId}/revisions/${undoDesignRev}/restore`, { method: 'POST' })
-      setUndoDesignRev(null)
-      refreshAfterChange()
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to undo')
-    } finally {
-      setUndoingDesign(false)
     }
   }
 
@@ -649,21 +296,21 @@ export default function DraftDetailPage() {
                   size="sm"
                   className="flex-1"
                   onClick={handleRegenerateDesign}
-                  disabled={regenDesign || undoingDesign || !draft.htmlContent}
+                  disabled={regenDesign || designUndo.undoing || !draft.htmlContent}
                   title="Generate a brand-new design from the same brief"
                 >
                   {regenDesign ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
                   Regenerate design
                 </Button>
-                {undoDesignRev !== null && (
+                {designUndo.snapshot !== null && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleUndoDesign}
-                    disabled={regenDesign || undoingDesign}
+                    onClick={designUndo.undo}
+                    disabled={regenDesign || designUndo.undoing}
                     title="Go back to the previous design"
                   >
-                    {undoingDesign ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
+                    {designUndo.undoing ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
                     Undo
                   </Button>
                 )}
@@ -700,7 +347,7 @@ export default function DraftDetailPage() {
                         {r.instruction}
                       </p>
                       <p className="text-[11px] text-light-text-muted dark:text-dark-text-muted mt-0.5">
-                        {timeAgo(r.createdAt)}
+                        {formatDateTime(r.createdAt)}
                       </p>
                     </div>
                     <Button

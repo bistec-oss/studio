@@ -2,16 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
-import * as instagramPublisher from '@/lib/social/instagram'
-import * as linkedinPublisher from '@/lib/social/linkedin'
-import { PublishError } from '@/lib/social/types'
 import { resolveExportUrl } from '@/lib/storage/minio'
+import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
 import { Channel } from '@prisma/client'
-
-const publishers = {
-  INSTAGRAM: instagramPublisher,
-  LINKEDIN: linkedinPublisher,
-}
 
 // Permissive schema: only guards the JSON parse. The manual checks below keep
 // their exact error messages (asserted by tests).
@@ -47,6 +40,17 @@ export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
   }
   const publishNow = !scheduledAtDate || scheduledAtDate <= new Date()
 
+  // Idempotency: a live post (PENDING/SCHEDULED/PUBLISHING/PUBLISHED) for the
+  // same draft+channel means a double-click or client retry — reject instead of
+  // double-posting. Re-publishing after FAILED/CANCELLED stays allowed.
+  const existing = await findLivePost(draftId, channel as Channel)
+  if (existing) {
+    return NextResponse.json(
+      { error: 'A post for this draft and channel already exists', postId: existing.id, status: existing.status },
+      { status: 409 }
+    )
+  }
+
   // Scheduled path: persist a SCHEDULED row directly — no transient PENDING that
   // could be orphaned if the request dies before the follow-up update.
   if (!publishNow) {
@@ -62,53 +66,20 @@ export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
     return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
   }
 
-  // Sign the stored export key for the publisher's one-off image fetch. Resolved
-  // before the post row is created so a resolution failure can't strand a PENDING row.
+  // Resolve up front so a missing export is a clear 422 before any row exists.
   const signedExportUrl = await resolveExportUrl(draft.exportUrl)
   if (!signedExportUrl) {
     return NextResponse.json({ error: 'Draft has no export' }, { status: 422 })
   }
 
-  // Immediate path: the external publish call can't be inside a DB transaction,
-  // so every exit (success, PublishError, or unexpected throw) must drive the
-  // row to a terminal status — a PENDING row must never survive this handler.
-  const post = await prisma.post.create({
-    data: {
-      draftId,
-      userId: auth.userId,
-      channel: channel as Channel,
-      status: 'PENDING',
-      scheduledAt: scheduledAtDate,
-    },
+  // Immediate path — shared PENDING → publish → PUBLISHED/FAILED state machine.
+  const { post } = await createAndPublishPost({
+    draftId,
+    channel: channel as Channel,
+    userId: auth.userId,
+    scheduledAt: scheduledAtDate,
   })
-
-  try {
-    const { platformId } = await publishers[channel as keyof typeof publishers].publish(
-      signedExportUrl,
-      draft.copyText ?? '',
-    )
-    const updated = await prisma.post.update({
-      where: { id: post.id },
-      data: {
-        status: 'PUBLISHED',
-        publishedAt: new Date(),
-        platformId,
-      },
-    })
-    return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
-  } catch (err) {
-    const reason = err instanceof PublishError ? err.reason : 'Unexpected publish error'
-    const updated = await prisma.post.update({
-      where: { id: post.id },
-      data: { status: 'FAILED', errorReason: reason },
-    })
-    // Known publish failures are an expected outcome (201, FAILED row); anything
-    // else is a real fault — surface it after the row is safely terminal.
-    if (err instanceof PublishError) {
-      return NextResponse.json({ postId: updated.id, status: updated.status }, { status: 201 })
-    }
-    throw err
-  }
+  return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
 })
 
 export const GET = withAuth(async (req: NextRequest, _ctx, user) => {

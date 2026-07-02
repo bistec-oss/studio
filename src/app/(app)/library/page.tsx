@@ -1,41 +1,23 @@
 'use client'
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
+import { QueryError } from '@/components/ui/QueryError'
 import { PostCard } from '@/components/library/PostCard'
 import { PublishDialog } from '@/components/library/PublishDialog'
 import { PublishHistoryDrawer } from '@/components/library/PublishHistoryDrawer'
 import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/apiFetch'
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import type { DraftRecord, PostRecord, LibraryResponse } from '@/lib/api-types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type StatusFilter = 'ALL' | 'READY' | 'SCHEDULED' | 'PUBLISHED' | 'FAILED'
-
-interface PostRecord {
-  id: string
-  channel: string
-  status: string
-  scheduledAt: string | null
-  publishedAt: string | null
-  platformId: string | null
-  errorReason: string | null
-}
-
-interface DraftRecord {
-  id: string
-  exportUrl: string | null
-  status: string
-  createdAt: string
-  brief: {
-    topic: string
-    channels: string[]
-    campaign: { name: string; brandKit: { name: string } | null } | null
-  }
-  posts: PostRecord[]
-}
 
 // Flatten brandKitName from the brief's campaign for PostCard
 function toBriefCardProps(draft: DraftRecord) {
@@ -50,6 +32,8 @@ const STATUS_TABS: { label: string; value: StatusFilter }[] = [
   { label: 'Published', value: 'PUBLISHED' },
   { label: 'Failed', value: 'FAILED' },
 ]
+
+const PAGE_SIZE = 20
 
 // ── Skeleton loader ───────────────────────────────────────────────────────────
 
@@ -70,14 +54,11 @@ function SkeletonCard() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
+  const queryClient = useQueryClient()
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('ALL')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [drafts, setDrafts] = useState<DraftRecord[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { isAdmin } = useCurrentUser()
 
   const [selectedDraft, setSelectedDraft] = useState<{
     id: string
@@ -94,82 +75,46 @@ export default function LibraryPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       setSearch(searchInput)
-      setPage(1)
     }, 300)
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [searchInput])
 
-  // Fetch session / role
-  useEffect(() => {
-    fetch('/api/auth/session')
-      .then((r) => r.json())
-      .then((data) => {
-        const role = data?.user?.role ?? data?.session?.user?.role ?? ''
-        setIsAdmin(
-          typeof role === 'string'
-            ? role.toLowerCase() === 'admin'
-            : false
-        )
+  const {
+    data,
+    isPending,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
+    queryKey: ['library', activeStatus, search],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({
+        page: String(pageParam),
+        pageSize: String(PAGE_SIZE),
+        status: activeStatus,
+        ...(search ? { search } : {}),
       })
-      .catch(() => {})
-  }, [])
-
-  const PAGE_SIZE = 20
-
-  const fetchLibrary = useCallback(
-    async (append = false) => {
-      if (!append) setLoading(true)
-      try {
-        const params = new URLSearchParams({
-          page: String(page),
-          pageSize: String(PAGE_SIZE),
-          status: activeStatus,
-          ...(search ? { search } : {}),
-        })
-        const res = await fetch(`/api/library?${params}`)
-        if (!res.ok) throw new Error(res.statusText)
-        const data = await res.json()
-        setDrafts((prev) => (append ? [...prev, ...data.drafts] : data.drafts))
-        setTotal(data.total)
-      } catch (e) {
-        console.error(e)
-      } finally {
-        setLoading(false)
-      }
+      return apiFetch<LibraryResponse>(`/api/library?${params}`)
     },
-    [activeStatus, search, page]
-  )
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) =>
+      allPages.length * PAGE_SIZE < lastPage.total ? allPages.length + 1 : undefined,
+  })
 
-  // Reset page when filter/search changes (page already reset on search debounce)
-  useEffect(() => {
-    setPage(1)
-  }, [activeStatus])
+  const drafts = data?.pages.flatMap((p) => p.drafts) ?? []
 
-  const prevFiltersRef = useRef({ activeStatus, search })
-  useEffect(() => {
-    const filtersChanged =
-      prevFiltersRef.current.activeStatus !== activeStatus ||
-      prevFiltersRef.current.search !== search
-    prevFiltersRef.current = { activeStatus, search }
-    fetchLibrary(!filtersChanged && page > 1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStatus, search, page])
-
-  function handleStatusTab(s: StatusFilter) {
-    setActiveStatus(s)
-    setPage(1)
-    setDrafts([])
-  }
-
-  function handleLoadMore() {
-    setPage((p) => p + 1)
+  function invalidateLibrary() {
+    return queryClient.invalidateQueries({ queryKey: ['library'] })
   }
 
   async function handleRetry(postId: string) {
     await apiFetch(`/api/posts/${postId}/publish`, { method: 'POST' })
-    fetchLibrary(false)
+    invalidateLibrary()
   }
 
   return (
@@ -203,31 +148,23 @@ export default function LibraryPage() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex flex-wrap gap-1 mb-5">
-        {STATUS_TABS.map(({ label, value }) => (
-          <button
-            key={value}
-            onClick={() => handleStatusTab(value)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
-              activeStatus === value
-                ? 'bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light border border-primary/20 dark:border-primary-light/20'
-                : 'text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-primary dark:hover:text-primary-light border border-transparent'
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedToggle
+        options={STATUS_TABS.map(({ label, value }) => ({ value, label }))}
+        value={activeStatus}
+        onChange={(v) => setActiveStatus(v as StatusFilter)}
+        className="mb-5"
+      />
 
       {/* Grid */}
-      {loading && drafts.length === 0 ? (
+      {isPending ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>
-      ) : !loading && drafts.length === 0 ? (
+      ) : isError ? (
+        <QueryError error={error} onRetry={() => refetch()} />
+      ) : drafts.length === 0 ? (
         <GlassPanel className="p-12 text-center">
           <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
             No posts found.
@@ -252,15 +189,15 @@ export default function LibraryPage() {
           </div>
 
           {/* Load more */}
-          {drafts.length < total && (
+          {hasNextPage && (
             <div className="mt-6 flex justify-center">
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={handleLoadMore}
-                disabled={loading}
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
               >
-                {loading ? 'Loading…' : 'Load more'}
+                {isFetchingNextPage ? 'Loading…' : 'Load more'}
               </Button>
             </div>
           )}
@@ -274,7 +211,7 @@ export default function LibraryPage() {
           onClose={() => setShowPublishDialog(null)}
           onSuccess={() => {
             setShowPublishDialog(null)
-            fetchLibrary(false)
+            invalidateLibrary()
           }}
         />
       )}

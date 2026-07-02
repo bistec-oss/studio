@@ -1,36 +1,15 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Plus, Trash2, ToggleLeft, ToggleRight, Star, Instagram, Linkedin, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassInput } from '@/components/ui/GlassInput'
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
+import { QueryError } from '@/components/ui/QueryError'
 import { apiFetch } from '@/lib/apiFetch'
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type ProviderSlot = 'COPY' | 'IMAGE'
-
-interface Provider {
-  id: string
-  slot: ProviderSlot
-  providerKey: string
-  providerName: string
-  label: string
-  keyPrefix: string
-  isEnabled: boolean
-  isDefault: boolean
-  createdAt: string
-}
-
-interface ChannelStatus {
-  connected: boolean
-  updatedAt?: string
-}
-
-interface ChannelMap {
-  INSTAGRAM: ChannelStatus
-  LINKEDIN: ChannelStatus
-}
+import type { AdminProvider as Provider, ProviderSlot, ChannelStatus, ChannelMap } from '@/lib/api-types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +72,8 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
           <button
             type="button"
             onClick={() => setShowKey(v => !v)}
+            aria-label={showKey ? 'Hide API key' : 'Show API key'}
+            aria-pressed={showKey}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-light-text-muted dark:text-dark-text-muted"
           >
             {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -120,21 +101,14 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         )}
 
-        <div className="flex gap-2">
-          {(['COPY', 'IMAGE'] as ProviderSlot[]).map(s => (
-            <button
-              key={s}
-              onClick={() => setSlot(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                slot === s
-                  ? 'bg-primary/20 text-primary dark:bg-primary-light/20 dark:text-primary-light border border-primary/30 dark:border-primary-light/30'
-                  : 'glass-input text-light-text-muted dark:text-dark-text-muted'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          options={[
+            { value: 'COPY', label: 'COPY' },
+            { value: 'IMAGE', label: 'IMAGE' },
+          ]}
+          value={slot}
+          onChange={v => setSlot(v as ProviderSlot)}
+        />
 
         {error && <p className="text-xs text-red-500">{error}</p>}
 
@@ -159,14 +133,14 @@ function ProviderCard({ provider, onRefresh }: { provider: Provider; onRefresh: 
         body: JSON.stringify({ [field]: value }),
       })
       onRefresh()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   async function remove() {
     try {
       await apiFetch(`/api/admin/providers/${provider.id}`, { method: 'DELETE' })
       onRefresh()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   return (
@@ -191,6 +165,8 @@ function ProviderCard({ provider, onRefresh }: { provider: Provider; onRefresh: 
       <div className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={() => toggle('isEnabled', !provider.isEnabled)}
+          aria-pressed={provider.isEnabled}
+          aria-label={`Enable ${provider.label}`}
           className="text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light transition-colors"
           title={provider.isEnabled ? 'Disable' : 'Enable'}
         >
@@ -200,6 +176,8 @@ function ProviderCard({ provider, onRefresh }: { provider: Provider; onRefresh: 
         </button>
         <button
           onClick={() => toggle('isDefault', true)}
+          aria-pressed={provider.isDefault}
+          aria-label={`Set ${provider.label} as default`}
           className={`transition-colors ${provider.isDefault ? 'text-amber-500' : 'text-light-text-muted dark:text-dark-text-muted hover:text-amber-500'}`}
           title="Set as default"
         >
@@ -211,7 +189,11 @@ function ProviderCard({ provider, onRefresh }: { provider: Provider; onRefresh: 
             <button onClick={() => setConfirming(false)} className="text-xs text-light-text-muted dark:text-dark-text-muted px-2 py-0.5 rounded glass-input">Cancel</button>
           </div>
         ) : (
-          <button onClick={() => setConfirming(true)} className="text-light-text-muted dark:text-dark-text-muted hover:text-red-500 transition-colors">
+          <button
+            onClick={() => setConfirming(true)}
+            aria-label={`Remove ${provider.label}`}
+            className="text-light-text-muted dark:text-dark-text-muted hover:text-red-500 transition-colors"
+          >
             <Trash2 size={15} />
           </button>
         )}
@@ -265,7 +247,7 @@ function ChannelRow({
     try {
       await apiFetch(`/api/admin/channels/${channel}`, { method: 'DELETE' })
       onRefresh()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   return (
@@ -293,6 +275,8 @@ function ChannelRow({
           <button
             type="button"
             onClick={() => setShowToken(v => !v)}
+            aria-label={showToken ? 'Hide access token' : 'Show access token'}
+            aria-pressed={showToken}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-light-text-muted dark:text-dark-text-muted"
           >
             {showToken ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -322,30 +306,29 @@ function ChannelRow({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AdminSettingsPage() {
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState<'providers' | 'channels'>('providers')
-  const [providers, setProviders] = useState<Provider[]>([])
-  const [channels, setChannels] = useState<ChannelMap>({ INSTAGRAM: { connected: false }, LINKEDIN: { connected: false } })
   const [showRegister, setShowRegister] = useState(false)
-  const [loading, setLoading] = useState(true)
 
-  const loadProviders = useCallback(async () => {
-    try {
-      const data = await apiFetch('/api/admin/providers')
-      setProviders(data)
-    } catch { /* stay with stale */ }
-  }, [])
+  const providersQuery = useQuery({
+    queryKey: ['admin-providers'],
+    queryFn: () => apiFetch<Provider[]>('/api/admin/providers'),
+  })
+  const channelsQuery = useQuery({
+    queryKey: ['admin-channels'],
+    queryFn: () => apiFetch<ChannelMap>('/api/admin/channels'),
+  })
 
-  const loadChannels = useCallback(async () => {
-    try {
-      const data = await apiFetch('/api/admin/channels')
-      setChannels(data)
-    } catch { /* stay with stale */ }
-  }, [])
+  const providers = providersQuery.data ?? []
+  const channels = channelsQuery.data ?? { INSTAGRAM: { connected: false }, LINKEDIN: { connected: false } }
+  const loading = providersQuery.isLoading || channelsQuery.isLoading
 
-  useEffect(() => {
-    setLoading(true)
-    Promise.all([loadProviders(), loadChannels()]).finally(() => setLoading(false))
-  }, [loadProviders, loadChannels])
+  function invalidateProviders() {
+    return queryClient.invalidateQueries({ queryKey: ['admin-providers'] })
+  }
+  function invalidateChannels() {
+    return queryClient.invalidateQueries({ queryKey: ['admin-channels'] })
+  }
 
   const providersBySlot = (slot: ProviderSlot) => providers.filter(p => p.slot === slot)
 
@@ -360,25 +343,21 @@ export default function AdminSettingsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 glass-panel rounded-xl p-1 w-fit">
-        {(['providers', 'channels'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-              tab === t
-                ? 'bg-primary/15 text-primary dark:bg-primary-light/15 dark:text-primary-light'
-                : 'text-light-text-muted dark:text-dark-text-muted hover:text-light-text dark:hover:text-dark-text'
-            }`}
-          >
-            {t === 'providers' ? 'AI Providers' : 'Social Channels'}
-          </button>
-        ))}
-      </div>
+      <SegmentedToggle
+        options={[
+          { value: 'providers', label: 'AI Providers' },
+          { value: 'channels', label: 'Social Channels' },
+        ]}
+        value={tab}
+        onChange={v => setTab(v as 'providers' | 'channels')}
+      />
 
       {loading ? (
         <p className="text-sm text-light-text-muted dark:text-dark-text-muted">Loading…</p>
       ) : tab === 'providers' ? (
+        providersQuery.isError ? (
+          <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} />
+        ) : (
         <div className="space-y-6">
           {(['COPY', 'IMAGE'] as ProviderSlot[]).map(slot => (
             <div key={slot} className="space-y-3">
@@ -391,19 +370,22 @@ export default function AdminSettingsPage() {
                 <p className="text-sm text-light-text-muted dark:text-dark-text-muted italic">No providers registered for {slot}</p>
               )}
               {providersBySlot(slot).map(p => (
-                <ProviderCard key={p.id} provider={p} onRefresh={loadProviders} />
+                <ProviderCard key={p.id} provider={p} onRefresh={invalidateProviders} />
               ))}
             </div>
           ))}
 
           {showRegister ? (
-            <RegisterForm onSuccess={() => { setShowRegister(false); loadProviders() }} />
+            <RegisterForm onSuccess={() => { setShowRegister(false); invalidateProviders() }} />
           ) : (
             <Button variant="secondary" onClick={() => setShowRegister(true)} className="flex items-center gap-2">
               <Plus size={15} /> Register Provider
             </Button>
           )}
         </div>
+        )
+      ) : channelsQuery.isError ? (
+        <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} />
       ) : (
         <div className="space-y-4">
           <ChannelRow
@@ -413,7 +395,7 @@ export default function AdminSettingsPage() {
             tokenPlaceholder="Access token"
             metadataPlaceholder="Business Account ID"
             icon={<Instagram size={18} />}
-            onRefresh={loadChannels}
+            onRefresh={invalidateChannels}
           />
           <ChannelRow
             channel="LINKEDIN"
@@ -422,7 +404,7 @@ export default function AdminSettingsPage() {
             tokenPlaceholder="Access token"
             metadataPlaceholder="Organization ID"
             icon={<Linkedin size={18} />}
-            onRefresh={loadChannels}
+            onRefresh={invalidateChannels}
           />
         </div>
       )}

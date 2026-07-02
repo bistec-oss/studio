@@ -25,6 +25,39 @@ function resolveExecutablePath(): string {
   )
 }
 
+// Egress allowlist for rendered documents. The HTML we render is model-generated
+// (and refine output is user-instruction-influenced), and it executes with the
+// server's network position — without interception, a prompt-injected
+// <img src="http://169.254.169.254/..."> or <script>fetch('http://minio:9000/...')
+// runs server-side (SSRF/exfil vector). Only our own MinIO endpoints (embedded
+// assets) and Google Fonts (brand @import fonts) are reachable; everything else
+// is aborted (the render still completes — the resource just fails to load).
+const ALLOWED_RENDER_HOSTS = new Set<string>(["fonts.googleapis.com", "fonts.gstatic.com"])
+for (const e of [env.MINIO_ENDPOINT, env.MINIO_PUBLIC_ENDPOINT]) {
+  if (!e) continue
+  try {
+    ALLOWED_RENDER_HOSTS.add(new URL(e).host)
+  } catch {
+    // Malformed endpoint config — env.ts validation reports it elsewhere.
+  }
+}
+
+function isAllowedRenderRequest(url: string): boolean {
+  // data:/blob: are in-document; about:blank is the setContent navigation itself.
+  if (url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") return true
+  try {
+    const u = new URL(url)
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false
+    return ALLOWED_RENDER_HOSTS.has(u.host)
+  } catch {
+    return false
+  }
+}
+
+// Bound a hung render (e.g. a resource that never settles): explicit, generous
+// budget instead of relying on Puppeteer's silent 30s navigation default.
+const SET_CONTENT_TIMEOUT_MS = 60_000
+
 // Cap concurrent renders. Each render rasterizes at 2× DPI (here 1080→2160px),
 // which is memory-heavy, and the design agent can fire renderHtml repeatedly
 // while several generations run in parallel. Without a cap, unbounded pages
@@ -80,7 +113,16 @@ async function renderOnce(
   const page = await browser.newPage()
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 2 })
-    await page.setContent(html, { waitUntil: "networkidle0" })
+    await page.setRequestInterception(true)
+    page.on("request", (req) => {
+      if (isAllowedRenderRequest(req.url())) {
+        req.continue().catch(() => {})
+      } else {
+        console.warn(`[renderer] blocked off-allowlist request: ${req.url().slice(0, 200)}`)
+        req.abort().catch(() => {})
+      }
+    })
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: SET_CONTENT_TIMEOUT_MS })
     const screenshot = await page.screenshot({ type: "png" })
     return Buffer.from(screenshot)
   } finally {

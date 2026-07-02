@@ -1,57 +1,42 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import Link from 'next/link'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Megaphone, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
-
-interface Project {
-  id: string
-  name: string
-  defaultTone: string | null
-  defaultBrandKit: { id: string; name: string } | null
-  campaigns: Array<{
-    campaign: { id: string; name: string; isDeleted: boolean }
-  }>
-}
-
-interface BrandKitOption {
-  id: string
-  name: string
-  previewColor: string
-}
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import type { ProjectDetail, BrandKitSummary } from '@/lib/api-types'
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const [project, setProject] = useState<Project | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
-  const [isAdmin, setIsAdmin] = useState(false)
+  const queryClient = useQueryClient()
+  const { isAdmin } = useCurrentUser()
   const [savingKit, setSavingKit] = useState(false)
 
-  const fetchProject = useCallback(async () => {
-    try {
-      const data = await apiFetch(`/api/projects/${params.id}`)
-      setProject(data)
-    } catch {
-      router.push('/projects')
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id, router])
+  const projectQuery = useQuery({
+    queryKey: ['projects', params.id],
+    queryFn: () => apiFetch<ProjectDetail>(`/api/projects/${params.id}`),
+  })
 
-  useEffect(() => { fetchProject() }, [fetchProject])
+  const { data: brandKits = [] } = useQuery({
+    queryKey: ['brandkits'],
+    queryFn: () => apiFetch<BrandKitSummary[]>('/api/brandkits'),
+  })
+
+  const project = projectQuery.data
+
+  // Mirrors the previous try/catch behaviour: a failed/missing project
+  // bounces back to the list rather than showing a dead-end detail page.
   useEffect(() => {
-    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
-    apiFetch<{ role: string }>('/api/me')
-      .then(u => setIsAdmin(u.role?.toLowerCase() === 'admin'))
-      .catch(() => setIsAdmin(false))
-  }, [])
+    if (projectQuery.isError) router.push('/projects')
+  }, [projectQuery.isError, router])
 
   async function updateBrandKit(value: string) {
     setSavingKit(true)
@@ -61,19 +46,17 @@ export default function ProjectDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultBrandKitId: value || null }),
       })
-      await fetchProject()
+      await queryClient.invalidateQueries({ queryKey: ['projects', params.id] })
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to update brand kit')
+      toast.error(e instanceof Error ? e.message : 'Failed to update brand kit')
     } finally {
       setSavingKit(false)
     }
   }
 
-  if (loading) {
+  if (projectQuery.isLoading || projectQuery.isError || !project) {
     return <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8">Loading…</div>
   }
-
-  if (!project) return null
 
   const activeCampaigns = project.campaigns.filter(c => !c.campaign.isDeleted)
 

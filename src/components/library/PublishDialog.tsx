@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useState } from 'react'
-import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Modal } from '@/components/ui/Modal'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { Button } from '@/components/ui/Button'
+import { apiFetch } from '@/lib/apiFetch'
 import { CHANNEL_VALUES, channelLabel } from '@/lib/channels'
 import type { Channel } from '@prisma/client'
 
@@ -19,11 +20,16 @@ export interface PublishDialogProps {
   onSuccess: () => void
 }
 
+// Per-channel outcome of the last Confirm — channels that succeeded are locked
+// so re-confirming after a partial failure can't double-post them.
+type ChannelOutcome = { ok: true } | { ok: false; message: string }
+
 export function PublishDialog({ draftId, onClose, onSuccess }: PublishDialogProps) {
   const [checkedChannels, setCheckedChannels] = useState<Channel[]>([])
   const [scheduledAt, setScheduledAt] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [outcomes, setOutcomes] = useState<Partial<Record<Channel, ChannelOutcome>>>({})
 
   function toggleChannel(ch: Channel) {
     setCheckedChannels((prev) =>
@@ -32,69 +38,106 @@ export function PublishDialog({ draftId, onClose, onSuccess }: PublishDialogProp
   }
 
   async function handleConfirm() {
-    if (checkedChannels.length === 0) {
+    // Skip channels that already succeeded in a previous partial attempt.
+    const toPublish = checkedChannels.filter((ch) => outcomes[ch]?.ok !== true)
+    if (toPublish.length === 0 && checkedChannels.length === 0) {
       setError('Select at least one channel.')
       return
     }
     setSubmitting(true)
     setError(null)
-    try {
-      await Promise.all(
-        checkedChannels.map((channel) =>
-          fetch('/api/posts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              draftId,
-              channel,
-              scheduledAt: scheduledAt || undefined,
-            }),
-          }).then(async (res) => {
-            if (!res.ok) {
-              const body = await res.json().catch(() => ({}))
-              throw new Error(body.error ?? res.statusText)
-            }
-          })
-        )
+    const settled = await Promise.allSettled(
+      toPublish.map((channel) =>
+        apiFetch('/api/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            draftId,
+            channel,
+            scheduledAt: scheduledAt || undefined,
+          }),
+        })
       )
+    )
+    setSubmitting(false)
+
+    const next: Partial<Record<Channel, ChannelOutcome>> = { ...outcomes }
+    settled.forEach((result, i) => {
+      const channel = toPublish[i]
+      next[channel] =
+        result.status === 'fulfilled'
+          ? { ok: true }
+          : { ok: false, message: result.reason instanceof Error ? result.reason.message : 'Publish failed.' }
+    })
+    setOutcomes(next)
+
+    const failed = checkedChannels.filter((ch) => next[ch] && !next[ch]!.ok)
+    if (failed.length === 0) {
       onSuccess()
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Publish failed.')
-    } finally {
-      setSubmitting(false)
+    } else {
+      setError(
+        `${failed.map((ch) => channelLabel(ch)).join(', ')} failed — fix the issue and Confirm to retry ` +
+          `(already-published channels won't be re-sent).`
+      )
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <GlassPanel className="p-6 w-full max-w-md">
-        <h2 className="text-lg font-semibold text-light-text dark:text-dark-text mb-4">
-          Publish Post
-        </h2>
-
+    <Modal
+      open
+      onClose={onClose}
+      title="Publish Post"
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleConfirm}
+            disabled={submitting || checkedChannels.length === 0}
+          >
+            {submitting ? 'Publishing…' : 'Confirm'}
+          </Button>
+        </>
+      }
+    >
         {/* Channel checkboxes */}
         <p className="text-sm font-medium text-light-text dark:text-dark-text mb-2">
           Channels
         </p>
         <div className="flex gap-3 mb-4">
-          {CHANNELS.map((ch) => (
-            <label
-              key={ch}
-              className="flex items-center gap-2 cursor-pointer text-sm text-light-text dark:text-dark-text"
-            >
-              <input
-                type="checkbox"
-                checked={checkedChannels.includes(ch)}
-                onChange={() => toggleChannel(ch)}
-                className="accent-primary dark:accent-primary-light"
-              />
-              {channelLabel(ch)}
-            </label>
-          ))}
+          {CHANNELS.map((ch) => {
+            const outcome = outcomes[ch]
+            return (
+              <label
+                key={ch}
+                className="flex items-center gap-2 cursor-pointer text-sm text-light-text dark:text-dark-text"
+              >
+                <input
+                  type="checkbox"
+                  checked={checkedChannels.includes(ch)}
+                  onChange={() => toggleChannel(ch)}
+                  disabled={outcome?.ok === true}
+                  className="accent-primary dark:accent-primary-light"
+                />
+                {channelLabel(ch)}
+                {outcome?.ok === true && (
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400">✓ published</span>
+                )}
+                {outcome && !outcome.ok && (
+                  <span className="text-xs text-red-600 dark:text-red-400" title={outcome.message}>
+                    ✕ failed
+                  </span>
+                )}
+              </label>
+            )
+          })}
         </div>
 
         {/* Scheduled at */}
-        <div className="mb-5">
+        <div>
           <GlassInput
             label="Schedule for (optional)"
             type="datetime-local"
@@ -107,23 +150,8 @@ export function PublishDialog({ draftId, onClose, onSuccess }: PublishDialogProp
         </div>
 
         {error && (
-          <p className="text-xs text-red-600 dark:text-red-400 mb-3">{error}</p>
+          <p className="text-xs text-red-600 dark:text-red-400 mt-3">{error}</p>
         )}
-
-        <div className="flex gap-2 justify-end">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={handleConfirm}
-            disabled={submitting || checkedChannels.length === 0}
-          >
-            {submitting ? 'Publishing…' : 'Confirm'}
-          </Button>
-        </div>
-      </GlassPanel>
-    </div>
+    </Modal>
   )
 }

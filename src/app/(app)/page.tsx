@@ -15,6 +15,7 @@ import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
 import type { DraftStatus } from '@prisma/client'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
+import { relativeTime } from '@/lib/format'
 
 // Dashboard renders live data; never cache it.
 export const dynamic = 'force-dynamic'
@@ -26,19 +27,6 @@ const DRAFT_CHIP: Record<DraftStatus, 'draft' | 'exported' | 'published' | 'fail
   EXPORTED: 'exported',
   PUBLISHED: 'published',
   FAILED: 'failed',
-}
-
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime()
-  const sec = Math.round(diffMs / 1000)
-  if (sec < 60) return 'just now'
-  const min = Math.round(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.round(min / 60)
-  if (hr < 24) return `${hr}h ago`
-  const day = Math.round(hr / 24)
-  if (day < 30) return `${day}d ago`
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 function channelLabel(channels: string[]): string {

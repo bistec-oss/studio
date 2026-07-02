@@ -13,7 +13,10 @@ export function GlassInput({
   className,
   ...props
 }: GlassInputProps) {
-  const inputId = id ?? (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
+  // Stable, collision-free fallback: an explicit id wins, otherwise React.useId.
+  // (The old label-derived id collided when two inputs shared the same label text.)
+  const generatedId = React.useId()
+  const inputId = id ?? (label ? generatedId : undefined)
 
   return (
     <div className="flex flex-col gap-1.5">

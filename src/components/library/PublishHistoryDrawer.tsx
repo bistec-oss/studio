@@ -1,11 +1,13 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, ExternalLink, RotateCcw } from 'lucide-react'
+import { ExternalLink, RotateCcw } from 'lucide-react'
+import { Drawer } from '@/components/ui/Modal'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { channelLabel } from '@/lib/channels'
+import { formatDateTime } from '@/lib/format'
 
 interface PostHistory {
   id: string
@@ -36,14 +38,6 @@ function toChipStatus(status: string): ChipStatus {
   return 'draft'
 }
 
-function formatDate(iso: string | null): string {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
-}
-
 const PLATFORM_URLS: Record<string, (id: string) => string> = {
   INSTAGRAM: (id) => `https://www.instagram.com/p/${id}/`,
   LINKEDIN: (id) => `https://www.linkedin.com/feed/update/${id}/`,
@@ -70,28 +64,9 @@ export function PublishHistoryDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Drawer panel */}
-      <div className="relative ml-auto h-full w-full max-w-md flex flex-col glass-panel rounded-none border-l">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-light-border dark:border-dark-border">
-          <h2 className="text-base font-semibold text-light-text dark:text-dark-text">
-            Publish History
-          </h2>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
-            <X size={16} />
-          </Button>
-        </div>
-
+    <Drawer open onClose={onClose} title="Publish History">
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        <div className="px-5 py-4 space-y-3">
           {posts.length === 0 ? (
             <p className="text-sm text-light-text-muted dark:text-dark-text-muted text-center py-8">
               No publish history yet.
@@ -119,7 +94,7 @@ export function PublishHistoryDrawer({
 
                   {/* Date */}
                   <p className="text-xs font-mono text-light-text-muted dark:text-dark-text-muted">
-                    {displayDate ? formatDate(displayDate) : '—'}
+                    {formatDateTime(displayDate)}
                   </p>
 
                   {/* Platform link */}
@@ -160,7 +135,6 @@ export function PublishHistoryDrawer({
             })
           )}
         </div>
-      </div>
-    </div>
+    </Drawer>
   )
 }

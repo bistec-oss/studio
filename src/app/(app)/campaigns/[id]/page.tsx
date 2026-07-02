@@ -1,40 +1,20 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import Link from 'next/link'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
-
-interface Campaign {
-  id: string
-  name: string
-  defaultTone: string | null
-  brandKit: { id: string; name: string } | null
-  projects: Array<{ project: { id: string; name: string } }>
-  _count: { briefs: number }
-}
-
-interface BrandKitOption {
-  id: string
-  name: string
-  previewColor: string
-}
-
-interface ProjectOption {
-  id: string
-  name: string
-}
-
-interface ResolvedKit {
-  kit: { id: string; name: string; colors: string[] } | null
-  source: 'campaign' | 'project' | 'system' | null
-}
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import type { Campaign, BrandKitSummary, ProjectSummary, ResolvedBrandKitResponse } from '@/lib/api-types'
 
 const SOURCE_LABEL: Record<string, string> = {
+  explicit: 'Selected for this post',
   campaign: 'Campaign override',
   project: 'Inherited from project',
   system: 'System default',
@@ -43,38 +23,46 @@ const SOURCE_LABEL: Record<string, string> = {
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const [campaign, setCampaign] = useState<Campaign | null>(null)
-  const [resolved, setResolved] = useState<ResolvedKit | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
-  const [projects, setProjects] = useState<ProjectOption[]>([])
-  const [isAdmin, setIsAdmin] = useState(false)
+  const queryClient = useQueryClient()
+  const { isAdmin } = useCurrentUser()
   const [savingKit, setSavingKit] = useState(false)
   const [savingProject, setSavingProject] = useState(false)
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [camp, kit] = await Promise.all([
-        apiFetch(`/api/campaigns/${params.id}`),
-        apiFetch(`/api/campaigns/${params.id}/brandkit`),
-      ])
-      setCampaign(camp)
-      setResolved(kit)
-    } catch {
-      router.push('/campaigns')
-    } finally {
-      setLoading(false)
-    }
-  }, [params.id, router])
+  const campaignQuery = useQuery({
+    queryKey: ['campaigns', params.id],
+    queryFn: () => apiFetch<Campaign>(`/api/campaigns/${params.id}`),
+  })
 
-  useEffect(() => { fetchData() }, [fetchData])
+  const resolvedQuery = useQuery({
+    queryKey: ['campaigns', params.id, 'brandkit'],
+    queryFn: () => apiFetch<ResolvedBrandKitResponse>(`/api/campaigns/${params.id}/brandkit`),
+  })
+
+  const { data: brandKits = [] } = useQuery({
+    queryKey: ['brandkits'],
+    queryFn: () => apiFetch<BrandKitSummary[]>('/api/brandkits'),
+  })
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => apiFetch<ProjectSummary[]>('/api/projects'),
+  })
+
+  const campaign = campaignQuery.data
+  const resolved = resolvedQuery.data
+
+  // Mirrors the previous try/catch behaviour: a failed/missing campaign
+  // bounces back to the list rather than showing a dead-end detail page.
   useEffect(() => {
-    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
-    apiFetch<ProjectOption[]>('/api/projects').then(setProjects).catch(console.error)
-    apiFetch<{ role: string }>('/api/me')
-      .then(u => setIsAdmin(u.role?.toLowerCase() === 'admin'))
-      .catch(() => setIsAdmin(false))
-  }, [])
+    if (campaignQuery.isError) router.push('/campaigns')
+  }, [campaignQuery.isError, router])
+
+  function invalidate() {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['campaigns', params.id] }),
+      queryClient.invalidateQueries({ queryKey: ['campaigns', params.id, 'brandkit'] }),
+    ])
+  }
 
   async function updateBrandKit(value: string) {
     setSavingKit(true)
@@ -84,9 +72,9 @@ export default function CampaignDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brandKitId: value || null }),
       })
-      await fetchData()
+      await invalidate()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to update brand kit')
+      toast.error(e instanceof Error ? e.message : 'Failed to update brand kit')
     } finally {
       setSavingKit(false)
     }
@@ -101,19 +89,17 @@ export default function CampaignDetailPage() {
         // API replaces project membership: '' clears it (standalone).
         body: JSON.stringify({ projectId: value || '' }),
       })
-      await fetchData()
+      await invalidate()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Failed to update project')
+      toast.error(e instanceof Error ? e.message : 'Failed to update project')
     } finally {
       setSavingProject(false)
     }
   }
 
-  if (loading) {
+  if (campaignQuery.isLoading || campaignQuery.isError || !campaign) {
     return <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8">Loading…</div>
   }
-
-  if (!campaign) return null
 
   return (
     <>

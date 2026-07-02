@@ -97,7 +97,13 @@ export const env: Env = envSchema.parse(process.env)
 //   - MinIO "minioadmin" default rejection (src/lib/storage/minio.ts)
 // Dev keeps the convenient defaults and lazy failures exactly as before.
 // ---------------------------------------------------------------------------
-if (env.NODE_ENV === 'production') {
+// `next build` runs with NODE_ENV=production and imports every route while
+// collecting page data — but produces no runtime state, so a dev machine
+// building with dev credentials must not be rejected. Runtime (server start)
+// still enforces the checks: NEXT_PHASE is only set during the build.
+const IS_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
+
+if (env.NODE_ENV === 'production' && !IS_BUILD_PHASE) {
   const problems: string[] = []
 
   if (!env.TOKEN_ENCRYPTION_KEY || env.TOKEN_ENCRYPTION_KEY === 'your-32-byte-hex-key') {

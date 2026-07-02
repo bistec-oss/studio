@@ -1,50 +1,46 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Plus, Trash2, RotateCcw, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { Select } from '@/components/ui/Select'
+import { QueryError } from '@/components/ui/QueryError'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
-
-interface Project {
-  id: string
-  name: string
-  defaultTone: string | null
-  isDeleted: boolean
-  defaultBrandKit: { id: string; name: string } | null
-  _count: { campaigns: number }
-}
-
-interface BrandKitOption {
-  id: string
-  name: string
-  previewColor: string
-}
+import type { ProjectSummary, BrandKitSummary } from '@/lib/api-types'
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [newBrandKitId, setNewBrandKitId] = useState('')
-  const [brandKits, setBrandKits] = useState<BrandKitOption[]>([])
   const [showDeleted, setShowDeleted] = useState(false)
 
-  const fetchProjects = useCallback(async () => {
-    try {
-      const data = await apiFetch('/api/projects')
-      setProjects(data)
-    } catch (e: unknown) { console.error(e) }
-    finally { setLoading(false) }
-  }, [])
+  const {
+    data: projects = [],
+    isLoading: loading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => apiFetch<ProjectSummary[]>('/api/projects'),
+  })
 
-  useEffect(() => { fetchProjects() }, [fetchProjects])
-  useEffect(() => {
-    apiFetch<BrandKitOption[]>('/api/brandkits').then(setBrandKits).catch(console.error)
-  }, [])
+  const { data: brandKits = [] } = useQuery({
+    queryKey: ['brandkits'],
+    queryFn: () => apiFetch<BrandKitSummary[]>('/api/brandkits'),
+  })
+
+  function invalidateProjects() {
+    return queryClient.invalidateQueries({ queryKey: ['projects'] })
+  }
 
   const brandKitOptions = [
     { value: '', label: 'No default brand kit' },
@@ -61,16 +57,20 @@ export default function ProjectsPage() {
         body: JSON.stringify({ name: newName.trim(), defaultBrandKitId: newBrandKitId || undefined }),
       })
       setNewName(''); setNewBrandKitId(''); setCreating(false)
-      fetchProjects()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateProjects()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   async function softDelete(id: string) {
-    if (!confirm('Delete this project?')) return
+    if (!(await confirm({
+      title: 'Delete this project?',
+      description: 'You can restore it later from "Show deleted".',
+      confirmLabel: 'Delete',
+    }))) return
     try {
       await apiFetch(`/api/projects/${id}`, { method: 'DELETE' })
-      fetchProjects()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateProjects()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   async function restore(id: string) {
@@ -80,8 +80,8 @@ export default function ProjectsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isDeleted: false }),
       })
-      fetchProjects()
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      invalidateProjects()
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
 
   const visible = projects.filter(p => showDeleted ? p.isDeleted : !p.isDeleted)
@@ -136,7 +136,11 @@ export default function ProjectsPage() {
         <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8 text-center">Loading…</div>
       )}
 
-      {!loading && visible.length === 0 && (
+      {isError && (
+        <QueryError error={error} onRetry={() => refetch()} />
+      )}
+
+      {!loading && !isError && visible.length === 0 && (
         <GlassPanel className="p-8 text-center">
           <FolderOpen size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
           <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
@@ -145,43 +149,45 @@ export default function ProjectsPage() {
         </GlassPanel>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {visible.map(project => (
-          <GlassPanel key={project.id} className="p-4 flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-2">
-              <Link
-                href={`/projects/${project.id}`}
-                className="text-base font-semibold text-light-text dark:text-dark-text hover:text-primary dark:hover:text-primary-light transition-colors"
-              >
-                {project.name}
-              </Link>
-              {project.isDeleted ? (
-                <Button variant="ghost" size="sm" onClick={() => restore(project.id)}>
-                  <RotateCcw size={13} /> Restore
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => softDelete(project.id)}>
-                  <Trash2 size={13} />
-                </Button>
-              )}
-            </div>
+      {!isError && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map(project => (
+            <GlassPanel key={project.id} className="p-4 flex flex-col gap-3">
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/projects/${project.id}`}
+                  className="text-base font-semibold text-light-text dark:text-dark-text hover:text-primary dark:hover:text-primary-light transition-colors"
+                >
+                  {project.name}
+                </Link>
+                {project.isDeleted ? (
+                  <Button variant="ghost" size="sm" onClick={() => restore(project.id)}>
+                    <RotateCcw size={13} /> Restore
+                  </Button>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => softDelete(project.id)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
+              </div>
 
-            <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
-              <span>{project._count.campaigns} campaign{project._count.campaigns !== 1 ? 's' : ''}</span>
-              {project.defaultBrandKit && (
-                <span className="bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full">
-                  {project.defaultBrandKit.name}
-                </span>
-              )}
-              {project.defaultTone && (
-                <span className="bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize">
-                  {project.defaultTone}
-                </span>
-              )}
-            </div>
-          </GlassPanel>
-        ))}
-      </div>
+              <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
+                <span>{project._count.campaigns} campaign{project._count.campaigns !== 1 ? 's' : ''}</span>
+                {project.defaultBrandKit && (
+                  <span className="bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full">
+                    {project.defaultBrandKit.name}
+                  </span>
+                )}
+                {project.defaultTone && (
+                  <span className="bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize">
+                    {project.defaultTone}
+                  </span>
+                )}
+              </div>
+            </GlassPanel>
+          ))}
+        </div>
+      )}
     </>
   )
 }

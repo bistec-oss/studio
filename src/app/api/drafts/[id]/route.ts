@@ -87,6 +87,15 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
   const forbidden = forbiddenIfNotOwner(user, existing.brief.userId)
   if (forbidden) return forbidden
 
+  // The published caption lives only on the draft — editing it after publish
+  // would silently desynchronize the record from what was actually posted.
+  if (existing.status === 'PUBLISHED') {
+    return NextResponse.json(
+      { error: 'This draft has been published — its copy can no longer be edited' },
+      { status: 409 }
+    )
+  }
+
   await prisma.draft.update({
     where: { id: params.id },
     data: {

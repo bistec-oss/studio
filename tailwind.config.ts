@@ -26,12 +26,15 @@ const config: Config = {
         'primary-hover': '#0369a1',
         'primary-active':'#075985',
 
-        // Status tokens
-        'status-draft':      '#94a3b8',
-        'status-exported':   '#818cf8',
-        'status-scheduled':  '#38bdf8',
-        'status-published':  '#4ade80',
-        'status-failed':     '#f87171',
+        // Status tokens — single source of truth for post-status colors
+        // (StatusChip consumes these). DEFAULT is tuned for light surfaces,
+        // `dark` for dark surfaces; the old single 400-level values lacked
+        // contrast on white.
+        'status-draft':      { DEFAULT: '#64748b', dark: '#94a3b8' },
+        'status-exported':   { DEFAULT: '#7c3aed', dark: '#a78bfa' },
+        'status-scheduled':  { DEFAULT: '#0284c7', dark: '#38bdf8' },
+        'status-published':  { DEFAULT: '#047857', dark: '#4ade80' },
+        'status-failed':     { DEFAULT: '#dc2626', dark: '#f87171' },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],

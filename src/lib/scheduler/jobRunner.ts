@@ -1,13 +1,6 @@
 import { prisma } from "../prisma"
-import * as instagramPublisher from "../social/instagram"
-import * as linkedinPublisher from "../social/linkedin"
 import { PublishError } from "../social/types"
-import { resolveExportUrl } from "../storage/minio"
-
-const publishers = {
-  INSTAGRAM: instagramPublisher,
-  LINKEDIN: linkedinPublisher,
-} as const
+import { publishToChannel } from "../publish/publishDraft"
 
 // A transient failure is retried up to MAX_RETRIES times with exponential
 // backoff before the post is marked terminally FAILED.
@@ -74,16 +67,12 @@ export async function runScheduledJobs(): Promise<void> {
   })
 
   for (const post of posts) {
-    const publisher = publishers[post.channel]
-
     try {
-      // Sign the stored export key for the publisher's one-off image fetch.
-      const signedExportUrl = await resolveExportUrl(post.draft.exportUrl)
-      if (!signedExportUrl) {
-        throw new PublishError(post.channel, "draft export missing")
-      }
-      const { platformId } = await publisher.publish(
-        signedExportUrl,
+      // Shared sign+publish (throws PublishError 'draft export missing' when the
+      // draft lost its export between scheduling and this tick).
+      const { platformId } = await publishToChannel(
+        post.channel,
+        post.draft.exportUrl,
         post.draft.copyText
       )
 
