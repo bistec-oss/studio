@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 
-export async function GET() {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async () => {
   const projects = await prisma.project.findMany({
     where: { isDeleted: false },
     include: {
@@ -18,23 +16,23 @@ export async function GET() {
   })
 
   return NextResponse.json(projects)
-}
+})
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const createSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  defaultBrandKitId: z.string().nullish(),
+  defaultTone: z.string().nullish(),
+})
 
-  const body = await req.json()
-  const { name, defaultBrandKitId, defaultTone } = body
-
-  if (!name?.trim()) {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 })
-  }
+export const POST = withAuth(async (req: NextRequest) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { name, defaultBrandKitId, defaultTone } = body.data
 
   const project = await prisma.project.create({
-    data: { name: name.trim(), defaultBrandKitId: defaultBrandKitId ?? null, defaultTone: defaultTone ?? null },
+    data: { name, defaultBrandKitId: defaultBrandKitId ?? null, defaultTone: defaultTone ?? null },
     include: { defaultBrandKit: { select: { id: true, name: true } } },
   })
 
   return NextResponse.json(project, { status: 201 })
-}
+})

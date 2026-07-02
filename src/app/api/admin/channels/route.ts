@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 import { encrypt } from '@/lib/crypto'
 
-export async function GET(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const GET = withAdmin(async () => {
   const tokens = await prisma.channelToken.findMany()
   const map: Record<string, { connected: boolean; updatedAt?: string }> = {
     INSTAGRAM: { connected: false },
@@ -17,20 +15,21 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(map)
-}
+})
 
-export async function POST(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const createSchema = z.object({
+  channel: z.enum(['INSTAGRAM', 'LINKEDIN'], {
+    errorMap: () => ({ message: 'channel must be INSTAGRAM or LINKEDIN' }),
+  }),
+  // Tokens are encrypted verbatim — validate presence without altering the value.
+  token: z.string().refine((v) => v.trim().length > 0, 'token is required'),
+  metadata: z.string().refine((v) => v.trim().length > 0, 'metadata is required'),
+})
 
-  const body = await req.json()
-  const { channel, token, metadata } = body
-
-  if (!channel || !['INSTAGRAM', 'LINKEDIN'].includes(channel)) {
-    return NextResponse.json({ error: 'channel must be INSTAGRAM or LINKEDIN' }, { status: 400 })
-  }
-  if (!token?.trim()) return NextResponse.json({ error: 'token is required' }, { status: 400 })
-  if (!metadata?.trim()) return NextResponse.json({ error: 'metadata is required' }, { status: 400 })
+export const POST = withAdmin(async (req: NextRequest) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { channel, token, metadata } = body.data
 
   await prisma.channelToken.upsert({
     where: { channel },
@@ -39,4 +38,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ connected: true }, { status: 201 })
-}
+})

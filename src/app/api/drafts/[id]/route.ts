@@ -1,8 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
+
+type Params = { id: string }
 
 async function loadDraft(id: string) {
   const draft = await prisma.draft.findUnique({
@@ -54,23 +58,23 @@ async function loadDraft(id: string) {
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth<Params>(async (_req, { params }, user) => {
   const result = await loadDraft(params.id)
   if (!result) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   const forbidden = forbiddenIfNotOwner(user, result.ownerId)
   if (forbidden) return forbidden
 
   return NextResponse.json(result.data)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// Permissive schema + manual type check so the error message stays exactly
+// 'copyText is required' (asserted by tests).
+const patchSchema = z.object({}).passthrough()
 
-  const { copyText } = await req.json()
+export const PATCH = withAuth<Params>(async (req, { params }, user) => {
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { copyText } = body.data as { copyText?: unknown }
   if (typeof copyText !== 'string') {
     return NextResponse.json({ error: 'copyText is required' }, { status: 400 })
   }
@@ -94,4 +98,4 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const result = await loadDraft(params.id)
   return NextResponse.json(result?.data)
-}
+})

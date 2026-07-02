@@ -1,17 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
+import { forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
+import { withAuth } from '@/lib/api/handler'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
-import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
 
 export const maxDuration = 120
 
-export async function POST(_req: NextRequest, { params }: { params: { id: string; rev: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { id: string; rev: string }
 
+export const POST = withAuth<Params>(async (_req, { params }, user) => {
   const revisionNumber = Number(params.rev)
   if (!Number.isInteger(revisionNumber)) {
     return NextResponse.json({ error: 'Invalid revision number' }, { status: 400 })
@@ -34,7 +34,7 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   })
   const { width, height } = dimensionsFor(draft?.brief.aspectRatio)
   const buffer = await renderHtmlToPng(revision.htmlSnapshot, width, height)
-  const key = `restore-${params.id}-${Date.now()}.png`
+  const key = exportKey('restore', params.id)
   await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 
   await prisma.draft.update({
@@ -47,4 +47,4 @@ export async function POST(_req: NextRequest, { params }: { params: { id: string
   })
 
   return NextResponse.json({ exportUrl: await resolveExportUrl(key) })
-}
+})

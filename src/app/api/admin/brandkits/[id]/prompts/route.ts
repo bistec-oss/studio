@@ -1,29 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string }
 
+export const GET = withAdmin<Params>(async (_req, { params }) => {
   const prompts = await prisma.brandKitPrompt.findMany({
     where: { brandKitId: params.id },
     orderBy: { version: 'desc' },
   })
 
   return NextResponse.json(prompts)
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-  const { userId } = auth
+const createSchema = z.object({
+  content: z.string().trim().min(1, 'content is required'),
+})
 
-  const body = await req.json()
-  const { content } = body
+export const POST = withAdmin<Params>(async (req, { params }, user) => {
+  const { userId } = user
 
-  if (!content?.trim()) return NextResponse.json({ error: 'content is required' }, { status: 400 })
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { content } = body.data
 
   // Allocate the next version, deactivate the current active prompt, and create
   // the new active prompt atomically. Concurrent saves can read the same max
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return tx.brandKitPrompt.create({
         data: {
           brandKitId: params.id,
-          content: content.trim(),
+          content,
           version: nextVersion,
           isActive: true,
           createdBy: userId,
@@ -64,4 +65,4 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
     throw err
   }
-}
+})

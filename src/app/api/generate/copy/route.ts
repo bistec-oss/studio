@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveCopyProvider } from '@/providers/registry'
-import type { BriefInput } from '@/providers/interfaces/CopyProvider'
+import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { buildBriefInput } from '@/lib/agent/briefInput'
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const bodySchema = z.object({ briefId: z.string() })
 
-  const { briefId } = await req.json()
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+  const body = await parseBody(req, bodySchema)
+  if (body.response) return body.response
+  const { briefId } = body.data
 
   const brief = await prisma.brief.findUnique({ where: { id: briefId } })
   if (!brief) return NextResponse.json({ error: 'Brief not found' }, { status: 404 })
@@ -18,28 +22,14 @@ export async function POST(req: NextRequest) {
   try {
     const provider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
 
-    const briefImages = Array.isArray(brief.briefImages)
-      ? (brief.briefImages as Array<{ url: string; intent: 'embed' | 'reference' }>)
-      : undefined
+    // Brand voice for copy comes from the same kit precedence as design:
+    // explicit brief kit → campaign → project → system default.
+    const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
 
-    const briefInput: BriefInput = {
-      topic: brief.topic,
-      description: brief.description ?? '',
-      goal: brief.goal,
-      tone: brief.tone,
-      channels: brief.channels,
-      designMode: brief.designMode,
-      copyProviderKey: brief.copyProviderKey ?? undefined,
-      imageProviderKey: brief.imageProviderKey ?? undefined,
-      additionalImageUrl: brief.additionalImageUrl ?? undefined,
-      briefImages: briefImages ?? undefined,
-      referenceTemplateId: brief.referenceTemplateId ?? undefined,
-    }
-
-    const copyText = await provider.generateCopy(briefInput)
+    const copyText = await provider.generateCopy(buildBriefInput(brief, kit))
     return NextResponse.json({ copyText })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ code: 'COPY_ERROR', message }, { status: 422 })
   }
-}
+})

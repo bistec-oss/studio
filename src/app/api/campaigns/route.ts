@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 
-export async function GET() {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async () => {
   const campaigns = await prisma.campaign.findMany({
     where: { isDeleted: false },
     include: {
@@ -21,22 +19,33 @@ export async function GET() {
   })
 
   return NextResponse.json(campaigns)
-}
+})
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const createSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  brandKitId: z.string().nullish(),
+  defaultTone: z.string().nullish(),
+  projectId: z.string().nullish(),
+})
 
-  const body = await req.json()
-  const { name, brandKitId, defaultTone, projectId } = body
+export const POST = withAuth(async (req: NextRequest) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { name, brandKitId, defaultTone, projectId } = body.data
 
-  if (!name?.trim()) {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 })
+  // Verify referenced records so a bogus id is a 400, not a P2003 500.
+  if (brandKitId) {
+    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
+    if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  }
+  if (projectId) {
+    const project = await prisma.project.findFirst({ where: { id: projectId, isDeleted: false } })
+    if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
   }
 
   const campaign = await prisma.campaign.create({
     data: {
-      name: name.trim(),
+      name,
       brandKitId: brandKitId ?? null,
       defaultTone: defaultTone ?? null,
       ...(projectId && {
@@ -49,4 +58,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(campaign, { status: 201 })
-}
+})

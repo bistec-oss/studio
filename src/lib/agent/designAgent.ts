@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { MessageParam, ToolUseBlock, ToolResultBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages"
 import type { DesignAgentOptions, DesignAgentResult } from "./types"
-import { AgentToolLimitError } from "./types"
+import { AgentToolLimitError, AgentTimeoutError, AgentTruncatedError } from "./types"
 import { toolGenerateImage, toolRenderHtml, toolGetBrandKitContext } from "./tools"
 import { restoreInlineAssets, missingTokens } from "./inlineAssets"
 import { MOCK_AI, buildMockHtml, buildMockConflict } from "@/lib/testHooks"
+import { env } from "@/lib/env"
 
 const TOOL_DEFINITIONS: Tool[] = [
   {
@@ -88,6 +89,9 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     briefId,
     model = "claude-sonnet-4-6",
     maxToolCalls = 15,
+    // Wall-clock budget mirroring the CLI runner's 300s tree-killed timeout —
+    // maxToolCalls alone doesn't bound slow image generations + renders.
+    deadlineMs = 300_000,
     inlineAssets,
     width = 1080,
     height = 1080,
@@ -105,22 +109,42 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     return { htmlContent: html, exportUrl: key, toolCallCount: 1 }
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
 
   const messages: MessageParam[] = [{ role: "user", content: userMessage }]
 
+  const MAX_TOKENS = 8192
+  const startedAt = Date.now()
   let toolCallCount = 0
+  let iteration = 0
   let lastHtml = ""
   let lastExportUrl = ""
 
   while (true) {
+    if (Date.now() - startedAt > deadlineMs) {
+      throw new AgentTimeoutError(deadlineMs)
+    }
+
+    iteration++
+    const turnStartedAt = Date.now()
     const response = await client.messages.create({
       model,
-      max_tokens: 8192,
+      max_tokens: MAX_TOKENS,
       system: systemPrompt,
       tools: TOOL_DEFINITIONS,
       messages,
     })
+    console.log(
+      `[designAgent] turn ${iteration} (${model}): ${Date.now() - turnStartedAt}ms, ` +
+        `in=${response.usage.input_tokens} out=${response.usage.output_tokens} tokens, ` +
+        `stop=${response.stop_reason}, elapsed=${Math.round((Date.now() - startedAt) / 1000)}s`
+    )
+
+    // A truncated turn means a mangled tool call or half-emitted HTML — fail
+    // with the real cause instead of storing broken output.
+    if (response.stop_reason === "max_tokens") {
+      throw new AgentTruncatedError(MAX_TOKENS)
+    }
 
     const toolUseBlocks = response.content.filter(
       (b): b is ToolUseBlock => b.type === "tool_use"

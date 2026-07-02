@@ -1,5 +1,6 @@
 import OpenAI from "openai"
 import type { BriefInput, CopyProvider } from "../../interfaces/CopyProvider"
+import { buildCopyPrompt } from "@/lib/agent/prompts/copy"
 
 export class OpenAICopyProvider implements CopyProvider {
   private client: OpenAI
@@ -9,27 +10,15 @@ export class OpenAICopyProvider implements CopyProvider {
   }
 
   async generateCopy(brief: BriefInput): Promise<string> {
-    const channelList = brief.channels.join(", ")
+    const prompt = buildCopyPrompt(brief)
 
     const response = await this.client.chat.completions.create({
       model: this.model,
       max_tokens: 500,
       temperature: 0.7,
       messages: [
-        {
-          role: "system",
-          content: `You are an expert social media copywriter for Bistec, a tech company. Write compelling, on-brand copy for ${channelList} posts.`,
-        },
-        {
-          role: "user",
-          content: `Topic: ${brief.topic}
-Description: ${brief.description}
-Goal: ${brief.goal}
-Tone: ${brief.tone}
-Channels: ${channelList}
-
-Write engaging copy for the above brief.`,
-        },
+        { role: "system", content: prompt.system },
+        { role: "user", content: prompt.user },
       ],
     })
 

@@ -7,33 +7,25 @@ import {
   PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { env } from "@/lib/env"
 
-const endpoint = process.env.MINIO_ENDPOINT ?? "http://localhost:9000"
+const endpoint = env.MINIO_ENDPOINT
 // Browser-facing base URL for public objects. Defaults to the internal endpoint
 // (correct for local dev where both are localhost:9000); set explicitly in prod
 // when MinIO is reached internally (e.g. http://minio:9000) but served publicly
 // from a different host. Trailing slash trimmed so publicUrl() joins cleanly.
-const publicEndpoint = (process.env.MINIO_PUBLIC_ENDPOINT ?? endpoint).replace(/\/+$/, "")
-const accessKeyId = process.env.MINIO_ACCESS_KEY ?? "minioadmin"
-const secretAccessKey = process.env.MINIO_SECRET_KEY ?? "minioadmin"
+const publicEndpoint = (env.MINIO_PUBLIC_ENDPOINT ?? endpoint).replace(/\/+$/, "")
+const accessKeyId = env.MINIO_ACCESS_KEY
+const secretAccessKey = env.MINIO_SECRET_KEY
 
-// Fail closed in production: the "minioadmin/minioadmin" default grants full
-// read/write/policy control of object storage to anyone who can reach MinIO.
-// Dev keeps the convenient default. Mirrors the placeholder rejection in
-// crypto.ts / auth.ts.
-if (
-  process.env.NODE_ENV === "production" &&
-  (accessKeyId === "minioadmin" || secretAccessKey === "minioadmin")
-) {
-  throw new Error(
-    "Refusing to start: set MINIO_ACCESS_KEY and MINIO_SECRET_KEY to non-default " +
-      "values in production (the built-in 'minioadmin' default must not be used).",
-  )
-}
+// Fail closed in production: the "minioadmin/minioadmin" default rejection now
+// lives centrally in src/lib/env.ts (thrown when env is first imported), along
+// with the TOKEN_ENCRYPTION_KEY / BETTER_AUTH_SECRET placeholder rejections.
+// Dev keeps the convenient default.
 
-export const BUCKET_IMAGES = process.env.MINIO_BUCKET_IMAGES ?? "generated-images"
-export const BUCKET_EXPORTS = process.env.MINIO_BUCKET_EXPORTS ?? "exported-designs"
-export const BUCKET_BRANDKITS = process.env.MINIO_BUCKET_BRANDKITS ?? "brand-kits"
+export const BUCKET_IMAGES = env.MINIO_BUCKET_IMAGES
+export const BUCKET_EXPORTS = env.MINIO_BUCKET_EXPORTS
+export const BUCKET_BRANDKITS = env.MINIO_BUCKET_BRANDKITS
 
 // Public-read buckets: objects are served via a stable, non-expiring URL. These
 // hold assets embedded into stored HTML (generated images, brief uploads,
@@ -175,6 +167,35 @@ export async function uploadObject(
 // in stored HTML.
 export function publicUrl(bucket: string, key: string): string {
   return `${publicEndpoint}/${bucket}/${key}`
+}
+
+// Every EXPORTS object key comes from here — one namespaced format per render
+// kind, so lifecycle policies and debugging-by-prefix work across the bucket.
+export type ExportKind = "design" | "refine" | "restore" | "export" | "cli"
+
+export function exportKey(kind: ExportKind, id: string): string {
+  return `exports/${kind}-${id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`
+}
+
+// Persists a base64 `data:` image URL into the public IMAGES bucket and returns
+// its stable public URL. Single implementation for the agent's generateImage
+// tool and the /api/generate/image route — enforces the raster allow-list in
+// both (the declared type lands in a public-read bucket and gets embedded into
+// rendered HTML, so a text/html or image/svg+xml payload would be stored XSS).
+export async function persistDataUrlImage(dataUrl: string, keyPrefix: string): Promise<string> {
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!matches) throw new Error("Invalid base64 data URL from image provider")
+  const [, contentType, b64] = matches
+  if (!RASTER_IMAGE_TYPES.includes(contentType)) {
+    throw new Error(`Unsupported image content-type from provider: ${contentType}`)
+  }
+  const ext = contentType === "image/png" ? "png" : contentType.split("/")[1]
+  const key = `${keyPrefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const buffer = Buffer.from(b64, "base64")
+  await uploadObject(buffer, BUCKET_IMAGES, key, contentType)
+  // Public, non-expiring URL — embedded into HTML that is stored and re-rendered
+  // later (refine), so it must not expire.
+  return publicUrl(BUCKET_IMAGES, key)
 }
 
 // Resolve a stored EXPORTS reference to a fetchable URL: signs the object key

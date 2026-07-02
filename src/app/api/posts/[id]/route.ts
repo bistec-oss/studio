@@ -1,15 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, requireRole } from '@/lib/auth'
+import { withAuth, withAdmin } from '@/lib/api/handler'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
-export async function GET(
-  _: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { id: string }
 
+export const GET = withAuth<Params>(async (_req, { params }, user) => {
   const post = await prisma.post.findUnique({
     where: { id: params.id },
     include: {
@@ -28,15 +24,9 @@ export async function GET(
     ...post,
     draft: { ...post.draft, exportUrl: await resolveExportUrl(post.draft.exportUrl) },
   })
-}
+})
 
-export async function DELETE(
-  _: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const post = await prisma.post.findUnique({ where: { id: params.id } })
   if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -50,4 +40,4 @@ export async function DELETE(
   })
 
   return NextResponse.json({ postId: updated.id, status: updated.status })
-}
+})

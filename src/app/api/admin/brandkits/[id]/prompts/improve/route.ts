@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
-import Anthropic from '@anthropic-ai/sdk'
+import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole('admin')
@@ -18,26 +18,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: 'No active prompt to improve — use /generate first' }, { status: 400 })
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `You are a brand strategist. Improve the following brand voice prompt for an AI design agent.
+  // Drafts via the shared helper: MOCK_AI test seam + provider-registry key
+  // resolution live inside it (see src/lib/brandkit/voiceDraft.ts).
+  const draft = await draftBrandVoice(
+    `You are a brand strategist. Improve the following brand voice prompt for an AI design agent.
 
 Current prompt:
 ${currentPrompt}
 
 Make it more specific, actionable, and comprehensive. Add concrete guidance on visual composition, spacing, hierarchy, and specific do/don't rules. Keep the same second-person tone. Return only the improved prompt text, no preamble.`,
-      },
-    ],
-  })
-
-  const textBlock = message.content.find(b => b.type === 'text')
-  const draft = textBlock && 'text' in textBlock ? textBlock.text : ''
+    {
+      mockDraft: `${currentPrompt} [MOCK improved brand voice prompt for E2E tests — deterministic.]`,
+    },
+  )
 
   // Return the draft — admin must explicitly save it as a new version
   return NextResponse.json({ draft })

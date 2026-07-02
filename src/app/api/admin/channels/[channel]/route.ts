@@ -1,11 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin } from '@/lib/api/handler'
 
-export async function DELETE(req: NextRequest, { params }: { params: { channel: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<{ channel: string }>(async (_req, { params }) => {
   const channel = params.channel.toUpperCase()
   if (!['INSTAGRAM', 'LINKEDIN'].includes(channel)) {
     return NextResponse.json({ error: 'Invalid channel' }, { status: 400 })
@@ -16,4 +13,4 @@ export async function DELETE(req: NextRequest, { params }: { params: { channel: 
 
   await prisma.channelToken.delete({ where: { channel: channel as 'INSTAGRAM' | 'LINKEDIN' } })
   return new NextResponse(null, { status: 204 })
-}
+})

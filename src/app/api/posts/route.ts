@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, requireRole } from '@/lib/auth'
+import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
 import * as instagramPublisher from '@/lib/social/instagram'
 import * as linkedinPublisher from '@/lib/social/linkedin'
 import { PublishError } from '@/lib/social/types'
@@ -12,14 +13,15 @@ const publishers = {
   LINKEDIN: linkedinPublisher,
 }
 
-export async function POST(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+// Permissive schema: only guards the JSON parse. The manual checks below keep
+// their exact error messages (asserted by tests).
+const createSchema = z.object({}).passthrough()
 
-  const body = await req.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
+  const parsed = await parseBody(req, createSchema)
+  if (parsed.response) return parsed.response
 
-  const { draftId, channel, scheduledAt } = body as {
+  const { draftId, channel, scheduledAt } = parsed.data as {
     draftId?: string
     channel?: string
     scheduledAt?: string
@@ -107,12 +109,9 @@ export async function POST(req: NextRequest) {
     }
     throw err
   }
-}
+})
 
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') ?? '20', 10)))
@@ -141,4 +140,4 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json({ posts: signedPosts, total, page, pageSize })
-}
+})

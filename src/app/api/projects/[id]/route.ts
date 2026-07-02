@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, requireRole } from '@/lib/auth'
+import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { id: string }
 
+export const GET = withAuth<Params>(async (_req, { params }) => {
   const project = await prisma.project.findUnique({
     where: { id: params.id },
     include: {
@@ -18,22 +18,26 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(project)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const patchSchema = z.object({
+  name: z.string().trim().min(1, 'name is required').optional(),
+  defaultBrandKitId: z.string().nullable().optional(),
+  defaultTone: z.string().nullable().optional(),
+})
 
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
   const project = await prisma.project.findUnique({ where: { id: params.id } })
   if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const body = await req.json()
-  const { name, defaultBrandKitId, defaultTone } = body
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { name, defaultBrandKitId, defaultTone } = body.data
 
   const updated = await prisma.project.update({
     where: { id: params.id },
     data: {
-      ...(name !== undefined && { name: name.trim() }),
+      ...(name !== undefined && { name }),
       ...(defaultBrandKitId !== undefined && { defaultBrandKitId }),
       ...(defaultTone !== undefined && { defaultTone }),
     },
@@ -41,12 +45,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const project = await prisma.project.findUnique({ where: { id: params.id } })
   if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -56,4 +57,4 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   })
 
   return new NextResponse(null, { status: 204 })
-}
+})

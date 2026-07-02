@@ -1,9 +1,10 @@
 import { spawn } from "child_process"
+import { env } from "@/lib/env"
 
 // Resolve the Claude Code CLI binary. On Windows the npm shim is `claude.cmd`,
 // which needs a shell to launch; elsewhere `claude` runs directly.
 function claudeCommand(): { cmd: string; shell: boolean } {
-  if (process.env.CLAUDE_CLI_PATH) return { cmd: process.env.CLAUDE_CLI_PATH, shell: false }
+  if (env.CLAUDE_CLI_PATH) return { cmd: env.CLAUDE_CLI_PATH, shell: false }
   if (process.platform === "win32") return { cmd: "claude.cmd", shell: true }
   return { cmd: "claude", shell: false }
 }
@@ -19,7 +20,7 @@ function claudeCommand(): { cmd: string; shell: boolean } {
 // "default" (from either source) omits --model and uses the account default
 // (the costly Opus tier) — the reason we never want that implicitly.
 function claudeModelArgs(explicitModel?: string): string[] {
-  const override = (process.env.CLAUDE_CLI_MODEL ?? "").trim()
+  const override = (env.CLAUDE_CLI_MODEL ?? "").trim()
   const model = override || (explicitModel ?? "haiku").trim()
   if (!model || model.toLowerCase() === "default") return []
   return ["--model", model]
@@ -40,7 +41,7 @@ export interface ClaudeCliOptions {
 // set CLAUDE_CLI_DEBUG=0 to silence. Logs spawn details, a liveness heartbeat,
 // streamed stderr, and the final outcome with elapsed time — so a timeout is
 // debuggable instead of opaque.
-const CLI_DEBUG = (process.env.CLAUDE_CLI_DEBUG ?? "1") !== "0"
+const CLI_DEBUG = env.CLAUDE_CLI_DEBUG !== "0"
 function cliLog(label: string, msg: string) {
   if (CLI_DEBUG) console.log(`[claudeCli${label ? ":" + label : ""}] ${msg}`)
 }

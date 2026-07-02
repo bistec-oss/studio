@@ -2,6 +2,7 @@ import puppeteer, { type Browser } from "puppeteer-core"
 import { existsSync } from "fs"
 import pLimit from "p-limit"
 import { MOCK_PUPPETEER, MOCK_PNG_BUFFER } from "@/lib/testHooks"
+import { env } from "@/lib/env"
 
 const COMMON_LINUX_PATHS = [
   "/usr/bin/chromium-browser",
@@ -11,8 +12,8 @@ const COMMON_LINUX_PATHS = [
 ]
 
 function resolveExecutablePath(): string {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-    return process.env.PUPPETEER_EXECUTABLE_PATH
+  if (env.PUPPETEER_EXECUTABLE_PATH) {
+    return env.PUPPETEER_EXECUTABLE_PATH
   }
   for (const p of COMMON_LINUX_PATHS) {
     if (existsSync(p)) return p
@@ -30,7 +31,7 @@ function resolveExecutablePath(): string {
 // (previously: unbounded *browsers*) exhaust memory under load.
 const MAX_CONCURRENCY = Math.max(
   1,
-  parseInt(process.env.PUPPETEER_MAX_CONCURRENCY ?? "2", 10) || 2
+  parseInt(env.PUPPETEER_MAX_CONCURRENCY ?? "2", 10) || 2
 )
 const limit = pLimit(MAX_CONCURRENCY)
 

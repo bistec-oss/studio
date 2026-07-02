@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
-import Anthropic from '@anthropic-ai/sdk'
-import { MOCK_AI } from '@/lib/testHooks'
+import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole('admin')
@@ -21,28 +20,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Test seam: deterministic draft with no Anthropic call.
-  if (MOCK_AI) {
-    return NextResponse.json({
-      draft: `You are the brand voice for ${kit.name}. [MOCK generated brand voice prompt for E2E tests — deterministic. Covers visual style, tone of voice, colour usage, typography guidance, and what to avoid.]`,
-    })
-  }
-
   const colors = Array.isArray(kit.colors) ? (kit.colors as string[]).join(', ') : 'none specified'
   const fonts = Array.isArray(kit.fonts)
     ? (kit.fonts as Array<{ name: string }>).map(f => f.name).join(', ')
     : 'none specified'
   const artifactNames = kit.artifacts.map(a => `${a.name} (${a.type})`).join(', ') || 'none'
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [
-      {
-        role: 'user',
-        content: `You are a brand strategist. Write a brand voice prompt for an AI design agent.
+  // Drafts via the shared helper: MOCK_AI test seam + provider-registry key
+  // resolution live inside it (see src/lib/brandkit/voiceDraft.ts).
+  const draft = await draftBrandVoice(
+    `You are a brand strategist. Write a brand voice prompt for an AI design agent.
 
 Brand name: ${kit.name}
 Brand colors: ${colors}
@@ -51,12 +38,11 @@ Brand artifacts: ${artifactNames}
 Admin description: ${description}
 
 Write a detailed system prompt (2–4 paragraphs) that instructs an AI design agent to maintain brand consistency when creating social media posts. Cover: visual style, tone of voice, color usage, typography guidance, and what to avoid. Write the prompt in second person addressed to the AI ("You are...").`,
-      },
-    ],
-  })
-
-  const textBlock = message.content.find(b => b.type === 'text')
-  const draft = textBlock && 'text' in textBlock ? textBlock.text : ''
+    {
+      // Preserves this route's exact historical MOCK_AI response (E2E asserts on it).
+      mockDraft: `You are the brand voice for ${kit.name}. [MOCK generated brand voice prompt for E2E tests — deterministic. Covers visual style, tone of voice, colour usage, typography guidance, and what to avoid.]`,
+    },
+  )
 
   // Return the draft — admin must explicitly save it as a new version
   return NextResponse.json({ draft })

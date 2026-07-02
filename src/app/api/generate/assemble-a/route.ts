@@ -1,24 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
-import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
-import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { runDesignAgent } from '@/lib/agent/designAgent'
-import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
+import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
 import { dimensionsFor } from '@/lib/aspectRatio'
+import { isCliMode, modelFor, pipelineMode } from '@/lib/agent/config'
+import { buildBriefInput } from '@/lib/agent/briefInput'
+import { buildPathASystemPrompt, buildPathAUserMessage } from '@/lib/agent/prompts/pathA'
+import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 
-const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
+const bodySchema = z.object({ briefId: z.string(), templateId: z.string() })
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { briefId, templateId } = await req.json()
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+  const body = await parseBody(req, bodySchema)
+  if (body.response) return body.response
+  const { briefId, templateId } = body.data
 
   const brief = await prisma.brief.findUnique({ where: { id: briefId } })
   if (!brief) return NextResponse.json({ error: 'Brief not found' }, { status: 404 })
@@ -52,85 +55,51 @@ export async function POST(req: NextRequest) {
   // Resolve brand kit: explicit brief kit → campaign → project → system default.
   const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
 
-  // Generate copy inline (avoid HTTP round-trip)
-  const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
-  const briefImages = Array.isArray(brief.briefImages)
-    ? (brief.briefImages as Array<{ url: string; intent: 'embed' | 'reference' }>)
-    : undefined
-  const briefInput: BriefInput = {
-    topic: brief.topic,
-    description: brief.description ?? '',
-    goal: brief.goal,
-    tone: brief.tone,
-    channels: brief.channels,
-    designMode: brief.designMode,
-    copyProviderKey: brief.copyProviderKey ?? undefined,
-    imageProviderKey: brief.imageProviderKey ?? undefined,
-    additionalImageUrl: brief.additionalImageUrl ?? undefined,
-    briefImages: briefImages ?? undefined,
-    referenceTemplateId: brief.referenceTemplateId ?? undefined,
-  }
-  const copyText = await copyProvider.generateCopy(briefInput)
-
-  // Externalize inline data: assets (e.g. base64 logos/backgrounds) before the
-  // template enters the prompt. The model sees compact placeholder tokens; the
-  // real assets are spliced back in just before rendering. Keeps oversized
-  // templates (e.g. "Hearts Talk", 1.81 MB) within the prompt/context limits.
-  const { html: slimTemplate, assets: inlineAssets } = extractInlineAssets(template.htmlTemplate)
-  const hasInlineAssets = Object.keys(inlineAssets).length > 0
-
-  const placeholderNote = hasInlineAssets
-    ? `\n- The template contains image placeholders like __INLINE_ASSET_0__ inside src="" or CSS url(). Keep every such token EXACTLY as-is — do not modify, remove, or replace them. They are restored to real images after rendering.`
-    : ''
-
-  const imageInstruction = brief.additionalImageUrl
-    ? `\n- A user-provided image is supplied (URL below). You MUST embed it in the template's primary photo/subject slot (e.g. the avatar/photo/headshot area), replacing whatever placeholder graphic — a decorative SVG, a coloured shape, or a sample photo — currently fills that slot. Use an <img> that covers the slot (object-fit: cover) or set it as that element's background-image. This specific URL is allowed.`
-    : ''
-
-  // Build prompts
-  const systemPrompt = `You are a professional social media design agent. Your task is to fill an HTML/CSS brand template with the provided content.
-
-${buildBrandKitSystemContext(kit)}
-
-Instructions:
-- Fill the template with the provided copy text. Replace placeholder text with the actual content.
-- Apply brand colors as CSS custom properties where appropriate.
-- If the design requires a raster image (and none is provided), call the generateImage tool. Otherwise use CSS gradients or SVG.
-- Always call renderHtml as the final step to produce the PNG.
-- Output dimensions: ${width}×${height} pixels.${imageInstruction}${placeholderNote}`
-
-  const imageNote = brief.additionalImageUrl
-    ? `\nUser-provided image URL (embed this into the main photo/subject slot): ${brief.additionalImageUrl}`
-    : ''
-
-  const userMessage = `Here is the HTML template to fill:
-<template>
-${slimTemplate}
-</template>
-
-Copy text: ${copyText}${imageNote}
-
-Fill the template with this content. Replace all placeholder text with the copy. Call renderHtml(html, ${width}, ${height}) when done.`
-
   try {
-    const result = CLI_MODE
+    // Generate copy inline (avoid HTTP round-trip); brand voice comes from the kit.
+    const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
+    const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit))
+
+    // Externalize inline data: assets (e.g. base64 logos/backgrounds) before the
+    // template enters the prompt. The model sees compact placeholder tokens; the
+    // real assets are spliced back in just before rendering. Keeps oversized
+    // templates (e.g. "Hearts Talk", 1.81 MB) within the prompt/context limits.
+    const { html: slimTemplate, assets: inlineAssets } = extractInlineAssets(template.htmlTemplate)
+    const hasInlineAssets = Object.keys(inlineAssets).length > 0
+
+    const mode = pipelineMode()
+    const systemPrompt = buildPathASystemPrompt({
+      kit,
+      mode,
+      width,
+      height,
+      hasInlineAssets,
+      additionalImageUrl: brief.additionalImageUrl,
+    })
+    const userMessage = buildPathAUserMessage({
+      slimTemplate,
+      copyText,
+      mode,
+      width,
+      height,
+      additionalImageUrl: brief.additionalImageUrl,
+    })
+
+    const result = isCliMode()
       ? await runDesignAgentCli({
           systemPrompt,
           userMessage,
           briefId,
           inlineAssets,
-          cliInstruction: CLI_INSTRUCTION.templateFill,
           width,
           height,
-          // Path A (template fill) is a constrained task — use Haiku, matching
-          // the API path's claude-haiku-4-5 above.
-          model: 'haiku',
+          model: modelFor('A', 'cli'),
         })
       : await runDesignAgent({
           systemPrompt,
           userMessage,
           briefId,
-          model: 'claude-haiku-4-5-20251001',
+          model: modelFor('A', 'api'),
           maxToolCalls: 15,
           inlineAssets,
           width,
@@ -146,6 +115,7 @@ Fill the template with this content. Replace all placeholder text with the copy.
         // result.exportUrl is an EXPORTS object key; stored as-is, signed per read.
         exportUrl: result.exportUrl,
         status: 'EXPORTED',
+        promptVersion: PROMPT_VERSION,
       },
     })
 
@@ -157,4 +127,4 @@ Fill the template with this content. Replace all placeholder text with the copy.
     const message = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
   }
-}
+})

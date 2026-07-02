@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
-import { uploadObject, resolveExportUrl, BUCKET_EXPORTS } from '@/lib/storage/minio'
+import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const bodySchema = z.object({ draftId: z.string() })
 
-  const body = await req.json()
-  const { draftId } = body
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+  const body = await parseBody(req, bodySchema)
+  if (body.response) return body.response
+  const { draftId } = body.data
 
   const draft = await prisma.draft.findUnique({
     where: { id: draftId },
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   const { width, height } = dimensionsFor(draft.brief.aspectRatio)
   const buffer = await renderHtmlToPng(draft.htmlContent, width, height)
-  const key = `exports/${draftId}.png`
+  const key = exportKey('export', draftId)
   await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 
   await prisma.draft.update({
@@ -40,4 +42,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ exportUrl: await resolveExportUrl(key) })
-}
+})

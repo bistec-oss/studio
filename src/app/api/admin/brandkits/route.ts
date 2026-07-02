@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const GET = withAdmin(async () => {
   const kits = await prisma.brandKit.findMany({
     where: { isDeleted: false },
     include: {
@@ -16,18 +14,20 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(kits)
-}
+})
 
-export async function POST(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const createSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  colors: z.array(z.string()).nullish(),
+  fonts: z.array(z.object({ name: z.string(), url: z.string() })).nullish(),
+  logoUrl: z.string().nullish(),
+  isDefault: z.boolean().nullish(),
+})
 
-  const body = await req.json()
-  const { name, colors, fonts, logoUrl, isDefault } = body
-
-  if (!name?.trim()) {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 })
-  }
+export const POST = withAdmin(async (req: NextRequest) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { name, colors, fonts, logoUrl, isDefault } = body.data
 
   // Only one kit can be the system default — clear + create atomically.
   const kit = await prisma.$transaction(async (tx) => {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
     return tx.brandKit.create({
       data: {
-        name: name.trim(),
+        name,
         colors: colors ?? [],
         fonts: fonts ?? [],
         logoUrl: logoUrl ?? null,
@@ -46,4 +46,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(kit, { status: 201 })
-}
+})

@@ -1,13 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getCurrentUser } from "@/lib/auth"
+import { withAuth } from "@/lib/api/handler"
 import { resolveExportUrl } from "@/lib/storage/minio"
 import { PostStatus } from "@prisma/client"
 
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
+export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10))
   const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10)))
@@ -123,4 +120,4 @@ export async function GET(req: NextRequest) {
   )
 
   return NextResponse.json({ drafts: signedDrafts, total, page, pageSize })
-}
+})

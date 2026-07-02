@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { Channel, DesignMode } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// Permissive schema: only guards the JSON parse. The thorough hand-rolled
+// validation below (exact error messages + channel normalization) is kept as-is.
+const createSchema = z.object({}).passthrough()
 
-  const body = await req.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+  const parsed = await parseBody(req, createSchema)
+  if (parsed.response) return parsed.response
+  const body = parsed.data as Record<string, any>
 
   const {
     topic,
@@ -144,4 +147,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(brief, { status: 201 })
-}
+})

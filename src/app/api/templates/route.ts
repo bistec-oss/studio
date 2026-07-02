@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth } from '@/lib/api/handler'
 
 // Lists brand-kit templates for the brief wizard's template picker. Available to
 // any signed-in user (editors included) — the /api/admin/brandkits routes are
 // admin-gated and would 403 for editors. Pass ?brandKitId= to restrict the list
 // to a single kit (the wizard filters templates to the selected brand kit).
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async (req: NextRequest) => {
   const brandKitId = req.nextUrl.searchParams.get('brandKitId') ?? undefined
 
   const templates = await prisma.brandKitTemplate.findMany({
@@ -38,4 +35,4 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(result)
-}
+})

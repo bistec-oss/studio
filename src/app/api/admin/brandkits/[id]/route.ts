@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string }
 
+export const GET = withAdmin<Params>(async (_req, { params }) => {
   const kit = await prisma.brandKit.findUnique({
     where: { id: params.id },
     include: {
@@ -17,17 +17,23 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(kit)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const patchSchema = z.object({
+  name: z.string().trim().optional(),
+  colors: z.array(z.string()).optional(),
+  fonts: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
+  logoUrl: z.string().nullable().optional(),
+  isDefault: z.boolean().optional(),
+})
 
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const body = await req.json()
-  const { name, colors, fonts, logoUrl, isDefault } = body
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { name, colors, fonts, logoUrl, isDefault } = body.data
 
   // Clearing the prior default + updating this row must be atomic so a
   // failure can't leave the slot with zero (or two) defaults.
@@ -41,7 +47,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return tx.brandKit.update({
       where: { id: params.id },
       data: {
-        ...(name !== undefined && { name: name.trim() }),
+        ...(name !== undefined && { name }),
         ...(colors !== undefined && { colors }),
         ...(fonts !== undefined && { fonts }),
         ...(logoUrl !== undefined && { logoUrl }),
@@ -51,12 +57,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -70,4 +73,4 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   })
 
   return new NextResponse(null, { status: 204 })
-}
+})

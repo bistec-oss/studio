@@ -1,20 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
-import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
-import { runDesignAgentCli, CLI_INSTRUCTION } from '@/lib/agent/designAgentCli'
+import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
 import { AgentToolLimitError } from '@/lib/agent/types'
 import { dimensionsFor } from '@/lib/aspectRatio'
+import { isCliMode, modelFor, pathForDesignMode, pipelineMode } from '@/lib/agent/config'
+import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/prompts/refine'
+import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { withNextRevisionNumber } from '@/lib/drafts/revisions'
 
 export const maxDuration = 120
-
-const CLI_MODE = (process.env.DESIGN_PROVIDER ?? '') === 'cli'
 
 interface PendingConflict {
   conflictId: string
@@ -28,24 +31,39 @@ interface ConflictMarker {
   pendingHtml: string
 }
 
+// The conflict protocol asks the model for a bare JSON object as its final text.
+// Models occasionally wrap it in a code fence or a sentence of prose — tolerate
+// both by extracting the outermost JSON object before parsing, so a wrapped
+// conflict doesn't silently fall through and get stored as htmlContent.
 function parseConflict(htmlContent: string): ConflictMarker | null {
-  if (!htmlContent.includes('"conflict"') || !htmlContent.includes('true')) return null
+  if (!htmlContent.includes('"conflict"')) return null
+  // Strip a wrapping markdown fence if present, then isolate {...}.
+  const unfenced = htmlContent.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '')
+  const start = unfenced.indexOf('{')
+  const end = unfenced.lastIndexOf('}')
+  if (start === -1 || end <= start) return null
   try {
-    const parsed = JSON.parse(htmlContent.trim())
+    const parsed = JSON.parse(unfenced.slice(start, end + 1))
     if (parsed && parsed.conflict === true && typeof parsed.explanation === 'string') {
       return parsed as ConflictMarker
     }
   } catch {
-    // Not a bare JSON conflict object — treat as normal HTML.
+    // Not a JSON conflict object — treat as normal HTML.
   }
   return null
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// Permissive schema + manual check so the error message stays exactly
+// 'instruction is required' (asserted by tests).
+const refineSchema = z.object({}).passthrough()
 
-  const { instruction, overrideConflictId } = await req.json()
+export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
+  const body = await parseBody(req, refineSchema)
+  if (body.response) return body.response
+  const { instruction, overrideConflictId } = body.data as {
+    instruction: string
+    overrideConflictId?: string
+  }
   if (!overrideConflictId && (typeof instruction !== 'string' || !instruction.trim())) {
     return NextResponse.json({ error: 'instruction is required' }, { status: 400 })
   }
@@ -67,7 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!pending || pending.conflictId !== overrideConflictId) {
       return NextResponse.json({ error: 'Conflict not found or already resolved' }, { status: 409 })
     }
-    return commitRevision(draft.id, draft.brief.id, instruction || 'Override brand kit conflict', pending.pendingHtml, width, height)
+    return commitRevision(draft.id, instruction || 'Override brand kit conflict', pending.pendingHtml, width, height)
   }
 
   // Explicit brief kit → campaign → project → system default.
@@ -86,61 +104,46 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     draft.htmlContent ?? ''
   )
   const hasInlineAssets = Object.keys(inlineAssets).length > 0
-  const placeholderNote = hasInlineAssets
-    ? `\n\nThe HTML contains image placeholders like __INLINE_ASSET_0__ inside src="" or CSS url(). Keep every such token EXACTLY as-is — they are restored to real images after rendering.`
-    : ''
 
-  const userMessage = `Current HTML design:
-
-${draft.htmlContent ? slimHtml : `(no current HTML — start from a blank ${width}×${height} canvas)`}
-
-Instruction: ${instruction}`
-
-  const model = draft.brief.designMode === 'TEMPLATE' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6'
+  const mode = pipelineMode()
+  // Refine uses the same model as the originating path: Path A → haiku, Path B → sonnet.
+  const path = pathForDesignMode(draft.brief.designMode)
+  const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets })
+  const userMessage = buildRefineUserMessage({
+    slimHtml,
+    hasHtml: !!draft.htmlContent,
+    instruction,
+    width,
+    height,
+  })
 
   // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic API,
   // no API key). Conflict-card detection is an API-mode feature; CLI mode applies
   // the edit directly.
-  if (CLI_MODE) {
-    const cliSystemPrompt = `You are a design refinement agent. Apply the user's instruction as a targeted edit to the HTML, staying on-brand. Preserve everything the instruction does not touch.
-
-${buildBrandKitSystemContext(kit)}${placeholderNote}`
+  if (isCliMode()) {
     try {
       const result = await runDesignAgentCli({
-        systemPrompt: cliSystemPrompt,
+        systemPrompt,
         userMessage,
         briefId: draft.brief.id,
         inlineAssets,
-        cliInstruction: CLI_INSTRUCTION.refine,
         width,
         height,
-        // Refine uses the same model as the originating path: Path A → haiku,
-        // Path B → sonnet (mirrors the API-path `model` computed above).
-        model: draft.brief.designMode === 'TEMPLATE' ? 'haiku' : 'sonnet',
+        model: modelFor(path, 'cli'),
       })
-      return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, width, height, result.exportUrl)
+      return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
     }
   }
 
-  const systemPrompt = `You are a design refinement agent. Here is the current HTML design. Apply the user's instruction as a targeted edit — change only what the instruction requires and preserve everything else.
-
-${buildBrandKitSystemContext(kit)}
-
-Compliance instructions:
-Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, ${width}, ${height}) as your final step to produce the finished PNG.
-
-If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call renderHtml. Instead, your final text response must be ONLY a single JSON object, with no other text, in exactly this form:
-{ "conflict": true, "explanation": "<why this conflicts with the brand kit>", "pendingHtml": "<the full modified HTML as you would have applied it>" }${placeholderNote}`
-
   try {
     const result = await runDesignAgent({
       systemPrompt,
       userMessage,
       briefId: draft.brief.id,
-      model,
+      model: modelFor(path, 'api'),
       maxToolCalls: 15,
       inlineAssets,
       width,
@@ -165,7 +168,7 @@ If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call
       return NextResponse.json({ conflict: true, explanation: conflict.explanation, conflictId })
     }
 
-    return commitRevision(draft.id, draft.brief.id, instruction, result.htmlContent, width, height, result.exportUrl)
+    return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl)
   } catch (err) {
     if (err instanceof AgentToolLimitError) {
       return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
@@ -173,11 +176,10 @@ If the change WOULD conflict with the brand kit, do NOT apply it and do NOT call
     const message = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
   }
-}
+})
 
 async function commitRevision(
   draftId: string,
-  briefId: string,
   instruction: string,
   newHtml: string,
   width: number,
@@ -189,70 +191,42 @@ async function commitRevision(
   let finalExportUrl = exportUrl
   if (!finalExportUrl) {
     const { renderHtmlToPng } = await import('@/lib/renderer/puppeteer')
-    const { uploadObject, BUCKET_EXPORTS } = await import('@/lib/storage/minio')
+    const { uploadObject, exportKey, BUCKET_EXPORTS } = await import('@/lib/storage/minio')
     const buffer = await renderHtmlToPng(newHtml, width, height)
-    finalExportUrl = `refine-${draftId}-${Date.now()}.png`
+    finalExportUrl = exportKey('refine', draftId)
     await uploadObject(buffer, BUCKET_EXPORTS, finalExportUrl, 'image/png')
   }
 
   // Allocate the revision number, write the revision, and update the draft
-  // atomically. Concurrent refines on the same draft can read the same max and
-  // collide on @@unique([draftId, revisionNumber]) — catch P2002 and retry with
-  // a freshly computed number rather than 500-ing.
-  let revision: { id: string } | null = null
-  // The unique([draftId, revisionNumber]) constraint serializes concurrent
-  // refines; each loser recomputes and retries. The budget must cover the worst
-  // case (every other in-flight refine commits first), so size it generously —
-  // a small budget (e.g. 4) 500s under ~10-way concurrency (see TC-REG-H7a).
-  const MAX_ATTEMPTS = 12
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      revision = await prisma.$transaction(async (tx) => {
-        const last = await tx.draftRevision.findFirst({
-          where: { draftId },
-          orderBy: { revisionNumber: 'desc' },
-          select: { revisionNumber: true },
-        })
-        const revisionNumber = (last?.revisionNumber ?? 0) + 1
+  // atomically (P2002 collision retry handled by the shared helper).
+  const revision = await withNextRevisionNumber(draftId, async (tx, revisionNumber) => {
+    const created = await tx.draftRevision.create({
+      data: {
+        draftId,
+        revisionNumber,
+        instruction,
+        htmlSnapshot: newHtml,
+        exportUrl: finalExportUrl,
+      },
+      select: { id: true },
+    })
 
-        const created = await tx.draftRevision.create({
-          data: {
-            draftId,
-            revisionNumber,
-            instruction,
-            htmlSnapshot: newHtml,
-            exportUrl: finalExportUrl,
-          },
-          select: { id: true },
-        })
+    await tx.draft.update({
+      where: { id: draftId },
+      data: {
+        htmlContent: newHtml,
+        exportUrl: finalExportUrl,
+        pendingConflict: Prisma.JsonNull,
+        promptVersion: PROMPT_VERSION,
+      },
+    })
 
-        await tx.draft.update({
-          where: { id: draftId },
-          data: {
-            htmlContent: newHtml,
-            exportUrl: finalExportUrl,
-            pendingConflict: Prisma.JsonNull,
-          },
-        })
-
-        return created
-      })
-      break
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002' &&
-        attempt < MAX_ATTEMPTS
-      ) {
-        continue // revision number collided — recompute and retry
-      }
-      throw err
-    }
-  }
+    return created
+  })
 
   return NextResponse.json({
     reply: 'Design updated',
-    revisionId: revision!.id,
+    revisionId: revision.id,
     exportUrl: await resolveExportUrl(finalExportUrl),
   })
 }

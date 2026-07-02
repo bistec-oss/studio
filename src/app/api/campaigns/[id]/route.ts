@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, requireRole } from '@/lib/auth'
+import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { id: string }
 
+export const GET = withAuth<Params>(async (_req, { params }) => {
   const campaign = await prisma.campaign.findUnique({
     where: { id: params.id },
     include: {
@@ -17,22 +17,37 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 
   if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(campaign)
-}
+})
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const patchSchema = z.object({
+  name: z.string().trim().min(1, 'name is required').optional(),
+  brandKitId: z.string().nullable().optional(),
+  defaultTone: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+})
 
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
   const campaign = await prisma.campaign.findUnique({ where: { id: params.id } })
   if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const body = await req.json()
-  const { name, brandKitId, defaultTone, projectId } = body
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { name, brandKitId, defaultTone, projectId } = body.data
+
+  // Verify referenced records so a bogus id is a 400, not a P2003 500.
+  if (brandKitId) {
+    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
+    if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  }
+  if (projectId) {
+    const project = await prisma.project.findFirst({ where: { id: projectId, isDeleted: false } })
+    if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
+  }
 
   const updated = await prisma.campaign.update({
     where: { id: params.id },
     data: {
-      ...(name !== undefined && { name: name.trim() }),
+      ...(name !== undefined && { name }),
       ...(brandKitId !== undefined && { brandKitId }),
       ...(defaultTone !== undefined && { defaultTone }),
       ...(projectId !== undefined && {
@@ -46,12 +61,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const campaign = await prisma.campaign.findUnique({ where: { id: params.id } })
   if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -61,4 +73,4 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
   })
 
   return new NextResponse(null, { status: 204 })
-}
+})

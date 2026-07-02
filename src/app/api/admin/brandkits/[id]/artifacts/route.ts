@@ -1,27 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 import type { ArtifactType } from '@prisma/client'
 
 const VALID_TYPES: ArtifactType[] = ['LOGO', 'FONT', 'COLOR', 'REFERENCE_IMAGE', 'EXAMPLE_POST', 'OTHER']
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string }
 
+export const GET = withAdmin<Params>(async (_req, { params }) => {
   const artifacts = await prisma.brandKitArtifact.findMany({
     where: { brandKitId: params.id },
     orderBy: { createdAt: 'desc' },
   })
 
   return NextResponse.json(artifacts)
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const POST = withAdmin<Params>(async (req, { params }) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -75,4 +71,4 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   })
 
   return NextResponse.json(artifact, { status: 201 })
-}
+})

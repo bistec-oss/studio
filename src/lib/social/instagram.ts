@@ -2,14 +2,15 @@ import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
+import { env } from "@/lib/env"
 
 async function resolveCredentials(): Promise<{ accessToken: string; businessAccountId: string }> {
   const row = await prisma.channelToken.findUnique({ where: { channel: "INSTAGRAM" } })
   if (row) {
     return { accessToken: decrypt(row.encryptedToken), businessAccountId: decrypt(row.encryptedMetadata) }
   }
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN
-  const businessAccountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID
+  const accessToken = env.INSTAGRAM_ACCESS_TOKEN
+  const businessAccountId = env.INSTAGRAM_BUSINESS_ACCOUNT_ID
   if (!accessToken || !businessAccountId) {
     throw new Error("Instagram credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
   }

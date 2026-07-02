@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth } from '@/lib/api/handler'
 import { ProviderSlot } from '@prisma/client'
 
-export async function GET(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async (req: NextRequest) => {
   const slot = req.nextUrl.searchParams.get('slot')
   if (!slot || !['COPY', 'IMAGE'].includes(slot)) {
     return NextResponse.json({ error: 'slot must be COPY or IMAGE' }, { status: 400 })
@@ -19,4 +16,4 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(providers)
-}
+})

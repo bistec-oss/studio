@@ -1,3 +1,5 @@
+import { env } from '@/lib/env'
+
 function parseKeys(envVar: string | undefined): string[] {
   return (envVar ?? '')
     .split(',')
@@ -5,9 +7,9 @@ function parseKeys(envVar: string | undefined): string[] {
     .filter(Boolean)
 }
 
-const ADMIN_KEYS = parseKeys(process.env.BISTEC_ADMIN_API_KEYS)
+const ADMIN_KEYS = parseKeys(env.BISTEC_ADMIN_API_KEYS)
 // Non-admin keys allowed to call read / generate / publish capabilities.
-const API_KEYS = parseKeys(process.env.BISTEC_API_KEYS)
+const API_KEYS = parseKeys(env.BISTEC_API_KEYS)
 
 export function isAdminKey(apiKey: string | null | undefined): boolean {
   if (!apiKey) return false

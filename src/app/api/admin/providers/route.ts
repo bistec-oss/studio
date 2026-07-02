@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 import { encrypt } from '@/lib/crypto'
 
 function detectProvider(apiKey: string): { providerName: string; autoLabel: string } | null {
@@ -29,10 +30,7 @@ async function validateApiKey(providerName: string, apiKey: string): Promise<str
   }
 }
 
-export async function GET(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const GET = withAdmin(async () => {
   const providers = await prisma.availableProvider.findMany({
     select: {
       id: true,
@@ -49,19 +47,23 @@ export async function GET(req: NextRequest) {
   })
 
   return NextResponse.json(providers)
-}
+})
 
-export async function POST(req: NextRequest) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const createSchema = z.object({
+  // The key is encrypted verbatim — validate presence without altering the value.
+  apiKey: z.string().refine((v) => v.trim().length > 0, 'apiKey is required'),
+  slot: z.enum(['COPY', 'IMAGE'], {
+    errorMap: () => ({ message: 'slot must be COPY or IMAGE' }),
+  }),
+  providerName: z.string().optional(),
+  label: z.string().optional(),
+  isDefault: z.boolean().optional(),
+})
 
-  const body = await req.json()
-  const { apiKey, slot, providerName: bodyProviderName, label: bodyLabel, isDefault } = body
-
-  if (!apiKey?.trim()) return NextResponse.json({ error: 'apiKey is required' }, { status: 400 })
-  if (!slot || !['COPY', 'IMAGE'].includes(slot)) {
-    return NextResponse.json({ error: 'slot must be COPY or IMAGE' }, { status: 400 })
-  }
+export const POST = withAdmin(async (req: NextRequest) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { apiKey, slot, providerName: bodyProviderName, label: bodyLabel, isDefault } = body.data
 
   const detected = detectProvider(apiKey)
   const providerName = detected?.providerName ?? bodyProviderName?.trim()?.toLowerCase()
@@ -97,4 +99,4 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json(provider, { status: 201 })
-}
+})

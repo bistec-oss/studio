@@ -1,13 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth'
+import { NextResponse } from 'next/server'
+import { withAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 
 // Accepts a multipart file upload and returns a stable public MinIO URL.
 // Used by the admin UI to upload logos and fonts before PATCHing the kit.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const POST = withAdmin<{ id: string }>(async (req, { params }) => {
   const formData = await req.formData()
   const file = formData.get('file') as File | null
 
@@ -23,4 +20,4 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await uploadObject(buffer, BUCKET_BRANDKITS, key, file.type || `application/octet-stream`)
 
   return NextResponse.json({ url: publicUrl(BUCKET_BRANDKITS, key), key, name: file.name })
-}
+})

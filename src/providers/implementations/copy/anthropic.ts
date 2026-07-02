@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { BriefInput, CopyProvider } from "../../interfaces/CopyProvider"
+import { buildCopyPrompt } from "@/lib/agent/prompts/copy"
 
 export class AnthropicCopyProvider implements CopyProvider {
   private client: Anthropic
@@ -9,24 +10,13 @@ export class AnthropicCopyProvider implements CopyProvider {
   }
 
   async generateCopy(brief: BriefInput): Promise<string> {
-    const channelList = brief.channels.join(", ")
+    const prompt = buildCopyPrompt(brief)
 
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 500,
-      system: `You are an expert social media copywriter for Bistec, a tech company. Write compelling, on-brand copy for ${channelList} posts.`,
-      messages: [
-        {
-          role: "user",
-          content: `Topic: ${brief.topic}
-Description: ${brief.description}
-Goal: ${brief.goal}
-Tone: ${brief.tone}
-Channels: ${channelList}
-
-Write engaging copy for the above brief.`,
-        },
-      ],
+      system: prompt.system,
+      messages: [{ role: "user", content: prompt.user }],
     })
 
     const block = response.content[0]

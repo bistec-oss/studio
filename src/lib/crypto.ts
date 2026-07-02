@@ -1,9 +1,13 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
+import { env } from '@/lib/env'
 
 const ALG = 'aes-256-gcm'
 
+// Validated lazily (not at module load) so a dev server without a real key
+// still boots until encrypt/decrypt is first used. Production fails fast at
+// startup instead — see the assertions in src/lib/env.ts.
 function getKey(): Buffer {
-  const hex = process.env.TOKEN_ENCRYPTION_KEY
+  const hex = env.TOKEN_ENCRYPTION_KEY
   if (!hex || hex === 'your-32-byte-hex-key') {
     throw new Error('TOKEN_ENCRYPTION_KEY env var is not set or still uses the placeholder value')
   }

@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner } from '@/lib/auth'
+import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveImageProvider } from '@/providers/registry'
-import { uploadObject, publicUrl, BUCKET_IMAGES } from '@/lib/storage/minio'
+import { persistDataUrlImage } from '@/lib/storage/minio'
 
-export async function POST(req: NextRequest) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+const bodySchema = z.object({ briefId: z.string(), prompt: z.string() })
 
-  const { briefId, prompt } = await req.json()
+export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+  const body = await parseBody(req, bodySchema)
+  if (body.response) return body.response
+  const { briefId, prompt } = body.data
 
   const brief = await prisma.brief.findUnique({ where: { id: briefId } })
   if (!brief) return NextResponse.json({ error: 'Brief not found' }, { status: 404 })
@@ -21,13 +24,11 @@ export async function POST(req: NextRequest) {
     const result = await provider.generateImage(prompt)
     const rawUrl: string = result.url
 
-    if (rawUrl.startsWith('data:image/')) {
-      const commaIdx = rawUrl.indexOf(',')
-      const base64data = rawUrl.slice(commaIdx + 1)
-      const buffer = Buffer.from(base64data, 'base64')
-      const key = `images/${briefId}-${Date.now()}.png`
-      await uploadObject(buffer, BUCKET_IMAGES, key, 'image/png')
-      return NextResponse.json({ imageUrl: publicUrl(BUCKET_IMAGES, key) })
+    if (rawUrl.startsWith('data:')) {
+      // Shared helper enforces the raster allow-list and stores with the real
+      // content type (previously this route accepted any data: image and
+      // mislabeled it image/png).
+      return NextResponse.json({ imageUrl: await persistDataUrlImage(rawUrl, `images/${briefId}`) })
     }
 
     // Already a real URL — return as-is
@@ -39,4 +40,4 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: message }, { status: 500 })
   }
-}
+})

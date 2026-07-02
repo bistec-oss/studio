@@ -2,14 +2,12 @@ import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import type { CopyProvider } from "./interfaces/CopyProvider"
 import type { ImageProvider } from "./interfaces/ImageProvider"
-import type { DesignOrchestrator } from "./interfaces/DesignOrchestrator"
 import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
 import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 import { ClaudeCliCopyProvider } from "./implementations/copy/claude-cli"
-import { ClaudeCliOrchestrator } from "./implementations/orchestrator/claude-cli"
-import { ClaudeHtmlOrchestrator } from "./implementations/orchestrator/claude-html"
 import { MOCK_AI, buildMockCopy } from "@/lib/testHooks"
+import { env } from "@/lib/env"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -64,13 +62,29 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
     return instantiateCopyProvider(defaultRecord.providerName, providerApiKey(defaultRecord))
   }
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY
+  const anthropicKey = env.ANTHROPIC_API_KEY
   if (anthropicKey) return new AnthropicCopyProvider(anthropicKey)
 
-  const openaiKey = process.env.OPENAI_API_KEY
+  const openaiKey = env.OPENAI_API_KEY
   if (openaiKey) return new OpenAICopyProvider(openaiKey)
 
   throw new Error("No COPY provider configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+}
+
+// Resolve a raw Anthropic API key for direct SDK calls that bypass the
+// CopyProvider abstraction (e.g. the brand-voice prompt drafting helper).
+// Mirrors resolveCopyProvider's resolution order: the default enabled COPY
+// provider (when it is an anthropic registration, its decrypted key) → the
+// ANTHROPIC_API_KEY env fallback. Returns null when neither is configured —
+// callers decide how to fail.
+export async function resolveAnthropicApiKey(): Promise<string | null> {
+  const defaultRecord = await prisma.availableProvider.findFirst({
+    where: { slot: "COPY", isDefault: true, isEnabled: true },
+  })
+  if (defaultRecord && defaultRecord.providerName.toLowerCase() === "anthropic") {
+    return decrypt(defaultRecord.encryptedApiKey)
+  }
+  return env.ANTHROPIC_API_KEY ?? null
 }
 
 export async function resolveImageProvider(providerKey?: string): Promise<ImageProvider> {
@@ -93,18 +107,9 @@ export async function resolveImageProvider(providerKey?: string): Promise<ImageP
     )
   }
 
-  const envKey = process.env.OPENAI_API_KEY
+  const envKey = env.OPENAI_API_KEY
   if (!envKey) {
     throw new Error("No IMAGE provider found and OPENAI_API_KEY env var is not set")
   }
   return new OpenAIImageProvider(envKey)
-}
-
-// Orchestrator is not user-selectable — resolved from DESIGN_PROVIDER env var only.
-// "cli"         → ClaudeCliOrchestrator (dev mode, no API key, no Puppeteer)
-// "claude-html" → ClaudeHtmlOrchestrator (production, implemented in T14 / Wave 4)
-export function resolveDesignOrchestrator(): DesignOrchestrator {
-  const provider = process.env.DESIGN_PROVIDER ?? "claude-html"
-  if (provider === "cli") return new ClaudeCliOrchestrator()
-  return new ClaudeHtmlOrchestrator()
 }

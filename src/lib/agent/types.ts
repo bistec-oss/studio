@@ -12,6 +12,9 @@ export interface DesignAgentOptions {
   briefId: string
   model?: string
   maxToolCalls?: number
+  // Wall-clock budget for the whole tool-use loop (default 300s, matching the
+  // CLI runner's timeout). Checked before each model turn.
+  deadlineMs?: number
   // Output canvas size. The real (API) path relies on the prompt to instruct the
   // model to call renderHtml with these dimensions; the mock path renders at them
   // directly. Default 1080×1080 keeps existing square behaviour.
@@ -34,5 +37,21 @@ export class AgentToolLimitError extends Error {
   constructor(limit: number) {
     super(`Design agent exceeded the ${limit}-tool-call limit`)
     this.name = "AgentToolLimitError"
+  }
+}
+
+export class AgentTimeoutError extends Error {
+  constructor(deadlineMs: number) {
+    super(`Design agent exceeded the ${Math.round(deadlineMs / 1000)}s deadline`)
+    this.name = "AgentTimeoutError"
+  }
+}
+
+// The model hit max_tokens mid-response — without this check a truncated design
+// surfaces as "the model produced broken HTML" with no cause attached.
+export class AgentTruncatedError extends Error {
+  constructor(maxTokens: number) {
+    super(`Design agent response was truncated at the ${maxTokens}-token output cap`)
+    this.name = "AgentTruncatedError"
   }
 }

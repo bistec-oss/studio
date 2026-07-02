@@ -1,15 +1,16 @@
+// Input to copy generation — only what copy providers actually consume.
+// Design-path concerns (designMode, image URLs, template references) live on
+// the Brief row and are consumed by the design pipeline, not copy providers.
 export interface BriefInput {
   topic: string
   description: string
   goal: string
   tone: string
   channels: string[]
-  designMode: string
-  copyProviderKey?: string
-  imageProviderKey?: string
-  additionalImageUrl?: string
-  briefImages?: Array<{ url: string; intent: "embed" | "reference" }>
-  referenceTemplateId?: string
+  // Resolved brand identity (kit name + active voice prompt), when available —
+  // lets copy match the selected kit's voice instead of a hardcoded brand.
+  brandName?: string
+  brandVoice?: string
 }
 
 export interface CopyProvider {

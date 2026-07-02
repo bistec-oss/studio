@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin } from '@/lib/api/handler'
 import * as instagramPublisher from '@/lib/social/instagram'
 import * as linkedinPublisher from '@/lib/social/linkedin'
 import { PublishError } from '@/lib/social/types'
@@ -11,13 +11,7 @@ const publishers = {
   LINKEDIN: linkedinPublisher,
 }
 
-export async function POST(
-  _: NextRequest,
-  { params }: { params: { id: string } },
-) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const POST = withAdmin<{ id: string }>(async (_req, { params }) => {
   const post = await prisma.post.findUnique({
     where: { id: params.id },
     include: {
@@ -65,4 +59,4 @@ export async function POST(
     }
     throw err
   }
-}
+})

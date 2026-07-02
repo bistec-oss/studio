@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser, forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
+import { forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
+import { withAuth } from '@/lib/api/handler'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+type Params = { id: string }
 
+export const GET = withAuth<Params>(async (_req, { params }, user) => {
   const ownerId = await getDraftOwnerId(params.id)
   if (ownerId === null) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   const forbidden = forbiddenIfNotOwner(user, ownerId)
@@ -30,4 +30,4 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   )
 
   return NextResponse.json(signed)
-}
+})

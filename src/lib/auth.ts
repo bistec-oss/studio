@@ -3,8 +3,9 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "@/lib/prisma"
 import { headers } from "next/headers"
 import { NextResponse } from "next/server"
+import { env } from "@/lib/env"
 
-const BETTER_AUTH_SECRET = process.env.BETTER_AUTH_SECRET
+const BETTER_AUTH_SECRET = env.BETTER_AUTH_SECRET
 if (!BETTER_AUTH_SECRET || BETTER_AUTH_SECRET === "your-32-byte-hex-secret") {
   throw new Error(
     "BETTER_AUTH_SECRET is not set or still uses the placeholder value — set a real 32-byte hex secret",

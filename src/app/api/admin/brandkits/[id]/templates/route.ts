@@ -1,40 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string }
 
+export const GET = withAdmin<Params>(async (_req, { params }) => {
   const templates = await prisma.brandKitTemplate.findMany({
     where: { brandKitId: params.id },
     orderBy: { createdAt: 'asc' },
   })
 
   return NextResponse.json(templates)
-}
+})
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+const createSchema = z.object({
+  name: z.string().trim().min(1, 'name is required'),
+  htmlTemplate: z.string().trim().min(1, 'htmlTemplate is required'),
+  aspectRatio: z
+    .enum(['SQUARE', 'PORTRAIT'], {
+      errorMap: () => ({ message: 'aspectRatio must be SQUARE or PORTRAIT' }),
+    })
+    .nullish(),
+})
 
-  const body = await req.json()
-  const { name, htmlTemplate, aspectRatio } = body
-
-  if (!name?.trim()) return NextResponse.json({ error: 'name is required' }, { status: 400 })
-  if (!htmlTemplate?.trim()) return NextResponse.json({ error: 'htmlTemplate is required' }, { status: 400 })
-  if (aspectRatio != null && aspectRatio !== 'SQUARE' && aspectRatio !== 'PORTRAIT') {
-    return NextResponse.json({ error: 'aspectRatio must be SQUARE or PORTRAIT' }, { status: 400 })
-  }
+export const POST = withAdmin<Params>(async (req, { params }) => {
+  const body = await parseBody(req, createSchema)
+  if (body.response) return body.response
+  const { name, htmlTemplate, aspectRatio } = body.data
 
   const template = await prisma.brandKitTemplate.create({
     data: {
       brandKitId: params.id,
-      name: name.trim(),
-      htmlTemplate: htmlTemplate.trim(),
+      name,
+      htmlTemplate,
       aspectRatio: aspectRatio ?? 'SQUARE',
     },
   })
 
   return NextResponse.json(template, { status: 201 })
-}
+})

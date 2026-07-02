@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
+import { withAuth } from '@/lib/api/handler'
 
 // Lists non-deleted brand kits for selection in the brief wizard and the
 // project/campaign forms. Available to any signed-in user (editors included) —
 // the /api/admin/brandkits routes are admin-gated and would 403 for editors.
 // Read-only and minimal (id, name, preview swatch); management stays in /admin.
-export async function GET() {
-  const user = await getCurrentUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
+export const GET = withAuth(async () => {
   const kits = await prisma.brandKit.findMany({
     where: { isDeleted: false },
     select: { id: true, name: true, colors: true, isDefault: true },
@@ -27,4 +24,4 @@ export async function GET() {
   })
 
   return NextResponse.json(result)
-}
+})

@@ -1,13 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string; tid: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string; tid: string }
 
-  const body = await req.json()
-  const { name, htmlTemplate } = body
+const patchSchema = z.object({
+  name: z.string().trim().optional(),
+  htmlTemplate: z.string().trim().optional(),
+})
+
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { name, htmlTemplate } = body.data
 
   const template = await prisma.brandKitTemplate.findFirst({
     where: { id: params.tid, brandKitId: params.id },
@@ -17,18 +23,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await prisma.brandKitTemplate.update({
     where: { id: params.tid },
     data: {
-      ...(name !== undefined && { name: name.trim() }),
-      ...(htmlTemplate !== undefined && { htmlTemplate: htmlTemplate.trim() }),
+      ...(name !== undefined && { name }),
+      ...(htmlTemplate !== undefined && { htmlTemplate }),
     },
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string; tid: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const template = await prisma.brandKitTemplate.findFirst({
     where: { id: params.tid, brandKitId: params.id },
   })
@@ -37,4 +40,4 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string;
   await prisma.brandKitTemplate.delete({ where: { id: params.tid } })
 
   return new NextResponse(null, { status: 204 })
-}
+})

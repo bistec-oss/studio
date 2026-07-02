@@ -1,13 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string }
 
-  const body = await req.json()
-  const { isEnabled, isDefault, label } = body
+const patchSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+  label: z.string().trim().optional(),
+})
+
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { isEnabled, isDefault, label } = body.data
   const { id } = params
 
   const existing = await prisma.availableProvider.findUnique({ where: { id } })
@@ -16,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const data: Record<string, unknown> = {}
   if (isEnabled !== undefined) data.isEnabled = isEnabled
   if (isDefault !== undefined) data.isDefault = isDefault
-  if (label !== undefined) data.label = label.trim()
+  if (label !== undefined) data.label = label
 
   // Clearing the prior default + updating this row must be atomic so a
   // failure can't leave the slot with zero (or two) defaults.
@@ -32,16 +39,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const { id } = params
   const existing = await prisma.availableProvider.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Provider not found' }, { status: 404 })
 
   await prisma.availableProvider.delete({ where: { id } })
   return new NextResponse(null, { status: 204 })
-}
+})

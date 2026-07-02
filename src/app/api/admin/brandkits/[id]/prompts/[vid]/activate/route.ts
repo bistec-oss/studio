@@ -1,11 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin } from '@/lib/api/handler'
 
-export async function POST(_: NextRequest, { params }: { params: { id: string; vid: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const POST = withAdmin<{ id: string; vid: string }>(async (_req, { params }) => {
   const prompt = await prisma.brandKitPrompt.findFirst({
     where: { id: params.vid, brandKitId: params.id },
   })
@@ -23,4 +20,4 @@ export async function POST(_: NextRequest, { params }: { params: { id: string; v
   ])
 
   return NextResponse.json({ activated: params.vid })
-}
+})

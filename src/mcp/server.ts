@@ -5,8 +5,9 @@ import { isAdminKey, isValidKey } from './auth'
 import { createBrandKit, setBrandKitPrompt, uploadBrandTemplate, listBrandKits, getBrandKit } from './tools/brandkit'
 import { generatePost, getDraft } from './tools/generate'
 import { publishPost } from './tools/publish'
+import { env } from '@/lib/env'
 
-const API_KEY = process.env.MCP_API_KEY ?? null
+const API_KEY = env.MCP_API_KEY ?? null
 
 const server = new Server(
   { name: 'bistec-studio', version: '1.0.0' },

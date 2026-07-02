@@ -1,33 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withAdmin, parseBody } from '@/lib/api/handler'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string; aid: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
+type Params = { id: string; aid: string }
 
+const patchSchema = z.object({
+  feedToAI: z.boolean().optional(),
+  name: z.string().optional(),
+})
+
+export const PATCH = withAdmin<Params>(async (req, { params }) => {
   const artifact = await prisma.brandKitArtifact.findFirst({
     where: { id: params.aid, brandKitId: params.id },
   })
   if (!artifact) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const body = await req.json()
+  const body = await parseBody(req, patchSchema)
+  if (body.response) return body.response
+  const { feedToAI, name } = body.data
 
   const updated = await prisma.brandKitArtifact.update({
     where: { id: params.aid },
     data: {
-      ...(body.feedToAI !== undefined && { feedToAI: Boolean(body.feedToAI) }),
-      ...(body.name !== undefined && { name: body.name }),
+      ...(feedToAI !== undefined && { feedToAI }),
+      ...(name !== undefined && { name }),
     },
   })
 
   return NextResponse.json(updated)
-}
+})
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string; aid: string } }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
   const artifact = await prisma.brandKitArtifact.findFirst({
     where: { id: params.aid, brandKitId: params.id },
   })
@@ -55,4 +59,4 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string;
   })
 
   return new NextResponse(null, { status: 204 })
-}
+})

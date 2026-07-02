@@ -2,14 +2,15 @@ import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
+import { env } from "@/lib/env"
 
 async function resolveCredentials(): Promise<{ accessToken: string; organizationId: string }> {
   const row = await prisma.channelToken.findUnique({ where: { channel: "LINKEDIN" } })
   if (row) {
     return { accessToken: decrypt(row.encryptedToken), organizationId: decrypt(row.encryptedMetadata) }
   }
-  const accessToken = process.env.LINKEDIN_ACCESS_TOKEN
-  const organizationId = process.env.LINKEDIN_ORGANIZATION_ID
+  const accessToken = env.LINKEDIN_ACCESS_TOKEN
+  const organizationId = env.LINKEDIN_ORGANIZATION_ID
   if (!accessToken || !organizationId) {
     throw new Error("LinkedIn credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
   }
