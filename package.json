@@ -22,7 +22,7 @@
     "test:e2e:serve": "node --env-file=.env.test ./node_modules/next/dist/bin/next dev -p 3001"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.109.1",
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/s3-request-presigner": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
