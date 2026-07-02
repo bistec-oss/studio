@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
 import type { AspectRatio } from '@prisma/client'
 import { aspectClassFor } from '@/lib/aspectRatio'
+import { channelLabel } from '@/lib/channels'
 
 interface PostSummary {
   id: string
@@ -20,7 +21,6 @@ interface PostSummary {
 interface PostCardDraft {
   id: string
   exportUrl: string | null
-  copyText: string
   status: string
   createdAt: string
   brief: { topic: string; channels: string[]; aspectRatio?: AspectRatio }
@@ -50,11 +50,6 @@ function deriveStatus(draft: PostCardDraft): ChipStatus {
   return 'draft'
 }
 
-const CHANNEL_LABELS: Record<string, string> = {
-  INSTAGRAM: 'Instagram',
-  LINKEDIN: 'LinkedIn',
-}
-
 export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardProps) {
   const chipStatus = deriveStatus(draft)
 
@@ -69,6 +64,7 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
           <img
             src={draft.exportUrl}
             alt={draft.brief.topic}
+            loading="lazy"
             className="w-full h-full object-cover transition-transform group-hover:scale-105"
           />
         ) : (
@@ -101,7 +97,7 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
                 text-primary dark:text-primary-light
                 border border-primary/20 dark:border-primary-light/20"
             >
-              {CHANNEL_LABELS[ch] ?? ch}
+              {channelLabel(ch)}
             </span>
           ))}
         </div>

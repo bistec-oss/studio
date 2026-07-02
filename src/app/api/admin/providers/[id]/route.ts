@@ -13,19 +13,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const existing = await prisma.availableProvider.findUnique({ where: { id } })
   if (!existing) return NextResponse.json({ error: 'Provider not found' }, { status: 404 })
 
-  if (isDefault === true) {
-    await prisma.availableProvider.updateMany({ where: { slot: existing.slot }, data: { isDefault: false } })
-  }
-
   const data: Record<string, unknown> = {}
   if (isEnabled !== undefined) data.isEnabled = isEnabled
   if (isDefault !== undefined) data.isDefault = isDefault
   if (label !== undefined) data.label = label.trim()
 
-  const updated = await prisma.availableProvider.update({
-    where: { id },
-    data,
-    select: { id: true, slot: true, providerKey: true, providerName: true, label: true, keyPrefix: true, isEnabled: true, isDefault: true, createdAt: true },
+  // Clearing the prior default + updating this row must be atomic so a
+  // failure can't leave the slot with zero (or two) defaults.
+  const updated = await prisma.$transaction(async (tx) => {
+    if (isDefault === true) {
+      await tx.availableProvider.updateMany({ where: { slot: existing.slot }, data: { isDefault: false } })
+    }
+    return tx.availableProvider.update({
+      where: { id },
+      data,
+      select: { id: true, slot: true, providerKey: true, providerName: true, label: true, keyPrefix: true, isEnabled: true, isDefault: true, createdAt: true },
+    })
   })
 
   return NextResponse.json(updated)

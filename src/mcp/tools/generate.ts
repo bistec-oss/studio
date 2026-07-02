@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import type { Channel } from '@prisma/client'
 import { resolveCopyProvider, resolveDesignOrchestrator } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 import { resolveExportUrl } from '@/lib/storage/minio'
@@ -38,7 +39,8 @@ export async function generatePost(args: GeneratePostArgs) {
       description: args.description,
       goal: args.goal,
       tone: args.tone,
-      channels: args.channels,
+      // Channel enum values are uppercase; tolerate lowercase from older callers.
+      channels: args.channels.map((c: string) => c.toUpperCase() as Channel),
       designMode: args.designMode,
       copyProviderKey: args.copyProviderKey ?? 'env-default',
       campaignId: args.campaignId ?? null,

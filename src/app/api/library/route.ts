@@ -73,10 +73,29 @@ export async function GET(req: NextRequest) {
   }
 
   const [drafts, total] = await Promise.all([
+    // select (not include): tiles never need htmlContent (megabytes/row after
+    // inline-asset restoration) or pendingConflict. Campaign/kit labels come
+    // from the brief's campaign — the only way drafts are linked to campaigns.
     prisma.draft.findMany({
       where,
-      include: {
-        brief: { select: { topic: true, channels: true, aspectRatio: true } },
+      select: {
+        id: true,
+        status: true,
+        exportUrl: true,
+        createdAt: true,
+        brief: {
+          select: {
+            topic: true,
+            channels: true,
+            aspectRatio: true,
+            campaign: {
+              select: {
+                name: true,
+                brandKit: { select: { name: true } },
+              },
+            },
+          },
+        },
         posts: {
           orderBy: { createdAt: "desc" },
           select: {
@@ -87,16 +106,6 @@ export async function GET(req: NextRequest) {
             publishedAt: true,
             platformId: true,
             errorReason: true,
-          },
-        },
-        campaigns: {
-          include: {
-            campaign: {
-              select: {
-                name: true,
-                brandKit: { select: { name: true } },
-              },
-            },
           },
         },
       },

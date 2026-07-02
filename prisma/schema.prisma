@@ -146,7 +146,6 @@ model Campaign {
   createdAt    DateTime          @default(now())
   projects     ProjectCampaign[]
   briefs       Brief[]
-  drafts       CampaignDraft[]
 }
 
 model ProjectCampaign {
@@ -156,15 +155,6 @@ model ProjectCampaign {
   campaign   Campaign @relation(fields: [campaignId], references: [id])
 
   @@id([projectId, campaignId])
-}
-
-model CampaignDraft {
-  campaignId String
-  draftId    String
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
-  draft      Draft    @relation(fields: [draftId], references: [id])
-
-  @@id([campaignId, draftId])
 }
 
 model Brief {
@@ -179,7 +169,7 @@ model Brief {
   description         String?
   goal                String
   tone                String
-  channels            String[]
+  channels            Channel[]
   aspectRatio         AspectRatio        @default(SQUARE)
   designMode          DesignMode
   copyProviderKey     String
@@ -208,9 +198,10 @@ model Draft {
   pendingConflict Json?
   status          DraftStatus     @default(IN_PROGRESS)
   createdAt       DateTime        @default(now())
+  // @default(now()) keeps the added column valid for pre-existing rows
+  updatedAt       DateTime        @default(now()) @updatedAt
   posts           Post[]
   revisions       DraftRevision[]
-  campaigns       CampaignDraft[]
 
   @@index([briefId])
 }
@@ -230,6 +221,8 @@ model Post {
   retryCount  Int        @default(0)
   nextRetryAt DateTime?
   createdAt   DateTime   @default(now())
+  // @default(now()) keeps the added column valid for pre-existing rows
+  updatedAt   DateTime   @default(now()) @updatedAt
 
   @@index([status, scheduledAt])
   @@index([status, nextRetryAt])

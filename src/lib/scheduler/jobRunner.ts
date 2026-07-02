@@ -78,7 +78,10 @@ export async function runScheduledJobs(): Promise<void> {
 
     try {
       // Sign the stored export key for the publisher's one-off image fetch.
-      const signedExportUrl = (await resolveExportUrl(post.draft.exportUrl))!
+      const signedExportUrl = await resolveExportUrl(post.draft.exportUrl)
+      if (!signedExportUrl) {
+        throw new PublishError(post.channel, "draft export missing")
+      }
       const { platformId } = await publisher.publish(
         signedExportUrl,
         post.draft.copyText

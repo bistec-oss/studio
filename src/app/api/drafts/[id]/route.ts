@@ -24,7 +24,7 @@ async function loadDraft(id: string) {
   })
   if (!draft) return null
 
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined)
+  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
   return {
     ownerId: draft.brief.userId,

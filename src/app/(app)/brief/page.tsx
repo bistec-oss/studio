@@ -21,6 +21,7 @@ import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 import type { AspectRatio } from '@prisma/client'
 import { ASPECT_LABELS, dimensionsLabel } from '@/lib/aspectRatio'
+import { CHANNEL_VALUES } from '@/lib/channels'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,7 +32,7 @@ type ImageIntent = 'embed' | 'reference'
 
 // Channels are no longer chosen at brief time — the publish step picks them. Every
 // brief targets both feeds by default; the brief now captures the post SIZE instead.
-const DEFAULT_CHANNELS = ['instagram', 'linkedin']
+const DEFAULT_CHANNELS = CHANNEL_VALUES
 
 interface ProjectRef {
   id: string
@@ -844,8 +845,8 @@ export default function NewBriefPage() {
                       : 'None'
                 }
               />
-              <ReviewRow label="Goal" value={goal} />
-              <ReviewRow label="Tone" value={tone} />
+              <ReviewRow label="Goal" value={goal} capitalize />
+              <ReviewRow label="Tone" value={tone} capitalize />
               <ReviewRow
                 label="Images"
                 value={
@@ -931,13 +932,13 @@ function CampaignRow({
   )
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
+function ReviewRow({ label, value, capitalize = false }: { label: string; value: string; capitalize?: boolean }) {
   return (
     <div className="flex items-start gap-4 py-2.5 border-b border-white/15 dark:border-white/8">
       <span className="text-xs font-bold tracking-wider uppercase text-light-text-muted dark:text-dark-text-muted w-24 flex-shrink-0 pt-0.5">
         {label}
       </span>
-      <span className="text-sm text-light-text dark:text-dark-text capitalize">{value}</span>
+      <span className={`text-sm text-light-text dark:text-dark-text${capitalize ? ' capitalize' : ''}`}>{value}</span>
     </div>
   )
 }

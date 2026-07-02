@@ -31,11 +31,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[var(--bg-base)]">
+    <main className="min-h-screen flex items-center justify-center bg-light-background dark:bg-dark-background">
       <GlassPanel className="w-full max-w-sm p-8 space-y-6">
         <div className="flex flex-col items-center text-center">
           <Logo height={48} />
-          <p className="text-sm text-[var(--text-tertiary)] mt-3">Sign in to continue</p>
+          <p className="text-sm text-light-text-muted dark:text-dark-text-muted mt-3">Sign in to continue</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <GlassInput

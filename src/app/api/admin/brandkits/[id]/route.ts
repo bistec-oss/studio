@@ -29,22 +29,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json()
   const { name, colors, fonts, logoUrl, isDefault } = body
 
-  if (isDefault) {
-    await prisma.brandKit.updateMany({
-      where: { isDefault: true, id: { not: params.id } },
-      data: { isDefault: false },
+  // Clearing the prior default + updating this row must be atomic so a
+  // failure can't leave the slot with zero (or two) defaults.
+  const updated = await prisma.$transaction(async (tx) => {
+    if (isDefault) {
+      await tx.brandKit.updateMany({
+        where: { isDefault: true, id: { not: params.id } },
+        data: { isDefault: false },
+      })
+    }
+    return tx.brandKit.update({
+      where: { id: params.id },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(colors !== undefined && { colors }),
+        ...(fonts !== undefined && { fonts }),
+        ...(logoUrl !== undefined && { logoUrl }),
+        ...(isDefault !== undefined && { isDefault }),
+      },
     })
-  }
-
-  const updated = await prisma.brandKit.update({
-    where: { id: params.id },
-    data: {
-      ...(name !== undefined && { name: name.trim() }),
-      ...(colors !== undefined && { colors }),
-      ...(fonts !== undefined && { fonts }),
-      ...(logoUrl !== undefined && { logoUrl }),
-      ...(isDefault !== undefined && { isDefault }),
-    },
   })
 
   return NextResponse.json(updated)
@@ -56,6 +59,10 @@ export async function DELETE(_: NextRequest, { params }: { params: { id: string 
 
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
   if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  if (kit.isDefault) {
+    return NextResponse.json({ error: 'Assign another default brand kit first' }, { status: 409 })
+  }
 
   await prisma.brandKit.update({
     where: { id: params.id },

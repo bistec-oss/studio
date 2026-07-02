@@ -27,23 +27,19 @@ interface PostRecord {
 interface DraftRecord {
   id: string
   exportUrl: string | null
-  copyText: string
   status: string
   createdAt: string
-  brief: { topic: string; channels: string[] }
+  brief: {
+    topic: string
+    channels: string[]
+    campaign: { name: string; brandKit: { name: string } | null } | null
+  }
   posts: PostRecord[]
-  campaigns: Array<{
-    campaign: {
-      name: string
-      brandKit: { name: string } | null
-    }
-  }>
 }
 
-// Flatten brandKitName from campaigns for PostCard
+// Flatten brandKitName from the brief's campaign for PostCard
 function toBriefCardProps(draft: DraftRecord) {
-  const brandKitName =
-    draft.campaigns[0]?.campaign?.brandKit?.name ?? null
+  const brandKitName = draft.brief.campaign?.brandKit?.name ?? null
   return { ...draft, brandKitName }
 }
 

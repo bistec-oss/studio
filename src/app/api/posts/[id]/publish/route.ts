@@ -33,7 +33,10 @@ export async function POST(
 
   const { draft } = post
   // Sign the stored export key for the publisher's one-off image fetch.
-  const signedExportUrl = (await resolveExportUrl(draft.exportUrl)) ?? ''
+  const signedExportUrl = await resolveExportUrl(draft.exportUrl)
+  if (!signedExportUrl) {
+    return NextResponse.json({ error: 'Draft has no export' }, { status: 422 })
+  }
 
   try {
     const { platformId } = await publishers[post.channel].publish(

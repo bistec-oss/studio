@@ -44,29 +44,35 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   await uploadObject(buffer, BUCKET_BRANDKITS, key, file.type || 'application/octet-stream')
   const url = publicUrl(BUCKET_BRANDKITS, key)
 
-  const artifact = await prisma.brandKitArtifact.create({
-    data: {
-      brandKitId: params.id,
-      type: type as ArtifactType,
-      name,
-      url,
-      feedToAI,
-    },
-  })
-
-  // Side-effects: keep BrandKit direct fields in sync
-  if (type === 'LOGO') {
-    await prisma.brandKit.update({ where: { id: params.id }, data: { logoUrl: url } })
-  }
-  if (type === 'FONT') {
-    const existing = Array.isArray(kit.fonts)
-      ? (kit.fonts as Array<{ name: string; url: string }>)
-      : []
-    await prisma.brandKit.update({
-      where: { id: params.id },
-      data: { fonts: [...existing, { name, url }] },
+  // Create + denormalized-field sync are atomic; fonts is re-read inside the
+  // transaction so concurrent uploads can't clobber each other's entries.
+  const artifact = await prisma.$transaction(async (tx) => {
+    const created = await tx.brandKitArtifact.create({
+      data: {
+        brandKitId: params.id,
+        type: type as ArtifactType,
+        name,
+        url,
+        feedToAI,
+      },
     })
-  }
+
+    if (type === 'LOGO') {
+      await tx.brandKit.update({ where: { id: params.id }, data: { logoUrl: url } })
+    }
+    if (type === 'FONT') {
+      const fresh = await tx.brandKit.findUnique({ where: { id: params.id }, select: { fonts: true } })
+      const existing = Array.isArray(fresh?.fonts)
+        ? (fresh.fonts as Array<{ name: string; url: string }>)
+        : []
+      await tx.brandKit.update({
+        where: { id: params.id },
+        data: { fonts: [...existing, { name, url }] },
+      })
+    }
+
+    return created
+  })
 
   return NextResponse.json(artifact, { status: 201 })
 }

@@ -5,6 +5,7 @@ import { X, ExternalLink, RotateCcw } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
+import { channelLabel } from '@/lib/channels'
 
 interface PostHistory {
   id: string
@@ -41,11 +42,6 @@ function formatDate(iso: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'short',
   })
-}
-
-const CHANNEL_LABELS: Record<string, string> = {
-  INSTAGRAM: 'Instagram',
-  LINKEDIN: 'LinkedIn',
 }
 
 const PLATFORM_URLS: Record<string, (id: string) => string> = {
@@ -105,9 +101,10 @@ export function PublishHistoryDrawer({
               const chipStatus = toChipStatus(post.status)
               const isFailed = post.status.toUpperCase() === 'FAILED'
               const displayDate = post.publishedAt ?? post.scheduledAt
+              const normalizedChannel = post.channel.toUpperCase()
               const platformUrl =
-                post.platformId && PLATFORM_URLS[post.channel]
-                  ? PLATFORM_URLS[post.channel](post.platformId)
+                post.platformId && PLATFORM_URLS[normalizedChannel]
+                  ? PLATFORM_URLS[normalizedChannel](post.platformId)
                   : null
 
               return (
@@ -115,7 +112,7 @@ export function PublishHistoryDrawer({
                   {/* Top row: channel + status */}
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium text-light-text dark:text-dark-text">
-                      {CHANNEL_LABELS[post.channel] ?? post.channel}
+                      {channelLabel(post.channel)}
                     </span>
                     <StatusChip status={chipStatus} />
                   </div>
@@ -133,7 +130,7 @@ export function PublishHistoryDrawer({
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-primary dark:text-primary-light hover:underline"
                     >
-                      View on {CHANNEL_LABELS[post.channel] ?? post.channel}
+                      View on {channelLabel(post.channel)}
                       <ExternalLink size={11} />
                     </a>
                   )}

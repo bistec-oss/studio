@@ -15,7 +15,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     },
   })
 
-  if (!campaign) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!campaign || campaign.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(campaign)
 }
 

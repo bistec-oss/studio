@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser } from '@/lib/auth'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
-import { DesignMode } from '@prisma/client'
+import { Channel, DesignMode } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
 
 export async function POST(req: NextRequest) {
@@ -41,6 +41,18 @@ export async function POST(req: NextRequest) {
   }
   if (!Array.isArray(channels) || channels.length === 0) {
     return NextResponse.json({ error: 'channels must be a non-empty array' }, { status: 400 })
+  }
+  // Normalize casing (legacy clients sent lowercase) and validate against the enum.
+  const normalizedChannels: Channel[] = []
+  for (const ch of channels) {
+    const upper = typeof ch === 'string' ? (ch.toUpperCase() as Channel) : null
+    if (!upper || !Object.values(Channel).includes(upper)) {
+      return NextResponse.json(
+        { error: `channels entries must be one of: ${Object.values(Channel).join(', ')}` },
+        { status: 400 }
+      )
+    }
+    normalizedChannels.push(upper)
   }
   if (!designMode || !['TEMPLATE', 'GENERATE'].includes(designMode)) {
     return NextResponse.json({ error: 'designMode must be TEMPLATE or GENERATE' }, { status: 400 })
@@ -118,7 +130,7 @@ export async function POST(req: NextRequest) {
       description: description?.trim() ?? null,
       goal: goal.trim(),
       tone: tone.trim(),
-      channels,
+      channels: normalizedChannels,
       aspectRatio: aspectRatio ?? 'SQUARE',
       designMode: designMode as DesignMode,
       campaignId: campaignId ?? null,

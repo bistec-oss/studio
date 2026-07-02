@@ -4,13 +4,14 @@ import React, { useState } from 'react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { Button } from '@/components/ui/Button'
+import { CHANNEL_VALUES, channelLabel } from '@/lib/channels'
+import type { Channel } from '@prisma/client'
 
 // Shared publish dialog: pick one or more channels and an optional schedule, then
 // fire a POST /api/posts per channel. Used from both the Library grid and the
 // draft review page so the publish UX (and validation) stays identical.
 
-const CHANNELS = ['INSTAGRAM', 'LINKEDIN'] as const
-type Channel = (typeof CHANNELS)[number]
+const CHANNELS = CHANNEL_VALUES
 
 export interface PublishDialogProps {
   draftId: string
@@ -87,7 +88,7 @@ export function PublishDialog({ draftId, onClose, onSuccess }: PublishDialogProp
                 onChange={() => toggleChannel(ch)}
                 className="accent-primary dark:accent-primary-light"
               />
-              {ch === 'INSTAGRAM' ? 'Instagram' : 'LinkedIn'}
+              {channelLabel(ch)}
             </label>
           ))}
         </div>

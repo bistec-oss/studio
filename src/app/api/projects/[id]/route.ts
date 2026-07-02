@@ -16,7 +16,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
     },
   })
 
-  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(project)
 }
 

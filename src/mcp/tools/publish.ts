@@ -13,7 +13,8 @@ export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' 
   if (!draft.exportUrl) throw new Error('Draft has no exportUrl — run export first')
 
   // Sign the stored export key for the publisher's one-off image fetch.
-  const signedExportUrl = (await resolveExportUrl(draft.exportUrl))!
+  const signedExportUrl = await resolveExportUrl(draft.exportUrl)
+  if (!signedExportUrl) throw new Error('Draft has no exportUrl — run export first')
 
   let platformId: string
   if (args.channel === 'INSTAGRAM') {

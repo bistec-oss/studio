@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
 import type { DraftStatus } from '@prisma/client'
+import { channelLabel as sharedChannelLabel } from '@/lib/channels'
 
 // Dashboard renders live data; never cache it.
 export const dynamic = 'force-dynamic'
@@ -42,9 +43,7 @@ function relativeTime(date: Date): string {
 
 function channelLabel(channels: string[]): string {
   if (!channels?.length) return '—'
-  return channels
-    .map(c => (c === 'INSTAGRAM' ? 'Instagram' : c === 'LINKEDIN' ? 'LinkedIn' : c))
-    .join(', ')
+  return channels.map(sharedChannelLabel).join(', ')
 }
 
 // ── Data ────────────────────────────────────────────────────────────────────
@@ -67,8 +66,14 @@ async function getDashboardData() {
       take: 8,
       orderBy: { createdAt: 'desc' },
       include: {
-        brief: { select: { topic: true, designMode: true, channels: true } },
-        campaigns: { take: 1, include: { campaign: { select: { name: true } } } },
+        brief: {
+          select: {
+            topic: true,
+            designMode: true,
+            channels: true,
+            campaign: { select: { name: true } },
+          },
+        },
       },
     }),
     prisma.post.findMany({
@@ -225,7 +230,7 @@ export default async function DashboardPage() {
                         </Link>
                       </td>
                       <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                        {d.campaigns[0]?.campaign?.name ?? '—'}
+                        {d.brief?.campaign?.name ?? '—'}
                       </td>
                       <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
                         {channelLabel(d.brief?.channels ?? [])}

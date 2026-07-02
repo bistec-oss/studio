@@ -22,6 +22,7 @@ import { PublishDialog } from '@/components/library/PublishDialog'
 import { apiFetch } from '@/lib/apiFetch'
 import type { AspectRatio } from '@prisma/client'
 import { aspectClassFor } from '@/lib/aspectRatio'
+import { channelLabel, channelCopyLimit } from '@/lib/channels'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,14 +79,12 @@ interface ConflictState {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const CHANNEL_LIMITS: Record<string, number> = { INSTAGRAM: 2200, LINKEDIN: 3000 }
-
 function copyLimitFor(channels: string[]): { channel: string; limit: number } {
   let chosen = { channel: 'LinkedIn', limit: 3000 }
   for (const ch of channels) {
-    const limit = CHANNEL_LIMITS[ch]
+    const limit = channelCopyLimit(ch)
     if (limit !== undefined && limit < chosen.limit) {
-      chosen = { channel: ch === 'INSTAGRAM' ? 'Instagram' : 'LinkedIn', limit }
+      chosen = { channel: channelLabel(ch), limit }
     }
   }
   return chosen
@@ -389,19 +388,24 @@ function RefinementPanel({
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!running) send(input)
+        }}
+      >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !running && send(input)}
           disabled={running}
           placeholder="e.g. Make the logo larger…"
           className="glass-input rounded-xl px-3 py-2 text-sm flex-1 text-light-text dark:text-dark-text"
         />
-        <Button size="sm" onClick={() => send(input)} disabled={running || !input.trim()}>
+        <Button type="submit" size="sm" disabled={running || !input.trim()}>
           {running ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
         </Button>
-      </div>
+      </form>
     </GlassPanel>
   )
 }

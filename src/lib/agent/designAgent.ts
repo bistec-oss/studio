@@ -149,19 +149,23 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
       try {
         // Re-inline any externalized assets before rendering, so the model never
         // had to carry the (huge) inline data and the PNG still matches the template.
+        // Keep the restored HTML in a local variable only — block.input stays the
+        // compact tokenized version, since it gets pushed into `messages` below and
+        // we don't want the multi-MB data: URIs re-sent to the model on the next turn.
+        let toolInput = block.input as ToolInput
         if (block.name === "renderHtml" && inlineAssets) {
           const html = (block.input as { html: string }).html
           const dropped = missingTokens(html, inlineAssets)
           if (dropped.length > 0) {
             console.warn(`[designAgent] model dropped ${dropped.length} asset placeholder(s): ${dropped.join(", ")}`)
           }
-          ;(block.input as { html: string }).html = restoreInlineAssets(html, inlineAssets)
+          toolInput = { ...toolInput, html: restoreInlineAssets(html, inlineAssets) }
         }
 
-        const result = await executeTool(block.name, block.input as ToolInput, briefId)
+        const result = await executeTool(block.name, toolInput, briefId)
 
         if (block.name === "renderHtml") {
-          lastHtml = (block.input as { html: string }).html
+          lastHtml = (toolInput as { html: string }).html
           // Persist the object KEY (signed per read), not the transient URL.
           lastExportUrl = (result as { key: string }).key
         }

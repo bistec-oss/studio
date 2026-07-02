@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentUser, forbiddenIfNotOwner } from '@/lib/auth'
-import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveCopyProvider } from '@/providers/registry'
 import type { BriefInput } from '@/providers/interfaces/CopyProvider'
 
@@ -17,8 +16,6 @@ export async function POST(req: NextRequest) {
   if (forbidden) return forbidden
 
   try {
-    const resolvedKit = await resolveBrandKit(brief.campaignId ?? undefined)
-
     const provider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
 
     const briefImages = Array.isArray(brief.briefImages)

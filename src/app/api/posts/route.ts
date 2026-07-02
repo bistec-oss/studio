@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
   }
 
   const scheduledAtDate = scheduledAt ? new Date(scheduledAt) : null
+  if (scheduledAtDate && Number.isNaN(scheduledAtDate.getTime())) {
+    return NextResponse.json({ error: 'scheduledAt must be a valid date' }, { status: 400 })
+  }
   const publishNow = !scheduledAtDate || scheduledAtDate <= new Date()
 
   // Scheduled path: persist a SCHEDULED row directly — no transient PENDING that
@@ -57,6 +60,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
   }
 
+  // Sign the stored export key for the publisher's one-off image fetch. Resolved
+  // before the post row is created so a resolution failure can't strand a PENDING row.
+  const signedExportUrl = await resolveExportUrl(draft.exportUrl)
+  if (!signedExportUrl) {
+    return NextResponse.json({ error: 'Draft has no export' }, { status: 422 })
+  }
+
   // Immediate path: the external publish call can't be inside a DB transaction,
   // so every exit (success, PublishError, or unexpected throw) must drive the
   // row to a terminal status — a PENDING row must never survive this handler.
@@ -69,9 +79,6 @@ export async function POST(req: NextRequest) {
       scheduledAt: scheduledAtDate,
     },
   })
-
-  // Sign the stored export key for the publisher's one-off image fetch.
-  const signedExportUrl = (await resolveExportUrl(draft.exportUrl))!
 
   try {
     const { platformId } = await publishers[channel as keyof typeof publishers].publish(
