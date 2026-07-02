@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Plus, Trash2, ToggleLeft, ToggleRight, Star, Instagram, Linkedin, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { apiFetch } from '@/lib/apiFetch'
 

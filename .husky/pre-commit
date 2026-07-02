@@ -15,3 +15,6 @@ if echo "$STAGED" | grep -qE '(^|/)\.env(\.[^e].*)?$'; then
   echo ""
   exit 1
 fi
+
+# Lint/format staged files (config in package.json "lint-staged")
+npx lint-staged

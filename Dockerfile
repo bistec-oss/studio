@@ -6,13 +6,19 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat chromium
 
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+# --ignore-scripts: the `prepare` script (husky install) needs devDependencies
+# that aren't installed here; the generated Prisma client is copied in from the
+# builder stage, so no postinstall output from this stage is needed.
+RUN npm ci --omit=dev --ignore-scripts
 
 # ─── Stage 2: builder ────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat chromium
+# openssl: required for `prisma generate` to detect OpenSSL 3 and download the
+# linux-musl-openssl-3.0.x query engine — without it detection falls back to
+# the openssl-1.1.x engine, which cannot load at runtime on this base image.
+RUN apk add --no-cache libc6-compat chromium openssl
 
 COPY package.json package-lock.json* ./
 RUN npm ci
@@ -23,13 +29,39 @@ COPY . .
 RUN npx prisma generate
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+
+# Build-time-only dummy env. `next build` imports server modules while collecting
+# page data, and src/lib/env.ts fails fast under NODE_ENV=production unless these
+# are validly shaped (64-char hex key, non-placeholder secret, non-"minioadmin"
+# MinIO creds). Not secrets, and not baked into the runner stage — real values
+# are injected at runtime via docker-compose `env_file: .env`.
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build \
+    TOKEN_ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000 \
+    BETTER_AUTH_SECRET=docker-build-dummy-secret-not-used-at-runtime \
+    MINIO_ACCESS_KEY=docker-build-dummy \
+    MINIO_SECRET_KEY=docker-build-dummy \
+    npm run build
+
+# Bundle the scheduler worker (src/scheduler/worker.ts is TypeScript, never
+# compiled by `next build`, and src/ isn't copied into the runner image) into a
+# single CJS file the runner can execute directly with plain `node`. esbuild
+# resolves the "@/*" path alias itself via tsconfig.json's compilerOptions.paths
+# (no --alias flag needed — verified against this repo's tsconfig). @prisma/client
+# is kept external: the runner gets the generated client + native query engine
+# copied in separately (see below), and bundling it would strand the engine binary.
+RUN npx esbuild src/scheduler/worker.ts \
+    --bundle \
+    --platform=node \
+    --format=cjs \
+    --outfile=dist/scheduler/worker.js \
+    --external:@prisma/client
 
 # ─── Stage 3: runner ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat chromium
+# openssl: Prisma's runtime OpenSSL detection needs it (see builder stage note).
+RUN apk add --no-cache libc6-compat chromium openssl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -49,6 +81,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy the bundled scheduler worker (see the esbuild step in the builder stage).
+COPY --from=builder /app/dist ./dist
 
 USER nextjs
 

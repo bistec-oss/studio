@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
-import type { APIRequestContext } from '@playwright/test'
-import { login, post, get, loginAs } from '../helpers/api'
+import { loginAs, type ApiClient } from '../helpers/api'
 
+const ADMIN_EMAIL = 'admin@bisteccare.lk'
+const ADMIN_PASSWORD = 'BistecStudio2026!'
 const EDITOR_EMAIL = 'editor@bisteccare.lk'
 const EDITOR_PASSWORD = 'BistecStudio2026!'
 
@@ -16,12 +17,12 @@ const EDITOR_PASSWORD = 'BistecStudio2026!'
 //   GET  /revisions                        → BARE ARRAY [{id, revisionNumber, instruction, exportUrl, createdAt}]
 //   POST /revisions/[revisionNumber]/restore → 200 {exportUrl}
 
-async function createExportedDraft(request: APIRequestContext) {
-  const kitRes = await post(request, '/api/admin/brandkits', { name: 'AGUI Test Kit', colors: ['#0284c7'] })
+async function createExportedDraft(api: ApiClient) {
+  const kitRes = await api.post('/api/admin/brandkits', { name: 'AGUI Test Kit', colors: ['#0284c7'] })
   const kit = await kitRes.json()
-  const campRes = await post(request, '/api/campaigns', { name: 'AGUI Campaign', brandKitId: kit.id })
+  const campRes = await api.post('/api/campaigns', { name: 'AGUI Campaign', brandKitId: kit.id })
   const camp = await campRes.json()
-  const briefRes = await post(request, '/api/briefs', {
+  const briefRes = await api.post('/api/briefs', {
     topic: 'AGUI Refinement Test',
     goal: 'Test AGUI',
     tone: 'casual',
@@ -31,22 +32,26 @@ async function createExportedDraft(request: APIRequestContext) {
     campaignId: camp.id,
   })
   const brief = await briefRes.json()
-  const assembleRes = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+  const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
   if (assembleRes.status() !== 200) return null
   const { draftId } = await assembleRes.json()
   // Return the full draft (assemble returns only {draftId,exportUrl}).
-  return (await get(request, `/api/drafts/${draftId}`)).json()
+  return (await api.get(`/api/drafts/${draftId}`)).json()
 }
 
 test.describe('AGUI design refinement', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
 
-  test('refinement instruction updates htmlContent and creates a DraftRevision', async ({ request }) => {
+  test('refinement instruction updates htmlContent and creates a DraftRevision', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(request)
+    const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
-    const refineRes = await post(request, `/api/drafts/${draft.id}/refine`, {
+    const refineRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'Make the background darker',
     })
     expect(refineRes.status()).toBe(200)
@@ -55,24 +60,24 @@ test.describe('AGUI design refinement', () => {
     expect(result.revisionId).toBeTruthy()
     expect(result.exportUrl).toMatch(/^https?:\/\//)
 
-    const updated = await (await get(request, `/api/drafts/${draft.id}`)).json()
+    const updated = await (await api.get(`/api/drafts/${draft.id}`)).json()
     expect(updated.htmlContent).toBeTruthy()
 
     // /revisions is a BARE ARRAY.
-    const revisions = await (await get(request, `/api/drafts/${draft.id}/revisions`)).json()
+    const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     expect(Array.isArray(revisions)).toBe(true)
     const rev = revisions.find((r: { id: string }) => r.id === result.revisionId)
     expect(rev).toBeTruthy()
     expect(rev.instruction).toBe('Make the background darker')
   })
 
-  test('conflicting instruction returns a conflict card; override applies it', async ({ request }) => {
+  test('conflicting instruction returns a conflict card; override applies it', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(request)
+    const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
     const originalHtml = draft.htmlContent
 
-    const refineRes = await post(request, `/api/drafts/${draft.id}/refine`, {
+    const refineRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'conflict_test: use completely off-brand colors',
     })
     expect(refineRes.status()).toBe(200)
@@ -82,11 +87,11 @@ test.describe('AGUI design refinement', () => {
     expect(body.conflictId).toBeTruthy()
 
     // htmlContent must NOT have changed yet.
-    const unchanged = await (await get(request, `/api/drafts/${draft.id}`)).json()
+    const unchanged = await (await api.get(`/api/drafts/${draft.id}`)).json()
     expect(unchanged.htmlContent).toBe(originalHtml)
 
     // Override → applies the withheld pendingHtml.
-    const overrideRes = await post(request, `/api/drafts/${draft.id}/refine`, {
+    const overrideRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'conflict_test: use completely off-brand colors',
       overrideConflictId: body.conflictId,
     })
@@ -94,35 +99,35 @@ test.describe('AGUI design refinement', () => {
     const overrideResult = await overrideRes.json()
     expect(overrideResult.reply).toBe('Design updated')
 
-    const overridden = await (await get(request, `/api/drafts/${draft.id}`)).json()
+    const overridden = await (await api.get(`/api/drafts/${draft.id}`)).json()
     expect(overridden.htmlContent).not.toBe(originalHtml)
   })
 
-  test('restore re-renders a revision snapshot and returns a signed exportUrl', async ({ request }) => {
+  test('restore re-renders a revision snapshot and returns a signed exportUrl', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(request)
+    const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
-    await post(request, `/api/drafts/${draft.id}/refine`, { instruction: 'Add a subtle gradient' })
-    const revisions = await (await get(request, `/api/drafts/${draft.id}/revisions`)).json()
+    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Add a subtle gradient' })
+    const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     expect(revisions.length).toBeGreaterThanOrEqual(1)
 
     const rev = revisions[0]
-    const restoreRes = await post(request, `/api/drafts/${draft.id}/revisions/${rev.revisionNumber}/restore`, {})
+    const restoreRes = await api.post(`/api/drafts/${draft.id}/revisions/${rev.revisionNumber}/restore`, {})
     expect(restoreRes.status()).toBe(200)
     const restored = await restoreRes.json()
     expect(restored.exportUrl).toMatch(/^https?:\/\//)
   })
 
-  test('revision numbers are unique and contiguous (H7)', async ({ request }) => {
+  test('revision numbers are unique and contiguous (H7)', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(request)
+    const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
-    await post(request, `/api/drafts/${draft.id}/refine`, { instruction: 'First edit' })
-    await post(request, `/api/drafts/${draft.id}/refine`, { instruction: 'Second edit' })
+    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'First edit' })
+    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Second edit' })
 
-    const revisions = await (await get(request, `/api/drafts/${draft.id}/revisions`)).json()
+    const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     const numbers = revisions.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
     expect(numbers.length).toBeGreaterThanOrEqual(2)
     expect(new Set(numbers).size).toBe(numbers.length) // all distinct
@@ -133,11 +138,15 @@ test.describe('AGUI design refinement', () => {
   // TC-AGUI-06 — Refining another user's draft is forbidden. Guards H2 (IDOR).
   test('an editor cannot refine a draft owned by the admin', async ({ request }) => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(request) // owned by the admin (beforeEach login)
+    const draft = await createExportedDraft(api) // owned by the admin (beforeEach loginAs)
     if (!draft) { test.skip(); return }
 
     const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
-    const res = await editor.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Make it pop' })
-    expect(res.status()).toBe(403)
+    try {
+      const res = await editor.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Make it pop' })
+      expect(res.status()).toBe(403)
+    } finally {
+      await editor.dispose()
+    }
   })
 })

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { login, post, get } from '../helpers/api'
+import { loginAs, type ApiClient } from '../helpers/api'
 
 // §L — Critical UI browser flows (docs/e2e-test-plan.md). These drive a real
 // browser (Playwright `page`), so the app must be serving on :3001 and a browser
@@ -20,19 +20,24 @@ async function pageLogin(page: Page) {
 
 // Mint an EXPORTED draft via the API (owned by the admin, so the logged-in
 // browser session can open it).
-async function apiDraft(request: Parameters<typeof post>[0], topic: string): Promise<string> {
-  await login(request, ADMIN_EMAIL, ADMIN_PASSWORD)
-  const kit = await (await post(request, '/api/admin/brandkits', { name: `UI Kit ${topic}`, colors: ['#0284c7'] })).json()
-  const camp = await (await post(request, '/api/campaigns', { name: `UI Camp ${topic}`, brandKitId: kit.id })).json()
-  const brief = await (await post(request, '/api/briefs', {
+async function apiDraft(api: ApiClient, topic: string): Promise<string> {
+  const kit = await (await api.post('/api/admin/brandkits', { name: `UI Kit ${topic}`, colors: ['#0284c7'] })).json()
+  const camp = await (await api.post('/api/campaigns', { name: `UI Camp ${topic}`, brandKitId: kit.id })).json()
+  const brief = await (await api.post('/api/briefs', {
     topic, goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
-  const assembled = await (await post(request, '/api/generate/assemble-b', { briefId: brief.id })).json()
+  const assembled = await (await api.post('/api/generate/assemble-b', { briefId: brief.id })).json()
   return assembled.draftId
 }
 
 test.describe('UI flows', () => {
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
+
   // TC-UI-01 — Login form → dashboard with KPIs (no 404).
   test('login lands on the dashboard with KPIs', async ({ page }) => {
     await pageLogin(page)
@@ -58,9 +63,9 @@ test.describe('UI flows', () => {
 
   // TC-UI-03 — Publish opens the publish dialog; picking a channel + Confirm fires
   // POST /api/posts (not a nav). Guards H5 and the shared PublishDialog wiring.
-  test('clicking Publish fires a POST /api/posts request', async ({ page, request }) => {
+  test('clicking Publish fires a POST /api/posts request', async ({ page }) => {
     if (!MOCKED()) { test.skip(); return }
-    const draftId = await apiDraft(request, `UI-Publish-${Date.now()}`)
+    const draftId = await apiDraft(api, `UI-Publish-${Date.now()}`)
     await pageLogin(page)
     await page.goto(`/drafts/${draftId}`)
 
@@ -79,10 +84,10 @@ test.describe('UI flows', () => {
   })
 
   // TC-UI-04 — The draft preview image loads in the browser (signed URL works). Guards H10.
-  test('the draft preview image loads', async ({ page, request }) => {
+  test('the draft preview image loads', async ({ page }) => {
     if (!MOCKED()) { test.skip(); return }
     const topic = `UI-Preview-${Date.now()}`
-    const draftId = await apiDraft(request, topic)
+    const draftId = await apiDraft(api, topic)
     await pageLogin(page)
     await page.goto(`/drafts/${draftId}`)
 
@@ -97,9 +102,9 @@ test.describe('UI flows', () => {
   })
 
   // TC-UI-05 — AGUI chat refine round-trip: typing an instruction fires /refine.
-  test('the AGUI chat fires a refine request', async ({ page, request }) => {
+  test('the AGUI chat fires a refine request', async ({ page }) => {
     if (!MOCKED()) { test.skip(); return }
-    const draftId = await apiDraft(request, `UI-AGUI-${Date.now()}`)
+    const draftId = await apiDraft(api, `UI-AGUI-${Date.now()}`)
     await pageLogin(page)
     await page.goto(`/drafts/${draftId}`)
 
@@ -114,7 +119,7 @@ test.describe('UI flows', () => {
     expect(req).toBeTruthy()
     // The refine response drives a new revision in the history panel.
     await expect.poll(
-      async () => (await (await get(request, `/api/drafts/${draftId}/revisions`)).json()).length,
+      async () => (await (await api.get(`/api/drafts/${draftId}/revisions`)).json()).length,
       { timeout: 15_000 },
     ).toBeGreaterThanOrEqual(1)
   })

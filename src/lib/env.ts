@@ -125,3 +125,24 @@ if (env.NODE_ENV === 'production') {
     )
   }
 }
+
+// ---------------------------------------------------------------------------
+// Cross-variable sanity checks (all environments).
+// ---------------------------------------------------------------------------
+// The MOCK_AI seam lives in the API pipeline (copy provider + design agent).
+// DESIGN_PROVIDER=cli routes generation through the local `claude -p` CLI,
+// which never consults the seam — so tests would silently burn real credits
+// and time out instead of hitting the mock. Fail fast at startup.
+// (testHooks.ts activates the seam only when MOCK_AI is exactly "true", but any
+// truthy-looking value signals intent to mock, so reject those too.)
+if (
+  env.DESIGN_PROVIDER === 'cli' &&
+  env.MOCK_AI &&
+  env.MOCK_AI !== '0' &&
+  env.MOCK_AI.toLowerCase() !== 'false'
+) {
+  throw new Error(
+    'MOCK_AI is incompatible with DESIGN_PROVIDER=cli — the CLI path bypasses the mock seam. ' +
+      "Use DESIGN_PROVIDER=claude-html for mocked runs (see .env.test / docs/e2e-test-plan.md).",
+  )
+}

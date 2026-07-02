@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, get, loginAs } from '../helpers/api'
+import { loginAs } from '../helpers/api'
 
 // §A — Authentication & RBAC (docs/e2e-test-plan.md).
 //
@@ -21,7 +21,9 @@ const EDITOR_PASSWORD = 'BistecStudio2026!'
 test.describe('Authentication & RBAC', () => {
   // TC-AUTH-01 — Login success sets a session cookie.
   test('login with valid admin credentials sets a session cookie', async ({ request }) => {
-    const res = await login(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+    const res = await request.post('/api/auth/sign-in/email', {
+      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    })
     expect(res.status()).toBe(200)
     expect(res.headers()['set-cookie'] ?? '').toContain('better-auth.session_token=')
   })
@@ -49,8 +51,8 @@ test.describe('Authentication & RBAC', () => {
 
   // TC-AUTH-04 — /api/me returns the lower-cased role. Guards H13.
   test('/api/me reports the role lower-cased for admin and editor', async ({ request }) => {
-    await login(request, ADMIN_EMAIL, ADMIN_PASSWORD)
-    const adminMe = await (await get(request, '/api/me')).json()
+    const admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+    const adminMe = await (await admin.get('/api/me')).json()
     expect(adminMe.role).toBe('admin')
     expect(adminMe.userId).toBeTruthy()
 
@@ -62,7 +64,6 @@ test.describe('Authentication & RBAC', () => {
   // TC-AUTH-05 — Admin-only mutations are gated for an editor → 403. Guards H4.
   test('an editor is forbidden from admin-only mutations', async ({ request }) => {
     // Seed a campaign + project as admin to target.
-    await login(request, ADMIN_EMAIL, ADMIN_PASSWORD)
     const { post: adminPost } = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
     const camp = await (await adminPost('/api/campaigns', { name: 'RBAC Campaign' })).json()
     const proj = await (await adminPost('/api/projects', { name: 'RBAC Project' })).json()
@@ -81,8 +82,8 @@ test.describe('Authentication & RBAC', () => {
   // TC-AUTH-06 — requireRole is case-insensitive: the admin (ADMIN in DB) reaches
   // an admin route (200, not 403). Guards the role-casing fix.
   test('admin (ADMIN in DB) is allowed through requireRole', async ({ request }) => {
-    await login(request, ADMIN_EMAIL, ADMIN_PASSWORD)
-    const res = await get(request, '/api/admin/brandkits')
+    const admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+    const res = await admin.get('/api/admin/brandkits')
     expect(res.status()).toBe(200)
   })
 

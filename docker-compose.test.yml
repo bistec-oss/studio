@@ -1,7 +1,5 @@
 # Isolated test environment — uses separate DB and MinIO instances.
 # Start with: docker compose -f docker-compose.test.yml up -d
-version: "3.8"
-
 services:
   postgres-test:
     image: postgres:16-alpine
@@ -15,7 +13,7 @@ services:
       - /var/lib/postgresql/data
 
   minio-test:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
     command: server /data --console-address ":9002"
     ports:
       - "127.0.0.1:9002:9001"

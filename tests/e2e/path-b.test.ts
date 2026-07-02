@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { login, post, get } from '../helpers/api'
+import { loginAs, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
 // Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment + seeded
@@ -8,25 +8,32 @@ import { prisma, dbAvailable } from '../helpers/db'
 // Real contract (src/app/api/generate/assemble-b/route.ts):
 //   POST /api/generate/assemble-b {briefId} → 200 {draftId, exportUrl}
 
-test.describe('Path B — freeform design generation', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+const ADMIN_EMAIL = 'admin@bisteccare.lk'
+const ADMIN_PASSWORD = 'BistecStudio2026!'
 
-  test('assemble-b produces an EXPORTED draft', async ({ request }) => {
+test.describe('Path B — freeform design generation', () => {
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
+
+  test('assemble-b produces an EXPORTED draft', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) {
       test.skip()
       return
     }
 
-    const kitRes = await post(request, '/api/admin/brandkits', {
+    const kitRes = await api.post('/api/admin/brandkits', {
       name: 'Path B Test Kit',
       colors: ['#7dd3fc', '#020617'],
     })
     const kit = await kitRes.json()
 
-    const campRes = await post(request, '/api/campaigns', { name: 'Path B Campaign', brandKitId: kit.id })
+    const campRes = await api.post('/api/campaigns', { name: 'Path B Campaign', brandKitId: kit.id })
     const camp = await campRes.json()
 
-    const briefRes = await post(request, '/api/briefs', {
+    const briefRes = await api.post('/api/briefs', {
       topic: 'AI Product Launch',
       description: 'Announcing our new AI assistant',
       goal: 'Generate buzz',
@@ -39,40 +46,40 @@ test.describe('Path B — freeform design generation', () => {
     expect(briefRes.status()).toBe(201)
     const brief = await briefRes.json()
 
-    const assembleRes = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+    const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
     expect(assembleRes.status()).toBe(200)
     const assembled = await assembleRes.json()
     expect(assembled.draftId).toBeTruthy()
     expect(assembled.exportUrl).toMatch(/^https?:\/\//)
 
-    const draftRes = await get(request, `/api/drafts/${assembled.draftId}`)
+    const draftRes = await api.get(`/api/drafts/${assembled.draftId}`)
     const draft = await draftRes.json()
     expect(draft.status).toBe('EXPORTED')
     expect(draft.htmlContent).toBeTruthy()
   })
 
-  test('assemble-b produces an EXPORTED draft for a 3:4 portrait brief', async ({ request }) => {
+  test('assemble-b produces an EXPORTED draft for a 3:4 portrait brief', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
 
-    const kit = await (await post(request, '/api/admin/brandkits', {
+    const kit = await (await api.post('/api/admin/brandkits', {
       name: 'Path B Portrait Kit', colors: ['#7dd3fc', '#020617'],
     })).json()
-    const camp = await (await post(request, '/api/campaigns', { name: 'Path B Portrait Campaign', brandKitId: kit.id })).json()
-    const brief = await (await post(request, '/api/briefs', {
+    const camp = await (await api.post('/api/campaigns', { name: 'Path B Portrait Campaign', brandKitId: kit.id })).json()
+    const brief = await (await api.post('/api/briefs', {
       topic: 'Portrait Freeform', goal: 'Generate buzz', tone: 'bold',
       channels: ['LINKEDIN'], aspectRatio: 'PORTRAIT', designMode: 'GENERATE',
       copyProviderKey: 'cli', campaignId: camp.id,
     })).json()
 
-    const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+    const res = await api.post('/api/generate/assemble-b', { briefId: brief.id })
     expect(res.status()).toBe(200)
-    const draftRes = await get(request, `/api/drafts/${(await res.json()).draftId}`)
+    const draftRes = await api.get(`/api/drafts/${(await res.json()).draftId}`)
     const draft = await draftRes.json()
     expect(draft.status).toBe('EXPORTED')
     expect(draft.brief.aspectRatio).toBe('PORTRAIT')
   })
 
-  test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async ({ request }) => {
+  test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) {
       test.skip()
       return
@@ -83,7 +90,7 @@ test.describe('Path B — freeform design generation', () => {
     // system default. With DB access we temporarily unset every default, assert
     // the 422, then restore. Without DB access we fall back to the lenient check
     // (the route must never 500).
-    const briefRes = await post(request, '/api/briefs', {
+    const briefRes = await api.post('/api/briefs', {
       topic: 'No-kit Brief',
       goal: 'Test fallback',
       tone: 'neutral',
@@ -94,7 +101,7 @@ test.describe('Path B — freeform design generation', () => {
     const brief = await briefRes.json()
 
     if (!dbAvailable) {
-      const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+      const res = await api.post('/api/generate/assemble-b', { briefId: brief.id })
       expect([200, 422]).toContain(res.status())
       return
     }
@@ -102,7 +109,7 @@ test.describe('Path B — freeform design generation', () => {
     const defaults = await prisma!.brandKit.findMany({ where: { isDefault: true, isDeleted: false } })
     try {
       await prisma!.brandKit.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
-      const res = await post(request, '/api/generate/assemble-b', { briefId: brief.id })
+      const res = await api.post('/api/generate/assemble-b', { briefId: brief.id })
       expect(res.status()).toBe(422)
       const body = await res.json()
       expect(JSON.stringify(body)).toContain('NO_BRAND_KIT')

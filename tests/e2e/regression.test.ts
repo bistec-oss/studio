@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test'
-import type { APIRequestContext } from '@playwright/test'
-import { login, post, get, authHeaders } from '../helpers/api'
+import { loginAs, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -17,39 +16,44 @@ import { resolve } from 'node:path'
 //   - Chromium-singleton cases (H11) need a real-render serve (MOCK_PUPPETEER off)
 //     — gated, and H11a/c require process observation (documented manual checks).
 
-const BASE = process.env.TEST_BASE_URL ?? 'http://localhost:3001'
+const ADMIN_EMAIL = 'admin@bisteccare.lk'
+const ADMIN_PASSWORD = 'BistecStudio2026!'
 const MOCKED = () => !!(process.env.MOCK_AI && process.env.MOCK_PUPPETEER)
 const REAL_RENDER = process.env.MOCK_PUPPETEER !== 'true'
 
-async function createExportedDraft(request: APIRequestContext, topic = 'Reg Test'): Promise<string> {
-  const kit = await (await post(request, '/api/admin/brandkits', { name: `Reg Kit ${topic}`, colors: ['#0284c7'] })).json()
-  const camp = await (await post(request, '/api/campaigns', { name: `Reg Camp ${topic}`, brandKitId: kit.id })).json()
-  const brief = await (await post(request, '/api/briefs', {
+async function createExportedDraft(api: ApiClient, topic = 'Reg Test'): Promise<string> {
+  const kit = await (await api.post('/api/admin/brandkits', { name: `Reg Kit ${topic}`, colors: ['#0284c7'] })).json()
+  const camp = await (await api.post('/api/campaigns', { name: `Reg Camp ${topic}`, brandKitId: kit.id })).json()
+  const brief = await (await api.post('/api/briefs', {
     topic, goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
-  const assembled = await (await post(request, '/api/generate/assemble-b', { briefId: brief.id })).json()
+  const assembled = await (await api.post('/api/generate/assemble-b', { briefId: brief.id })).json()
   return assembled.draftId
 }
 
 test.describe('§K — H7 atomicity', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
 
   // TC-REG-H7a — Concurrent refines yield distinct, contiguous revision numbers.
-  test('10 concurrent refines produce distinct sequential revision numbers', async ({ request }) => {
+  test('10 concurrent refines produce distinct sequential revision numbers', async () => {
     if (!MOCKED()) { test.skip(); return }
-    const draftId = await createExportedDraft(request, `H7a-${Date.now()}`)
+    const draftId = await createExportedDraft(api, `H7a-${Date.now()}`)
 
     const N = 10
     const results = await Promise.all(
       Array.from({ length: N }, (_, i) =>
-        post(request, `/api/drafts/${draftId}/refine`, { instruction: `concurrent edit ${i}` }),
+        api.post(`/api/drafts/${draftId}/refine`, { instruction: `concurrent edit ${i}` }),
       ),
     )
     // No 500s — the @@unique + $transaction retry holds under contention.
     for (const r of results) expect(r.status()).toBeLessThan(500)
 
-    const revisions = await (await get(request, `/api/drafts/${draftId}/revisions`)).json()
+    const revisions = await (await api.get(`/api/drafts/${draftId}/revisions`)).json()
     const numbers = revisions.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
     expect(numbers.length).toBe(N)
     expect(new Set(numbers).size).toBe(N) // all distinct
@@ -57,31 +61,31 @@ test.describe('§K — H7 atomicity', () => {
   })
 
   // TC-REG-H7b — Concurrent prompt version saves: distinct versions, ≤1 conflict, no 500.
-  test('5 concurrent prompt saves produce distinct versions without 500s', async ({ request }) => {
-    const kit = await (await post(request, '/api/admin/brandkits', { name: `H7b Kit ${Date.now()}` })).json()
+  test('5 concurrent prompt saves produce distinct versions without 500s', async () => {
+    const kit = await (await api.post('/api/admin/brandkits', { name: `H7b Kit ${Date.now()}` })).json()
 
     const results = await Promise.all(
       Array.from({ length: 5 }, (_, i) =>
-        post(request, `/api/admin/brandkits/${kit.id}/prompts`, { content: `voice ${i}`, createdBy: 'test' }),
+        api.post(`/api/admin/brandkits/${kit.id}/prompts`, { content: `voice ${i}`, createdBy: 'test' }),
       ),
     )
     for (const r of results) expect([201, 409]).toContain(r.status()) // never 500
 
-    const detail = await (await get(request, `/api/admin/brandkits/${kit.id}`)).json()
+    const detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
     const versions = detail.prompts.map((p: { version: number }) => p.version)
     expect(new Set(versions).size).toBe(versions.length) // versions are distinct
   })
 
   // TC-REG-H7c — No PENDING orphan posts ever persist. Guards H7.
-  test('no posts are left in transient PENDING state', async ({ request }) => {
+  test('no posts are left in transient PENDING state', async () => {
     if (!MOCKED()) { test.skip(); return }
     // Drive a publish (success) and a scheduled post, then assert nothing PENDING.
-    const d1 = await createExportedDraft(request, `H7c-pub-${Date.now()}`)
-    await post(request, '/api/posts', { draftId: d1, channel: 'INSTAGRAM' })
-    const d2 = await createExportedDraft(request, `H7c-sched-${Date.now()}`)
-    await post(request, '/api/posts', { draftId: d2, channel: 'LINKEDIN', scheduledAt: new Date(Date.now() + 3_600_000).toISOString() })
+    const d1 = await createExportedDraft(api, `H7c-pub-${Date.now()}`)
+    await api.post('/api/posts', { draftId: d1, channel: 'INSTAGRAM' })
+    const d2 = await createExportedDraft(api, `H7c-sched-${Date.now()}`)
+    await api.post('/api/posts', { draftId: d2, channel: 'LINKEDIN', scheduledAt: new Date(Date.now() + 3_600_000).toISOString() })
 
-    const list = await (await get(request, '/api/posts?pageSize=50')).json()
+    const list = await (await api.get('/api/posts?pageSize=50')).json()
     const pending = list.posts.filter((p: { status: string }) => p.status === 'PENDING')
     expect(pending.length).toBe(0)
   })
@@ -103,7 +107,11 @@ test.describe('§K — H9 indexes', () => {
 })
 
 test.describe('§K — H10 storage', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
 
   // TC-REG-H10a — Public IMAGES bucket: anonymous read of an uploaded asset → 200.
   test('a brief-image upload is anonymously readable', async ({ request }) => {
@@ -111,13 +119,13 @@ test.describe('§K — H10 storage', () => {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
       'base64',
     )
-    const up = await request.post(`${BASE}/api/briefs/images`, {
-      multipart: { file: { name: 'a.png', mimeType: 'image/png', buffer: png } },
-      headers: { ...authHeaders() },
+    const up = await api.multipart('/api/briefs/images', {
+      file: { name: 'a.png', mimeType: 'image/png', buffer: png },
     })
     expect(up.status()).toBe(200)
     const { url } = await up.json()
     expect(url).toMatch(/^https?:\/\//)
+    // Anonymous read: the unauthenticated `request` fixture (no session cookie).
     const anon = await request.get(url, { headers: {} })
     expect(anon.status()).toBe(200)
   })
@@ -126,8 +134,8 @@ test.describe('§K — H10 storage', () => {
   // readable; only the signed URL works.
   test('the export object is private but the signed URL works', async ({ request }) => {
     if (!MOCKED()) { test.skip(); return }
-    const draftId = await createExportedDraft(request, `H10b-${Date.now()}`)
-    const draft = await (await get(request, `/api/drafts/${draftId}`)).json()
+    const draftId = await createExportedDraft(api, `H10b-${Date.now()}`)
+    const draft = await (await api.get(`/api/drafts/${draftId}`)).json()
     const signed = draft.exportUrl as string
     expect(signed).toMatch(/^https?:\/\//)
 
@@ -141,30 +149,34 @@ test.describe('§K — H10 storage', () => {
   })
 
   // TC-REG-H10c — Legacy full-URL exportUrl passes through unchanged (no double-sign).
-  test('a legacy full-URL exportUrl is returned unchanged', async ({ request }) => {
+  test('a legacy full-URL exportUrl is returned unchanged', async () => {
     if (!MOCKED()) { test.skip(); return }
     test.skip(!dbAvailable, 'requires test DB access')
-    const draftId = await createExportedDraft(request, `H10c-${Date.now()}`)
+    const draftId = await createExportedDraft(api, `H10c-${Date.now()}`)
     const legacy = 'http://legacy.example.com/old-export.png'
     await prisma!.draft.update({ where: { id: draftId }, data: { exportUrl: legacy } })
 
-    const draft = await (await get(request, `/api/drafts/${draftId}`)).json()
+    const draft = await (await api.get(`/api/drafts/${draftId}`)).json()
     expect(draft.exportUrl).toBe(legacy) // resolveExportUrl passes http(s):// through verbatim
   })
 })
 
 test.describe('§K — H11 Puppeteer', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
 
   // TC-REG-H11b — Concurrency cap holds: parallel exports all complete (semaphore
   // queues, no crash/OOM). Requires a real-render serve (MOCK_PUPPETEER off).
-  test('parallel exports under the concurrency cap all succeed', async ({ request }) => {
+  test('parallel exports under the concurrency cap all succeed', async () => {
     test.skip(!REAL_RENDER, 'requires a real-Chromium serve (MOCK_PUPPETEER=false)')
     const draftIds = await Promise.all(
-      Array.from({ length: 8 }, (_, i) => createExportedDraft(request, `H11b-${i}-${Date.now()}`)),
+      Array.from({ length: 8 }, (_, i) => createExportedDraft(api, `H11b-${i}-${Date.now()}`)),
     )
     const results = await Promise.all(
-      draftIds.map(id => post(request, '/api/generate/export', { draftId: id })),
+      draftIds.map(id => api.post('/api/generate/export', { draftId: id })),
     )
     for (const r of results) {
       expect(r.status()).toBe(200)
@@ -186,13 +198,17 @@ test.describe('§K — H11 Puppeteer', () => {
 })
 
 test.describe('§K — H12 scheduler', () => {
-  test.beforeEach(async ({ request }) => { await login(request) })
+  let api: ApiClient
+  test.beforeEach(async ({ request }) => {
+    api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await api.dispose() })
 
   // Create a SCHEDULED post that is already due (scheduledAt in the past), with a
   // caption-driven publish outcome (topic sentinel). Returns the postId.
-  async function createDuePost(request: APIRequestContext, topic: string): Promise<string> {
-    const draftId = await createExportedDraft(request, topic)
-    const created = await (await post(request, '/api/posts', {
+  async function createDuePost(client: ApiClient, topic: string): Promise<string> {
+    const draftId = await createExportedDraft(client, topic)
+    const created = await (await client.post('/api/posts', {
       draftId, channel: 'INSTAGRAM', scheduledAt: new Date(Date.now() + 3_600_000).toISOString(),
     })).json()
     // Make it due now (the create route only accepts a future scheduledAt → SCHEDULED).
@@ -206,8 +222,8 @@ test.describe('§K — H12 scheduler', () => {
   // Drive one scheduler tick via the test-only HTTP seam (the app resolves the
   // scheduler's `@/` aliases natively; the runner cannot). The endpoint is
   // admin-gated and 404s unless MOCK_SOCIAL is set, so it's dormant in prod.
-  async function tick(request: APIRequestContext) {
-    return post(request, '/api/test/scheduler-tick', {})
+  async function tick(client: ApiClient) {
+    return client.post('/api/test/scheduler-tick', {})
   }
 
   // The DB-helper gate is enough — these read/write the test DB directly and
@@ -217,10 +233,10 @@ test.describe('§K — H12 scheduler', () => {
   })
 
   // TC-REG-H12a — Atomic claim: two concurrent runs publish a due post exactly once.
-  test('concurrent scheduler runs publish a due post exactly once', async ({ request }) => {
+  test('concurrent scheduler runs publish a due post exactly once', async () => {
     if (!MOCKED()) { test.skip(); return }
-    const postId = await createDuePost(request, `H12a-success-${Date.now()}`) // no sentinel → succeeds
-    await Promise.all([tick(request), tick(request)]) // FOR UPDATE SKIP LOCKED → only one claims it
+    const postId = await createDuePost(api, `H12a-success-${Date.now()}`) // no sentinel → succeeds
+    await Promise.all([tick(api), tick(api)]) // FOR UPDATE SKIP LOCKED → only one claims it
 
     const row = await prisma!.post.findUnique({ where: { id: postId } })
     expect(row?.status).toBe('PUBLISHED')
@@ -228,14 +244,14 @@ test.describe('§K — H12 scheduler', () => {
   })
 
   // TC-REG-H12b — Backoff retries then terminal FAILED after MAX_RETRIES.
-  test('a permanently failing post retries with backoff then FAILS', async ({ request }) => {
+  test('a permanently failing post retries with backoff then FAILS', async () => {
     if (!MOCKED()) { test.skip(); return }
-    const postId = await createDuePost(request, `__FAIL_ALWAYS__ H12b ${Date.now()}`)
+    const postId = await createDuePost(api, `__FAIL_ALWAYS__ H12b ${Date.now()}`)
 
     // Tick repeatedly; between ticks force the retry to be due again.
     let row = null
     for (let i = 0; i < 8; i++) {
-      await tick(request)
+      await tick(api)
       row = await prisma!.post.findUnique({ where: { id: postId } })
       if (row?.status === 'FAILED') break
       // The publish failed and rescheduled with a future nextRetryAt — pull it
@@ -248,16 +264,16 @@ test.describe('§K — H12 scheduler', () => {
   })
 
   // TC-REG-H12c — A stuck PUBLISHING row with a lapsed lease is reclaimed.
-  test('a stuck PUBLISHING post with a lapsed lease is reclaimed', async ({ request }) => {
+  test('a stuck PUBLISHING post with a lapsed lease is reclaimed', async () => {
     if (!MOCKED()) { test.skip(); return }
-    const postId = await createDuePost(request, `H12c-reclaim-${Date.now()}`) // succeeds on publish
+    const postId = await createDuePost(api, `H12c-reclaim-${Date.now()}`) // succeeds on publish
     // Simulate a dead worker: PUBLISHING with a lease that already lapsed.
     await prisma!.post.update({
       where: { id: postId },
       data: { status: 'PUBLISHING', nextRetryAt: new Date(Date.now() - 1000) },
     })
 
-    await tick(request)
+    await tick(api)
     const row = await prisma!.post.findUnique({ where: { id: postId } })
     expect(row?.status).toBe('PUBLISHED') // reclaimed and processed, not stranded
   })

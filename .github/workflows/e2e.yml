@@ -10,9 +10,15 @@ on:
   push:
     branches: [main]
 
+# One run per ref — a new push cancels the in-flight run for the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -70,7 +76,7 @@ jobs:
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
+            minio/minio:RELEASE.2024-10-13T13-34-11Z server /data
           # Wait for MinIO to accept connections.
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
@@ -90,11 +96,30 @@ jobs:
           node scripts/seed-hearts-talk.mjs
           node scripts/seed-cli-provider.mjs
 
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (browsers restored from cache)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
 
       - name: Start app (:3001, dev mode) and wait
         # Dev mode (NODE_ENV=development) so the test-only /api/test/scheduler-tick
@@ -102,10 +127,15 @@ jobs:
         # `npm run test:e2e:serve` flow.
         run: |
           npx next dev -p 3001 &
+          ready=0
           for i in $(seq 1 60); do
-            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/login)" = "200" ]; then echo "app ready"; break; fi
+            if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/login)" = "200" ]; then echo "app ready"; ready=1; break; fi
             sleep 2
           done
+          if [ "$ready" != "1" ]; then
+            echo "::error::App never became ready on :3001 after 120s"
+            exit 1
+          fi
 
       - name: Run E2E suite
         run: npx playwright test
@@ -117,3 +147,65 @@ jobs:
           name: playwright-report
           path: playwright-report
           retention-days: 7
+
+  # Fast unit-test gate — vitest over tests/unit/** (no DB, no browser).
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Unit tests
+        run: npm run test:unit
+
+  # Proves the production build path works: `next build` (standalone output)
+  # and the Docker image build. The e2e job runs `next dev` only, so without
+  # this gate a broken prod build ships silently.
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Dummy build-time env. `next build` runs app code under NODE_ENV=production,
+      # where src/lib/env.ts fails fast — so the values must be validly *shaped*:
+      # TOKEN_ENCRYPTION_KEY a 64-char hex string (32 bytes), BETTER_AUTH_SECRET
+      # non-placeholder, MinIO keys anything other than the rejected "minioadmin"
+      # default. None are real secrets; nothing connects to these endpoints.
+      DATABASE_URL: postgresql://x:x@localhost:5432/x
+      TOKEN_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      BETTER_AUTH_SECRET: ci-build-dummy-secret-not-used-at-runtime
+      MINIO_ACCESS_KEY: ci-build-dummy
+      MINIO_SECRET_KEY: ci-build-dummy
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Next.js production build (standalone)
+        run: npm run build
+
+      - name: Docker image build
+        run: docker build .
