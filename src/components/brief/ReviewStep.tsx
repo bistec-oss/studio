@@ -20,6 +20,7 @@ interface ReviewStepProps {
   goal: string
   tone: string
   images: UploadedImage[]
+  topic: string
   prompt: string
   providersLoaded: boolean
   copyProviderKey: string
@@ -37,6 +38,7 @@ export function ReviewStep({
   goal,
   tone,
   images,
+  topic,
   prompt,
   providersLoaded,
   copyProviderKey,
@@ -51,6 +53,7 @@ export function ReviewStep({
       </p>
 
       <div className="space-y-0">
+        <ReviewRow label="Topic" value={topic || '—'} />
         <ReviewRow label="Campaign" value={selectedCampaign?.name ?? 'Uncategorized'} />
         <ReviewRow label="Brand kit" value={selectedBrandKit?.name ?? '—'} />
         <ReviewRow label="Size" value={`${ASPECT_LABELS[aspectRatio]} · ${dimensionsLabel(aspectRatio)} px`} />

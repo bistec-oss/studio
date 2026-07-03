@@ -4,6 +4,14 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-03)
 
+**✅ Background images + CLI OAuth + Topic field + admin delete — 2026-07-03** (see `docs/handoff.md` top section):
+
+- **AI background images (Path B + refine):** `src/lib/agent/background.ts` pre-step — Haiku decides `{needed, prompt}` (biased yes at generation, instruction-gated at refine) → gpt-image-2 via `resolveImageProvider()` → public IMAGES bucket → URL injected into the design/refine prompts and stored on `Draft.imageUrl`. Never fails the pipeline (skips to CSS/SVG on any error); `MOCK_AI` skips it. Portrait→`1024x1536`, square→`1024x1024` (`imageSizeFor`).
+- **CLI-mode OAuth token:** set `CLAUDE_CODE_OAUTH_TOKEN` in `.env` (`claude setup-token`, ~1 yr) — headless `claude -p` spawns authenticate without the interactive login. API-key migration later = set `ANTHROPIC_API_KEY` + `DESIGN_PROVIDER=claude-html`, no code change.
+- **Brief wizard Topic field:** short required Topic → `Brief.topic` (library card name); the big prompt textarea → `Brief.description`. No schema/API change.
+- **Admin library delete:** `DELETE /api/drafts/[id]` (admin, transactional: posts → revisions → draft → orphaned brief) + trash button on `PostCard`.
+- **⚠️ To activate:** fill `CLAUDE_CODE_OAUTH_TOKEN=` and `OPENAI_API_KEY=` in `.env`. Background generation not yet runtime-verified with real keys (unit + mock-E2E green: 55/55 unit, 80/0/4 E2E).
+
 **✅ Improvement review fully remediated — 2026-07-02/03.** A four-reviewer whole-system design/code review found **77 findings** ([`docs/improvement-review-2026-07-02.md`](docs/improvement-review-2026-07-02.md)); **all 77 are remediated** across four phased commits on `main` (`689131cc`, `74725f28`, `b6fe63dd`, `8a1b2fae`). Structural changes to know about:
 
 - **One design pipeline.** The `DesignOrchestrator` layer is deleted; web routes, CLI mode, and the MCP/ACP surface all run the same `runPathBDesign`/assemble-a core. Prompts are pure builders in `src/lib/agent/prompts/` (a `PROMPT_VERSION` is stamped on every Draft); model policy is `modelFor(path, mode)` in `src/lib/agent/config.ts` (Path A haiku / Path B sonnet, API + CLI variants).

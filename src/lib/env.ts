@@ -55,6 +55,12 @@ const envSchema = z.object({
   CLAUDE_CLI_MODEL: z.string().optional(),
   // Diagnostics on by default; "0" silences (claudeCli.ts compares !== "0").
   CLAUDE_CLI_DEBUG: z.string().default('1'),
+  // Long-lived OAuth token (`claude setup-token`, ~1 year) so headless
+  // `claude -p` spawns authenticate without the developer's interactive login.
+  // ANTHROPIC_API_KEY outranks it in the CLI's own precedence chain, but the
+  // spawn strips that var (see claudeCli.ts), so in CLI mode this token — or,
+  // when unset, the logged-in session — is always the auth source.
+  CLAUDE_CODE_OAUTH_TOKEN: z.string().optional(),
 
   // --- Puppeteer renderer ---
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),

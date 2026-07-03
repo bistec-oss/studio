@@ -68,6 +68,8 @@ export default function NewBriefPage() {
 
         {step === 2 && (
           <ContentStep
+            topic={wizard.topic}
+            setTopic={wizard.setTopic}
             prompt={wizard.prompt}
             setPrompt={wizard.setPrompt}
             goal={wizard.goal}
@@ -99,6 +101,7 @@ export default function NewBriefPage() {
             goal={wizard.goal}
             tone={wizard.tone}
             images={wizard.images}
+            topic={wizard.topic}
             prompt={wizard.prompt}
             providersLoaded={wizard.providersLoaded}
             copyProviderKey={wizard.copyProviderKey}

@@ -47,6 +47,8 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
         htmlContent: result.htmlContent,
         // result.exportUrl is an EXPORTS object key; stored as-is, signed per read.
         exportUrl: result.exportUrl,
+        // Public URL of the AI-generated background (null when the pre-step skipped).
+        imageUrl: result.backgroundImageUrl,
         status: 'EXPORTED',
         promptVersion: PROMPT_VERSION,
       },

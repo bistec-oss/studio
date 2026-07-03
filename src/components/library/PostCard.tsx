@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ImageIcon } from 'lucide-react'
+import { ImageIcon, Trash2 } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
@@ -33,6 +33,8 @@ interface PostCardProps {
   isAdmin: boolean
   onPublish: (draftId: string, exportUrl: string) => void
   onViewHistory: (draftId: string, posts: PostSummary[]) => void
+  // Admin-only hard delete (button hidden when omitted).
+  onDelete?: (draftId: string) => void
 }
 
 type ChipStatus = 'draft' | 'exported' | 'scheduled' | 'published' | 'failed'
@@ -50,7 +52,7 @@ function deriveStatus(draft: PostCardDraft): ChipStatus {
   return 'draft'
 }
 
-export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardProps) {
+export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }: PostCardProps) {
   const chipStatus = deriveStatus(draft)
 
   return (
@@ -135,6 +137,18 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory }: PostCardP
           >
             History
           </Button>
+          {isAdmin && onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Delete ${draft.brief.topic}`}
+              title="Delete post"
+              className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 px-2"
+              onClick={() => onDelete(draft.id)}
+            >
+              <Trash2 size={15} />
+            </Button>
+          )}
         </div>
       </div>
     </GlassPanel>

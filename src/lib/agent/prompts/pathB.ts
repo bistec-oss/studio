@@ -17,13 +17,19 @@ export interface PathBPromptOptions {
   // Style-reference template HTML with inline assets already externalized
   // (structural HTML only — see pathB.ts runner for the extraction rationale).
   referenceTemplateHtml?: string | null
+  // Pre-generated AI background image (see agent/background.ts pre-step).
+  backgroundImageUrl?: string | null
 }
 
 export function buildPathBSystemPrompt(opts: PathBPromptOptions): string {
-  const { kit, mode, width, height, artifactUrls = [], referenceTemplateHtml } = opts
+  const { kit, mode, width, height, artifactUrls = [], referenceTemplateHtml, backgroundImageUrl } = opts
 
   const artifactLine = artifactUrls.length > 0
     ? `\n- Brand reference images: ${artifactUrls.join(', ')}`
+    : ''
+
+  const backgroundLine = backgroundImageUrl
+    ? `\n- Background image (MUST use): a background image has been pre-generated for this post at ${backgroundImageUrl} — use it as the full-bleed background layer (CSS background-image with background-size: cover, or an absolutely-positioned <img> behind the content). Layer a subtle scrim/gradient overlay where needed so all text stays clearly legible over it.`
     : ''
 
   const referenceTemplateLine = referenceTemplateHtml
@@ -39,7 +45,7 @@ Design requirements:
 - Use the brand colors as CSS custom properties
 - Apply brand fonts via @font-face (use the provided URLs) or fall back to system fonts
 - If the logo URL is provided, include it in the design
-- Output dimensions: ${width}×${height} pixels
+- Output dimensions: ${width}×${height} pixels${backgroundLine}
 
 Image intent rules (IMPORTANT):
 - Images tagged "embed": YOU MUST include these in the HTML layout via <img> tags

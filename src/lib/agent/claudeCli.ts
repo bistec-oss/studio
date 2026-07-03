@@ -91,14 +91,21 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
     )
   }
 
-  // CLI mode authenticates via the developer's local Claude Code (claude.ai)
-  // login — the whole point is keyless operation. If ANTHROPIC_API_KEY (or an
-  // auth token) is present in the server env, the spawned `claude` CLI prefers
-  // it as the auth source; an invalid/placeholder key then makes `claude -p`
-  // exit 1. Strip those vars from the child env so it uses the logged-in session.
+  // CLI-mode auth, in order of preference:
+  //   1. CLAUDE_CODE_OAUTH_TOKEN — a long-lived token from `claude setup-token`,
+  //      so headless spawns work without (and independent of) the developer's
+  //      interactive login. Forwarded explicitly below.
+  //   2. The developer's logged-in Claude Code session (when no token is set).
+  // ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are stripped either way: the CLI
+  // prefers them over both sources above, so a stray invalid/placeholder key in
+  // the server env would make `claude -p` exit 1 (and a real one would silently
+  // bill the API instead of the subscription).
   const childEnv = { ...process.env }
   delete childEnv.ANTHROPIC_API_KEY
   delete childEnv.ANTHROPIC_AUTH_TOKEN
+  if (env.CLAUDE_CODE_OAUTH_TOKEN) {
+    childEnv.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN
+  }
 
   // --strict-mcp-config + no --mcp-config => load ZERO MCP servers. Without it the
   // spawned CLI inherits the developer's full Claude Code config (Canva, Google

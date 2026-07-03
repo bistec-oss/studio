@@ -9,9 +9,16 @@ import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pipelineMode } from '@/lib/agent/config'
 import { buildPathBSystemPrompt, buildPathBUserMessage } from '@/lib/agent/prompts/pathB'
 import { parseBriefImages } from '@/lib/agent/briefInput'
+import { generateBackgroundForBrief } from '@/lib/agent/background'
 
 // Re-export for existing importers; canonical home is agent/briefInput.ts.
 export { buildBriefInput } from '@/lib/agent/briefInput'
+
+export type PathBDesignResult = DesignAgentResult & {
+  // Public URL of the AI-generated background used in this design (stored on
+  // Draft.imageUrl by the callers), or null when the pre-step skipped.
+  backgroundImageUrl: string | null
+}
 
 // Runs the Path B (freeform) design pipeline for a given brief + already-generated
 // copy, dispatching CLI vs API. Single source of truth for initial generation
@@ -21,7 +28,7 @@ export async function runPathBDesign(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
-): Promise<DesignAgentResult> {
+): Promise<PathBDesignResult> {
   // Feed-to-AI artifact URLs (brand reference imagery).
   const artifacts = await prisma.brandKitArtifact.findMany({
     where: { brandKitId: kit.id, feedToAI: true },
@@ -54,6 +61,11 @@ export async function runPathBDesign(
   const mode = pipelineMode()
   const briefImages = parseBriefImages(brief.briefImages)
 
+  // Background pre-step: Claude (Haiku) decides + gpt-image generates a
+  // full-bleed background before the design call. Null on skip/failure — the
+  // design proceeds with CSS/SVG visuals as before. See agent/background.ts.
+  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText)
+
   const systemPrompt = buildPathBSystemPrompt({
     kit,
     mode,
@@ -61,6 +73,7 @@ export async function runPathBDesign(
     height,
     artifactUrls,
     referenceTemplateHtml,
+    backgroundImageUrl,
   })
   const userMessage = buildPathBUserMessage({
     topic: brief.topic,
@@ -75,9 +88,9 @@ export async function runPathBDesign(
     briefImages,
   })
 
-  return isCliMode()
-    ? runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id, width, height, model: modelFor('B', 'cli') })
-    : runDesignAgent({
+  const result = isCliMode()
+    ? await runDesignAgentCli({ systemPrompt, userMessage, briefId: brief.id, width, height, model: modelFor('B', 'cli') })
+    : await runDesignAgent({
         systemPrompt,
         userMessage,
         briefId: brief.id,
@@ -86,4 +99,6 @@ export async function runPathBDesign(
         width,
         height,
       })
+
+  return { ...result, backgroundImageUrl }
 }

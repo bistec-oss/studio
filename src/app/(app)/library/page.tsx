@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
@@ -55,6 +57,7 @@ function SkeletonCard() {
 
 export default function LibraryPage() {
   const queryClient = useQueryClient()
+  const confirm = useConfirm()
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('ALL')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
@@ -115,6 +118,23 @@ export default function LibraryPage() {
   async function handleRetry(postId: string) {
     await apiFetch(`/api/posts/${postId}/publish`, { method: 'POST' })
     invalidateLibrary()
+  }
+
+  async function handleDelete(draftId: string) {
+    const ok = await confirm({
+      title: 'Delete this post?',
+      description:
+        'This permanently removes the draft, its revisions, its publish history (any scheduled publish is cancelled), and its brief. This cannot be undone.',
+      confirmLabel: 'Delete',
+    })
+    if (!ok) return
+    try {
+      await apiFetch(`/api/drafts/${draftId}`, { method: 'DELETE' })
+      toast.success('Post deleted')
+      invalidateLibrary()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed')
+    }
   }
 
   return (
@@ -184,6 +204,7 @@ export default function LibraryPage() {
                 onViewHistory={(draftId, posts) =>
                   setSelectedDraft({ id: draftId, posts: posts as PostRecord[] })
                 }
+                onDelete={handleDelete}
               />
             ))}
           </div>

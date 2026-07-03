@@ -62,6 +62,8 @@ export interface UseBriefWizardResult {
   visibleTemplates: TemplateSummary[]
 
   // Step 2 — Content
+  topic: string
+  setTopic: React.Dispatch<React.SetStateAction<string>>
   prompt: string
   setPrompt: React.Dispatch<React.SetStateAction<string>>
   goal: string
@@ -105,6 +107,9 @@ export function useBriefWizard(): UseBriefWizardResult {
   const [referenceTemplateId, setReferenceTemplateId] = useState('')
 
   // Step 2 — Content
+  // topic = the short post title (Brief.topic — names the post in the library);
+  // prompt = the full brief text (Brief.description — Claude's prompt context).
+  const [topic, setTopic] = useState('')
   const [prompt, setPrompt] = useState('')
   const [goal, setGoal] = useState('awareness')
   const [tone, setTone] = useState('professional')
@@ -251,7 +256,7 @@ export function useBriefWizard(): UseBriefWizardResult {
     if (s === 0) return true // campaign is optional (Uncategorized is valid)
     if (s === 1)
       return brandKitId !== '' && (designMode === 'GENERATE' || templateId !== '')
-    if (s === 2) return prompt.trim().length > 10
+    if (s === 2) return topic.trim().length > 0 && prompt.trim().length > 10
     if (s === 3) return !uploading
     return true
   }
@@ -267,7 +272,10 @@ export function useBriefWizard(): UseBriefWizardResult {
     try {
       const embedImages = images.filter(i => i.intent === 'embed')
       const briefBody = {
-        topic: prompt.trim(),
+        // Short title → Brief.topic (names the post in the library);
+        // full prompt → Brief.description (Claude uses both).
+        topic: topic.trim(),
+        description: prompt.trim(),
         goal,
         tone,
         channels: DEFAULT_CHANNELS,
@@ -351,6 +359,8 @@ export function useBriefWizard(): UseBriefWizardResult {
     referenceTemplateId,
     setReferenceTemplateId,
     visibleTemplates,
+    topic,
+    setTopic,
     prompt,
     setPrompt,
     goal,

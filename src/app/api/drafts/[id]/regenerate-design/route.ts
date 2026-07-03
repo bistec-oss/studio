@@ -68,6 +68,8 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
       data: {
         htmlContent: result.htmlContent,
         exportUrl: result.exportUrl,
+        // New background (or null when the pre-step skipped — clears the stale one).
+        imageUrl: result.backgroundImageUrl,
         status: 'EXPORTED',
         pendingConflict: Prisma.JsonNull,
         promptVersion: PROMPT_VERSION,

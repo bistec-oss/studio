@@ -31,8 +31,22 @@ import {
 const prisma = new PrismaClient()
 
 // ── Skill asset source (bistec-designer-v2/assets) ──────────────────────────
+// The skill install lives under the CURRENT user's %APPDATA% (the plugin/session
+// segments are stable across machines). Override with BISTEC_ASSETS_DIR when the
+// assets live elsewhere.
 const ASSETS_DIR =
-  "C:\\Users\\Damian\\AppData\\Roaming\\Claude\\local-agent-mode-sessions\\skills-plugin\\3fa60060-0e0e-496a-b432-dd74cf6e07b8\\2d2125cb-2f6d-4bd4-8737-8d27595717fb\\skills\\bistec-designer-v2\\assets"
+  process.env.BISTEC_ASSETS_DIR ??
+  path.join(
+    process.env.APPDATA ?? "C:\\Users\\Damian\\AppData\\Roaming",
+    "Claude",
+    "local-agent-mode-sessions",
+    "skills-plugin",
+    "3fa60060-0e0e-496a-b432-dd74cf6e07b8",
+    "2d2125cb-2f6d-4bd4-8737-8d27595717fb",
+    "skills",
+    "bistec-designer-v2",
+    "assets",
+  )
 
 const LOGO_FILES = [
   { file: "master_logo.png", name: "BISTEC Global — full logo (colour)", primary: true },

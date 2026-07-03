@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
@@ -107,4 +107,33 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
   const result = await loadDraft(params.id)
   return NextResponse.json(result?.data)
+})
+
+// Admin-only hard delete: removes the draft with its publish history (Post rows —
+// a SCHEDULED post is thereby cancelled), revisions, and the parent Brief when no
+// other draft references it. No cascades exist on these relations, so children
+// are deleted first, all in one transaction.
+export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+  const draft = await prisma.draft.findUnique({
+    where: { id: params.id },
+    select: { id: true, briefId: true },
+  })
+  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+
+  const briefDeleted = await prisma.$transaction(async (tx) => {
+    await tx.post.deleteMany({ where: { draftId: draft.id } })
+    await tx.draftRevision.deleteMany({ where: { draftId: draft.id } })
+    await tx.draft.delete({ where: { id: draft.id } })
+
+    // Sweep the brief only when it has become an orphan (the schema allows
+    // multiple drafts per brief, so count before deleting).
+    const remaining = await tx.draft.count({ where: { briefId: draft.briefId } })
+    if (remaining === 0) {
+      await tx.brief.delete({ where: { id: draft.briefId } })
+      return true
+    }
+    return false
+  })
+
+  return NextResponse.json({ deleted: true, briefDeleted })
 })

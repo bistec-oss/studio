@@ -14,6 +14,7 @@ import { AgentToolLimitError } from '@/lib/agent/types'
 import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pathForDesignMode, pipelineMode } from '@/lib/agent/config'
 import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/prompts/refine'
+import { generateBackgroundForRefine } from '@/lib/agent/background'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
 
@@ -108,7 +109,13 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   const mode = pipelineMode()
   // Refine uses the same model as the originating path: Path A → haiku, Path B → sonnet.
   const path = pathForDesignMode(draft.brief.designMode)
-  const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets })
+
+  // Background pre-step: generates a new background ONLY when the instruction
+  // asks for one (e.g. "change the background to a city skyline"); null
+  // otherwise, and on any failure. See agent/background.ts.
+  const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction)
+
+  const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
   const userMessage = buildRefineUserMessage({
     slimHtml,
     hasHtml: !!draft.htmlContent,
@@ -131,7 +138,7 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
         height,
         model: modelFor(path, 'cli'),
       })
-      return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl)
+      return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
@@ -168,7 +175,7 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
       return NextResponse.json({ conflict: true, explanation: conflict.explanation, conflictId })
     }
 
-    return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl)
+    return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
   } catch (err) {
     if (err instanceof AgentToolLimitError) {
       return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
@@ -184,7 +191,10 @@ async function commitRevision(
   newHtml: string,
   width: number,
   height: number,
-  exportUrl?: string
+  exportUrl?: string,
+  // Set only when the background pre-step generated a new image for this
+  // instruction; undefined/null leaves Draft.imageUrl untouched.
+  backgroundImageUrl?: string | null
 ) {
   // finalExportUrl is an EXPORTS object key (from runDesignAgent's renderHtml).
   // The override path has no fresh render — render the pending HTML now to get a key.
@@ -218,6 +228,7 @@ async function commitRevision(
         exportUrl: finalExportUrl,
         pendingConflict: Prisma.JsonNull,
         promptVersion: PROMPT_VERSION,
+        ...(backgroundImageUrl ? { imageUrl: backgroundImageUrl } : {}),
       },
     })
 

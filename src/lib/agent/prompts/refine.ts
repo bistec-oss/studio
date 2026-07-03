@@ -13,26 +13,36 @@ export interface RefinePromptOptions {
   width: number
   height: number
   hasInlineAssets: boolean
+  // Freshly generated background image (agent/background.ts refine pre-step) —
+  // present only when the instruction asked for a new background.
+  backgroundImageUrl?: string | null
+}
+
+// Instruction fragment injected when the refine pre-step generated a new background.
+function backgroundNote(backgroundImageUrl?: string | null): string {
+  return backgroundImageUrl
+    ? `\n\nNew background image: a background image has been generated for this instruction at ${backgroundImageUrl} — replace the design's current background with it (full-bleed: CSS background-image with background-size: cover, or an absolutely-positioned <img> behind the content), adding a subtle scrim/overlay where needed so text stays legible.`
+    : ''
 }
 
 export function buildRefineSystemPrompt(opts: RefinePromptOptions): string {
-  const { kit, mode, width, height, hasInlineAssets } = opts
+  const { kit, mode, width, height, hasInlineAssets, backgroundImageUrl } = opts
 
   if (mode === 'cli') {
     return `You are a design refinement agent. Apply the user's instruction as a targeted edit to the HTML, staying on-brand. Preserve everything the instruction does not touch.
 
-${buildBrandKitSystemContext(kit)}${placeholderNote(hasInlineAssets)}
+${buildBrandKitSystemContext(kit)}${placeholderNote(hasInlineAssets)}${backgroundNote(backgroundImageUrl)}
 
 Output protocol (single-shot — you have NO tools):
 - Apply the user's instruction as a targeted edit to the HTML above. Change ONLY what the instruction requires; preserve all other structure, layout, and CSS.
 - Keep the ${width}×${height} px canvas size unless the instruction explicitly asks to resize it.
-- Do NOT add external image/CDN references other than any URL explicitly named in the instruction. Brand font @import URLs are allowed.
+- Do NOT add external image/CDN references other than any URL explicitly named in the instruction or this system prompt. Brand font @import URLs are allowed.
 - Output ONLY the complete updated HTML document, starting with <!DOCTYPE html> and ending with </html>. No markdown code fences, no commentary.`
   }
 
   return `You are a design refinement agent. Here is the current HTML design. Apply the user's instruction as a targeted edit — change only what the instruction requires and preserve everything else.
 
-${buildBrandKitSystemContext(kit)}
+${buildBrandKitSystemContext(kit)}${backgroundNote(backgroundImageUrl)}
 
 Compliance instructions:
 Before applying any change, check if it conflicts with the brand kit (e.g. introducing off-brand colors, removing the logo, replacing brand fonts). If it does NOT conflict, apply the change and call renderHtml(html, ${width}, ${height}) as your final step to produce the finished PNG.

@@ -1,9 +1,25 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-03 (latest: dev-DB library cleanup — see top section below)
+**Date:** 2026-07-03 (latest: background-image pre-step + CLI OAuth token + Topic field + admin delete — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## 2026-07-03 (latest) — Background-image pre-step, CLI OAuth token, Topic field, admin delete
+
+**Branch: `main`.** Four features + a second-machine environment/DB repair. Gates: tsc clean, lint clean (2 pre-existing warnings only), **55/55 vitest unit tests** (10 new), full E2E **80 passed / 0 failed / 4 intentional skips** (unchanged baseline).
+
+1. **AI background images (Path B + refine) — `src/lib/agent/background.ts`.** A dedicated pre-step before the design call: Claude (**Haiku**, `modelForBackground()` in `config.ts`) answers strict JSON `{needed, prompt}` — biased **toward yes** at generation ("most posts need a background"), **neutral** at refine (only when the instruction asks for a new background) — then the server calls the resolved IMAGE provider (**gpt-image-2**, `OPENAI_API_KEY` env fallback), persists via `persistDataUrlImage(…, 'background')` (public IMAGES bucket), and injects the URL into the design/refine prompts as the full-bleed background layer (with a scrim-for-legibility instruction). Same behavior in CLI and API mode (one pipeline). Stored on **`Draft.imageUrl`** by `assemble-b`, `regenerate-design`, and refine's `commitRevision`.
+   - **Never fails the pipeline**: no provider / declined decision / provider error / bad JSON → `null` → design proceeds with CSS/SVG as before. `MOCK_AI` skips the step (E2E stays deterministic; the mock-IMAGE-provider seam for TC-GEN-05 is still open).
+   - Prompt rules ban text/logos in the raster (typography is the HTML layer's job). Portrait posts request `1024x1536`, square `1024x1024` (`imageSizeFor`; `ImageProvider.generateImage` gained an optional `size` param). Decision parser (`parseBackgroundDecision`) mirrors `parseConflict`'s fence-strip + outermost-`{}` pattern; unit-tested in `tests/unit/background.test.ts`.
+2. **CLI OAuth token (`CLAUDE_CODE_OAUTH_TOKEN`).** `claudeCli.ts` forwards the token (from `env.ts`, validated) into every spawned `claude -p`, so headless CLI-mode generation no longer depends on the developer's interactive login. Generate with `claude setup-token` (~1-year lifetime, Pro/Max/Team/Enterprise). The spawn still strips `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` (they outrank the token in the CLI's precedence chain), so **switching to an API key later = set `ANTHROPIC_API_KEY` + `DESIGN_PROVIDER=claude-html` — no code change**. Documented in `.env.example`; `.env` has the empty placeholder awaiting the real token.
+3. **Brief wizard "Topic" field.** The Content step now has a short required **Topic** input → `Brief.topic` (names the post in the library), and the big prompt textarea maps to **`Brief.description`** (previously the whole prompt was stuffed into `topic`, so library cards showed paragraph-length names). Both fields already flowed into Claude's prompts; **no API or schema change**. Review step shows the topic; step validation requires topic non-empty + prompt > 10 chars.
+4. **Admin delete from the library.** New **`DELETE /api/drafts/[id]`** (`withAdmin`): one transaction deletes Posts (a SCHEDULED post is thereby cancelled) → DraftRevisions → Draft → the Brief when no other draft references it (no cascades exist on these relations). `PostCard` gets an admin-only trash button wired through `useConfirm()` + sonner toasts + React Query invalidation on the library page.
+5. **This-machine environment + dev-DB repair** (fresh clone on a second device): `node_modules` was out of sync with the lockfile (74 packages added) + 2 unapplied migrations + stale Prisma client — the classic "Next.js error after pull" trio. Also the **MinIO volume was wiped** this session (the pinned `RELEASE.2024-10-13` image couldn't read a newer volume's `xl meta version 3` format — user chose wipe over pinning a newer image). Repairs: re-rendered the broken "Announcing bistec-studio" draft from stored `htmlContent` (721 KB PNG; its legacy expired-presigned `exportUrl` migrated to a modern object key), restored the 3 Bistec master logos via `refine-bistec-brandkit.mjs` (**script's `ASSETS_DIR` is now portable** — derives from `%APPDATA%`, override with `BISTEC_ASSETS_DIR`), and swept **9 orphan test briefs**. Final dev-DB state on this machine: **2 drafts + 2 briefs** ("Announcing bistec-studio" SQUARE + "House Standings" PORTRAIT), no orphans.
+
+> **To activate the new features:** fill `CLAUDE_CODE_OAUTH_TOKEN=` and `OPENAI_API_KEY=` in `.env` (both placeholders exist). Without the OpenAI key the background pre-step logs "no image provider available" and generation proceeds exactly as before. Background generation is **not yet runtime-verified end-to-end** (needs the real keys) — the decision parser, prompts, and skip paths are unit-tested and the full mock E2E suite is green.
 
 ---
 

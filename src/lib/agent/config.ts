@@ -35,6 +35,16 @@ export function modelFor(path: DesignPath, mode: PipelineMode = pipelineMode()):
   return mode === 'cli' ? CLI_MODELS[path] : API_MODELS[path]
 }
 
+// Background-image decision step (small constrained JSON task) → Haiku in both
+// modes, mirroring the Path A rationale.
+const BACKGROUND_MODELS: Record<PipelineMode, string> = {
+  api: 'claude-haiku-4-5-20251001',
+  cli: 'haiku',
+}
+export function modelForBackground(mode: PipelineMode = pipelineMode()): string {
+  return BACKGROUND_MODELS[mode]
+}
+
 // The design path a brief runs on, derived from its designMode.
 export function pathForDesignMode(designMode: string): DesignPath {
   return designMode === 'TEMPLATE' ? 'A' : 'B'
