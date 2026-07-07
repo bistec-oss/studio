@@ -11,6 +11,8 @@ import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import { CampaignBriefingSection } from '@/components/campaigns/CampaignBriefingSection'
+import { ScheduledQueueSection } from '@/components/campaigns/ScheduledQueueSection'
 import type { Campaign, BrandKitSummary, ProjectSummary, ResolvedBrandKitResponse } from '@/lib/api-types'
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -114,6 +116,14 @@ export default function CampaignDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         {/* Stats */}
         <div className="space-y-4">
+          <CampaignBriefingSection campaignId={params.id} isAdmin={isAdmin} />
+
+          <ScheduledQueueSection
+            campaignId={params.id}
+            resolvedKitId={resolved?.kit?.id ?? null}
+            isAdmin={isAdmin}
+          />
+
           <GlassPanel className="p-4">
             <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted mb-3">
               Briefs ({campaign._count.briefs})
