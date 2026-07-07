@@ -46,7 +46,11 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    # Pinned for reproducibility. ⚠️ Keep >= 2025 releases: the volume's on-disk
+    # format is "xl meta version 3", which pre-2025 images (e.g. the previous
+    # RELEASE.2024-10-13 pin) cannot read — they crash-loop with
+    # "Unable to initialize backend: decodeXLHeaders: Unknown xl meta version 3".
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     ports:
       - "127.0.0.1:9001:9001"
