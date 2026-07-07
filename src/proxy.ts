@@ -5,7 +5,9 @@ import { NextRequest, NextResponse } from "next/server"
 // the route-level key check governs (and fails closed when no key is configured).
 const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp"]
 
-export function middleware(req: NextRequest) {
+// Next 16: the `middleware` convention is deprecated in favour of `proxy`
+// (runs on the nodejs runtime; this cookie-presence gate is runtime-agnostic).
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Exact path or a true sub-path — avoids a public prefix matching an

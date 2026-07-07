@@ -12,6 +12,10 @@ export interface AuthedUser {
   role: Role
 }
 
+// Next 15+/16: route-handler `params` is a Promise. The wrapper awaits it once
+// and hands handlers a RESOLVED params object, so the 30+ call sites keep their
+// synchronous `{ params }` destructuring.
+type IncomingRouteContext<P> = { params: Promise<P> }
 type RouteContext<P> = { params: P }
 
 type AuthedHandler<P> = (
@@ -27,14 +31,14 @@ export function withAuth<P = Record<string, string>>(
   handler: AuthedHandler<P>,
   opts: { role?: 'admin' | 'super_admin' } = {}
 ) {
-  return async (req: NextRequest, ctx: RouteContext<P>): Promise<NextResponse> => {
+  return async (req: NextRequest, ctx: IncomingRouteContext<P>): Promise<NextResponse> => {
     try {
       const user = await getCurrentUser()
       if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       if (opts.role && !hasRole(user.role, opts.role)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
-      return await handler(req, ctx, user)
+      return await handler(req, { params: await ctx.params }, user)
     } catch (err) {
       console.error(`[api] ${req.method} ${req.nextUrl.pathname} failed:`, err)
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

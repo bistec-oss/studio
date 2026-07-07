@@ -52,7 +52,7 @@ export { hasRole, normalizeRole, type Role } from "@/lib/roles"
 import { hasRole, normalizeRole, type Role } from "@/lib/roles"
 
 export async function requireRole(role: Role): Promise<{ userId: string } | NextResponse> {
-  const session = await auth.api.getSession({ headers: headers() })
+  const session = await auth.api.getSession({ headers: await headers() })
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   const sessionUser = session.user as { role?: string; disabled?: boolean }
   if (sessionUser.disabled) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -84,7 +84,7 @@ export async function getDraftOwnerId(draftId: string): Promise<string | null> {
 }
 
 export async function getCurrentUser() {
-  const session = await auth.api.getSession({ headers: headers() })
+  const session = await auth.api.getSession({ headers: await headers() })
   if (!session) return null
   const sessionUser = session.user as { role?: string; disabled?: boolean }
   // Deactivated accounts resolve to no user even with a live session cookie.

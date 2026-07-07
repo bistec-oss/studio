@@ -74,7 +74,8 @@ export interface UseBriefWizardResult {
   // Step 3 — Images
   images: UploadedImage[]
   uploading: boolean
-  fileInputRef: React.RefObject<HTMLInputElement>
+  // React 19: useRef<T>(null) types as RefObject<T | null>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
   onFilesPicked: (files: FileList | null) => Promise<void>
   removeImage: (id: string) => void
   toggleIntent: (id: string) => void
@@ -183,7 +184,7 @@ export function useBriefWizard(): UseBriefWizardResult {
     if (campaignId && kit && (source === 'campaign' || source === 'project')) {
       setBrandKitId(kit.id)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [resolvedKitResponse, campaignId])
 
   function selectCampaign(id: string) {

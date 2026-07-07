@@ -9,7 +9,7 @@ import type { UploadedImage } from './types'
 interface ImagesStepProps {
   images: UploadedImage[]
   uploading: boolean
-  fileInputRef: React.RefObject<HTMLInputElement>
+  fileInputRef: React.RefObject<HTMLInputElement | null>
   onFilesPicked: (files: FileList | null) => Promise<void>
   removeImage: (id: string) => void
   toggleIntent: (id: string) => void

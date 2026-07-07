@@ -3,9 +3,10 @@ import { prisma } from '@/lib/prisma'
 import { requireRole } from '@/lib/auth'
 import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireRole('admin')
   if (auth instanceof NextResponse) return auth
+  const params = await ctx.params
 
   const kit = await prisma.brandKit.findUnique({
     where: { id: params.id },
