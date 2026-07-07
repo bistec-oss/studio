@@ -3,7 +3,29 @@
 import React, { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Star, Instagram, Linkedin, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Star, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
+
+// lucide-react 1.x removed brand icons — inline equivalents (stroke style
+// matches lucide so they sit naturally beside the other icons).
+function InstagramIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  )
+}
+
+function LinkedinIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+      <rect width="4" height="12" x="2" y="9" />
+      <circle cx="4" cy="4" r="2" />
+    </svg>
+  )
+}
 import { Button } from '@/components/ui/Button'
 import { GlassInput } from '@/components/ui/GlassInput'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
@@ -394,7 +416,7 @@ export default function AdminSettingsPage() {
             label="Instagram"
             tokenPlaceholder="Access token"
             metadataPlaceholder="Business Account ID"
-            icon={<Instagram size={18} />}
+            icon={<InstagramIcon size={18} />}
             onRefresh={invalidateChannels}
           />
           <ChannelRow
@@ -403,7 +425,7 @@ export default function AdminSettingsPage() {
             label="LinkedIn"
             tokenPlaceholder="Access token"
             metadataPlaceholder="Organization ID"
-            icon={<Linkedin size={18} />}
+            icon={<LinkedinIcon size={18} />}
             onRefresh={invalidateChannels}
           />
         </div>
