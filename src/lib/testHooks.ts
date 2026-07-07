@@ -54,6 +54,17 @@ export function shouldMockPublishFail(caption: string): boolean {
   return false
 }
 
+/**
+ * Decide whether a mocked DESIGN generation should throw. Consulted only inside
+ * the MOCK_AI branches of the design agents, so it is inert in production. A
+ * "__FAIL_GEN_ALWAYS__" sentinel in the brief topic (which flows into the
+ * prompt) drives deterministic generation failure — the scheduled-generation
+ * retry/FAILED path's E2E counterpart to shouldMockPublishFail.
+ */
+export function shouldMockGenerateFail(promptContext: string): boolean {
+  return promptContext.includes('__FAIL_GEN_ALWAYS__')
+}
+
 /** Deterministic 1×1 transparent PNG returned by the mock Puppeteer renderer. */
 export const MOCK_PNG_BUFFER = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

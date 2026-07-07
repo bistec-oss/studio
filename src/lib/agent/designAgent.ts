@@ -4,7 +4,7 @@ import type { DesignAgentOptions, DesignAgentResult } from "./types"
 import { AgentToolLimitError, AgentTimeoutError, AgentTruncatedError } from "./types"
 import { toolGenerateImage, toolRenderHtml, toolGetBrandKitContext } from "./tools"
 import { restoreInlineAssets, missingTokens } from "./inlineAssets"
-import { MOCK_AI, buildMockHtml, buildMockConflict } from "@/lib/testHooks"
+import { MOCK_AI, buildMockHtml, buildMockConflict, shouldMockGenerateFail } from "@/lib/testHooks"
 import { env } from "@/lib/env"
 
 const TOOL_DEFINITIONS: Tool[] = [
@@ -101,6 +101,9 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
   // HTML and a real EXPORTS object key (rendered via the mocked Puppeteer path),
   // or a conflict marker when a refine instruction contains "conflict_test".
   if (MOCK_AI) {
+    if (shouldMockGenerateFail(userMessage)) {
+      throw new Error("Mock generation failure (__FAIL_GEN_ALWAYS__ sentinel)")
+    }
     if (userMessage.includes("conflict_test")) {
       return { htmlContent: buildMockConflict(), exportUrl: "", toolCallCount: 0 }
     }
