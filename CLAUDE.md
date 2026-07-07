@@ -2,7 +2,16 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-03)
+## ✅ Outstanding work — START HERE (updated 2026-07-07)
+
+**✅ Campaign briefing + scheduled post generation — 2026-07-07** (see `docs/handoff.md` top section):
+
+- **Versioned campaign briefing** (`CampaignBriefing`, mirrors `BrandKitPrompt`): campaign-level free-text context injected into every generation under the campaign (copy + Path A/B + background prompts; refine excluded) on top of the brand voice. `GET/POST /api/campaigns/[id]/briefing` + `[vid]/activate`; writes admin-only. Loader: `getActiveCampaignBriefing()` (`src/lib/campaign/briefing.ts`). `PROMPT_VERSION=2026-07-07.1`.
+- **One generation orchestrator:** `generateDraftForBrief()` (`src/lib/agent/generateDraft.ts`) + new `runPathADesign` (`src/lib/agent/pathA.ts`); assemble-a/b + MCP are thin adapters.
+- **Scheduled generation queue** (`ScheduledGeneration`): per-campaign planned posts with `generateAt` + postAction HOLD / SCHEDULE_PUBLISH / PUBLISH_NOW; routes under `/api/campaigns/[id]/queue` (list/create/edit/cancel/rerun). Editors plan HOLD; auto-publish actions admin-only. Worker (`generationRunner.ts`) mirrors H12 (SKIP LOCKED claim, 15-min lease, 3 retries 20/40/60-min backoff); post-actions create SCHEDULED Post rows handled by the existing publish scheduler. `worker.ts` runs two independent loops.
+- **UI:** campaign page briefing editor + planned-posts queue table + entry modal; wizard shows the active briefing.
+- **⚠️ Deploy:** `npx prisma migrate deploy` (migrations `20260707052036`, `20260707054311`). **Scheduled generation needs API mode in the Docker scheduler container** (no `claude` CLI there — the worker warns at startup under `DESIGN_PROVIDER=cli`).
+- Tests: 72/72 unit; E2E baseline + 12 new cases in `tests/e2e/campaign-scheduling.test.ts` (needs `MOCK_AI` + test-DB access for the worker-flow cases).
 
 **✅ Background images + CLI OAuth + Topic field + admin delete — 2026-07-03** (see `docs/handoff.md` top section):
 

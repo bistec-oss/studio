@@ -1,8 +1,10 @@
 'use client'
 
-import React from 'react'
-import { Loader2, Check } from 'lucide-react'
-import type { Campaign } from '@/lib/api-types'
+import React, { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Loader2, Check, ChevronDown, ChevronRight } from 'lucide-react'
+import { apiFetch } from '@/lib/apiFetch'
+import type { Campaign, CampaignBriefing } from '@/lib/api-types'
 import { SOURCE_LABEL } from './constants'
 import type { ResolvedKit } from './types'
 import { cardCls } from './cardCls'
@@ -19,6 +21,40 @@ interface CampaignStepProps {
   standaloneCampaigns: Campaign[]
   onSelectCampaign: (id: string) => void
   onClearCampaign: () => void
+}
+
+// Read-only preview of the campaign's active briefing so the author knows what
+// context every post under this campaign already carries (and doesn't repeat it
+// in the post prompt). Collapsed by default.
+function BriefingPreview({ campaignId }: { campaignId: string }) {
+  const [open, setOpen] = useState(false)
+  const { data: briefings = [] } = useQuery({
+    queryKey: ['campaigns', campaignId, 'briefing'],
+    queryFn: () => apiFetch<CampaignBriefing[]>(`/api/campaigns/${campaignId}/briefing`),
+  })
+  const active = briefings.find(b => b.isActive)
+  if (!active) return null
+
+  return (
+    <div className="mb-4 rounded-xl border border-primary/20 dark:border-primary-light/20 bg-primary/5 dark:bg-primary-light/5">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 p-3 text-sm font-semibold text-primary dark:text-primary-light"
+      >
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        Campaign briefing (applies to every post)
+        <span className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted ml-auto">
+          v{active.version}
+        </span>
+      </button>
+      {open && (
+        <p className="px-3 pb-3 text-sm text-light-text dark:text-dark-text whitespace-pre-wrap leading-relaxed">
+          {active.content}
+        </p>
+      )}
+    </div>
+  )
 }
 
 export function CampaignStep({
@@ -58,6 +94,9 @@ export function CampaignStep({
           )}
         </div>
       )}
+
+      {/* Active campaign briefing preview */}
+      {campaignId && <BriefingPreview campaignId={campaignId} />}
 
       <div className="space-y-1.5">
         {/* Uncategorized */}

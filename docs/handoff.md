@@ -1,9 +1,24 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-03 (latest: background-image pre-step + CLI OAuth token + Topic field + admin delete — see top section below)
+**Date:** 2026-07-07 (latest: versioned campaign briefing + scheduled post generation — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## 2026-07-07 (latest) — Campaign briefing (versioned) + scheduled post generation
+
+**Branch: `main`** — 7 phased commits (schema → briefing API/injection → core extraction → queue schema/API → runner/worker → UI → polish). Campaigns are now a content-production unit: they carry the "80% of the brief" and can generate posts on a schedule. Gates per phase: tsc clean, lint clean (2 pre-existing warnings), 72/72 unit tests, full E2E green (80 baseline + 12 new cases).
+
+1. **Versioned campaign briefing** (`CampaignBriefing`, migration `20260707052036`) — free-text campaign context injected into **every** generation under the campaign (copy system prompt, Path A system prompt, Path B user message, background-decision prompt — refine is deliberately excluded), on top of the brand voice. Exact `BrandKitPrompt` pattern: one `isActive` row per campaign, `@@unique([campaignId, version])`, P2002 → 409, restore = re-activate. Routes: `GET/POST /api/campaigns/[id]/briefing` (+`[vid]/activate`); **writes admin-only**, reads editor-visible. Loader `getActiveCampaignBriefing()` (`src/lib/campaign/briefing.ts`) — deliberately NOT folded into `resolveBrandKit` (explicit-kit short-circuit would drop it). `PROMPT_VERSION` → `2026-07-07.1`.
+2. **Headless generation core** — `src/lib/agent/generateDraft.ts` `generateDraftForBrief(brief, {templateId?})` is now the ONE brief→draft orchestrator (kit + briefing → copy → design → Draft create), and Path A got its `runPathBDesign` twin: `src/lib/agent/pathA.ts` `runPathADesign` + `assertTemplateMatchesBrief` (`PathATemplateError`). assemble-a/b + MCP `generatePost` are thin adapters — response shapes/error strings unchanged (E2E-verified). MOCK_AI seams sit inside the core, so headless callers stay testable.
+3. **Scheduled generation queue** (`ScheduledGeneration`, migration `20260707054311`) — per-campaign planned posts: per-post specifics (topic/description/goal/tone/channels/size/path/template), a `generateAt`, and a `postAction`: **HOLD** (draft for review) / **SCHEDULE_PUBLISH** (auto-create SCHEDULED posts at `publishAt`) / **PUBLISH_NOW**. Routes under `/api/campaigns/[id]/queue` (list/create/edit/cancel/rerun). **Permissions: editors plan HOLD entries (owner-or-admin to edit); any auto-publish action is admin-only** (extends the POST /api/posts gate). zod cross-field rules in `src/lib/campaign/queue.ts` (TEMPLATE⇒templateId + kit/ratio match; SCHEDULE_PUBLISH⇒publishAt>generateAt).
+4. **Worker** — `src/lib/scheduler/generationRunner.ts` mirrors the H12 publish runner: `FOR UPDATE SKIP LOCKED` claim, RUNNING lease in `nextRetryAt` (15 min), CLAIM_BATCH 2, MAX_RETRIES 3 with 20/40/60-min backoff, terminal FAILED re-runnable via the rerun route. The Brief is created once and reused across retries. Post-actions create **SCHEDULED Post rows** (PUBLISH_NOW = due-now) so publishing keeps its own H12 retry and a publish failure never re-runs a good generation. `worker.ts` now runs **two independent 60s loops** (publish + generation) so long generations can't delay due publishes.
+5. **UI** — campaign detail page gains `CampaignBriefingSection` (Active/History/New Version + Restore, React Query; read-only for editors) and `ScheduledQueueSection` (queue table, status chips Queued/Generating/Generated/Failed/Cancelled, edit/cancel/re-run, "Open draft", 30s poll) + `QueueEntryModal` (kit-filtered template picker, datetime-locals, action radios disabled to HOLD for editors). Brief wizard `CampaignStep` shows the active briefing collapsed read-only.
+6. **Test seams** — `POST /api/test/generation-tick` (prod-404 + MOCK_AI-gated + admin) drives the queue in E2E; `__FAIL_GEN_ALWAYS__` topic sentinel (`shouldMockGenerateFail`) makes the mock design agent throw. New `tests/e2e/campaign-scheduling.test.ts` (12 cases: versioning/rollback, RBAC matrix, HOLD/SCHEDULE_PUBLISH/PUBLISH_NOW worker flows incl. handover to the publish scheduler, retry→FAILED→rerun, concurrent-tick exactly-once, page UI smoke).
+
+> **⚠️ Deployment caveats:** (a) run `npx prisma migrate deploy` (two new migrations). (b) **Scheduled generation in the Docker scheduler container requires API mode** — the image has no `claude` CLI, so under `DESIGN_PROVIDER=cli` every scheduled generation fails (the worker logs a loud startup warning). Use `DESIGN_PROVIDER=claude-html` + `ANTHROPIC_API_KEY` in the container, or run the worker on a host with the CLI in dev. (c) Scheduler-created briefs use `copyProviderKey: 'env-default'` (falls through to the default enabled COPY provider → env key), same as MCP.
 
 ---
 

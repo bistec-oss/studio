@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { loginAs, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
@@ -177,6 +177,37 @@ test.describe('Scheduled-generation queue — permissions + validation', () => {
     const rerun = await (await admin.post(`/api/campaigns/${camp.id}/queue/${entry.id}/rerun`, {})).json()
     expect(rerun.status).toBe('PENDING')
     expect(rerun.retryCount).toBe(0)
+  })
+})
+
+test.describe('Campaign page UI — briefing + queue sections', () => {
+  let admin: ApiClient
+  test.beforeEach(async ({ request }) => {
+    admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  })
+  test.afterEach(async () => { await admin.dispose() })
+
+  async function pageLogin(page: Page) {
+    await page.goto('/login')
+    await page.getByPlaceholder('Email address').fill(ADMIN_EMAIL)
+    await page.getByPlaceholder('Password').fill(ADMIN_PASSWORD)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL(url => url.pathname === '/')
+  }
+
+  test('campaign detail renders the briefing and planned-posts sections', async ({ page }) => {
+    const camp = await createCampaign(admin, `UI Camp ${Date.now()}`)
+    await admin.post(`/api/campaigns/${camp.id}/briefing`, { content: 'UI briefing content marker' })
+    await admin.post(`/api/campaigns/${camp.id}/queue`, holdEntry(`UI planned post ${Date.now()}`))
+
+    await pageLogin(page)
+    await page.goto(`/campaigns/${camp.id}`)
+
+    await expect(page.getByText('Campaign Briefing')).toBeVisible()
+    await expect(page.getByText('UI briefing content marker')).toBeVisible()
+    await expect(page.getByText(/Planned Posts \(1\)/)).toBeVisible()
+    await expect(page.getByText('Queued')).toBeVisible()
+    await expect(page.getByRole('button', { name: /plan a post/i })).toBeVisible()
   })
 })
 
