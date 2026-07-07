@@ -25,7 +25,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
   { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
   { label: 'Settings',  href: '/settings',           icon: <UserCog size={18} /> },
-  { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
+  { label: 'Brandkits', href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
   { label: 'Users',     href: '/admin/users',        icon: <Users size={18} />, superAdminOnly: true },
 ]
 
