@@ -136,16 +136,34 @@ model Project {
 }
 
 model Campaign {
-  id           String            @id @default(cuid())
+  id           String             @id @default(cuid())
   name         String
   brandKitId   String?
-  brandKit     BrandKit?         @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
+  brandKit     BrandKit?          @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
   defaultTone  String?
-  isDeleted    Boolean           @default(false)
+  isDeleted    Boolean            @default(false)
   deletedAt    DateTime?
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime           @default(now())
   projects     ProjectCampaign[]
   briefs       Brief[]
+  briefings    CampaignBriefing[]
+}
+
+// Versioned free-text campaign briefing — the campaign-level "80% of the brief"
+// injected into copy/design prompts for every post under the campaign, on top of
+// the brand kit's voice prompt. Versioning mirrors BrandKitPrompt: exactly one
+// isActive row per campaign; restore = re-activate an old version.
+model CampaignBriefing {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  content    String   @db.Text
+  version    Int      @default(1)
+  isActive   Boolean  @default(false)
+  createdBy  String
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, version])
 }
 
 model ProjectCampaign {
