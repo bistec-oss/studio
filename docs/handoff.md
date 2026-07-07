@@ -402,7 +402,7 @@ MOCK_SOCIAL=true
 - `src/app/(app)/projects/`, `src/app/(app)/campaigns/` — list + detail pages; inline create forms; soft-delete/restore; campaign detail shows resolved brand kit with "Campaign override / Inherited from project / System default" label
 - `AppShell` — added Campaigns + Admin nav items
 
-Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password `BistecStudio2026!` (change after first login).
+Admin user seeded: `admin@bisteccare.lk` · role = ADMIN · password printed once by the seed script (change after first login). _(Historical note — the account is now SUPER_ADMIN with username `adminBTG`.)_
 
 Running containers: `bistec_studio_postgres` · `bistec_studio_minio`.
 
@@ -428,7 +428,7 @@ This ensures the admin user, the default "Bistec" brand kit, and the "Hearts Tal
 
 Then start the dev server and smoke-test:
   npm run dev
-- Log in at http://localhost:3000 as admin@bisteccare.lk / BistecStudio2026!
+- Log in at http://localhost:3000 as username adminBTG (password: whatever the seed script printed / the current local admin password)
 - Open /admin/brandkits and confirm BOTH "Bistec" (system default) and "Hearts Talk" show their colors, fonts, and — for Hearts Talk — the 1080x1080 HTML template and logo artifact(s).
 - If ANTHROPIC_API_KEY + OPENAI_API_KEY are set, create a brief and generate a design end-to-end. Otherwise set DESIGN_PROVIDER=cli in .env to exercise the flow without API keys (no Puppeteer render / MinIO upload).
 

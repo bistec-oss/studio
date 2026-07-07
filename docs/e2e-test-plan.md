@@ -14,7 +14,7 @@ All §6 cases are now written. New/changed files:
 - **Existing specs extended:** `brand-kit.test.ts` (TC-BK-02/04/05/06/07/08), `publish.test.ts` (TC-PUB-03/04/06/07/08/09), `path-a.test.ts` (TC-GEN-A2/03/04/05/06 + A3/A4 portrait & ratio-mismatch), `path-b.test.ts` (TC-GEN-B2 strengthened via DB + B3 portrait), `agui-refinement.test.ts` (TC-AGUI-06), `provider-registration.test.ts` (TC-PROV-06).
 - **New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K), `ui.test.ts` (§L).
 - **New infra:**
-  - `scripts/seed-editor.mjs` — the non-admin RBAC account (`editor@bisteccare.lk` / `BistecStudio2026!`), wired into `setup-test-db.mjs`.
+  - `scripts/seed-editor.mjs` — the non-admin RBAC account (`editor@bisteccare.lk`, fixed test password — see `FIXED_TEST_PASSWORD` in `scripts/seed-admin.mjs`), wired into `setup-test-db.mjs`.
   - `tests/helpers/db.ts` — direct test-DB access for cases that can't be set up over HTTP. **It reads `DATABASE_URL` from `.env.test` FIRST**, because importing `@prisma/client` runs Prisma's bundled dotenv and loads the dev `.env` into `process.env` — so "process.env first" would wrongly hit the dev DB.
   - **`loginAs` now creates an isolated `APIRequestContext`** (its own cookie jar). The previous version reused the shared `request` fixture, so the admin cookie leaked into editor calls and RBAC tests got 200 instead of 403.
   - Two production-safe `testHooks.ts` seams — `buildMockCopy()` routes the brief topic into the mock caption, and `shouldMockPublishFail()` lets a `__FAIL_ALWAYS__`/`__FAIL_ONCE__` sentinel in the brief topic drive deterministic publish failures (TC-PUB-03/04, TC-REG-H12b) within a single serve.
@@ -124,7 +124,7 @@ BISTEC_ADMIN_API_KEYS=e2e-admin-key
 
 ### Known seeded accounts
 
-- **Admin:** `admin@bisteccare.lk` / `BistecStudio2026!` (role ADMIN)
+- **Admin:** `admin@bisteccare.lk` (role SUPER_ADMIN, username `adminBTG`); the test-DB password is the fixed test credential — see `FIXED_TEST_PASSWORD` in `scripts/seed-admin.mjs` (used by `tests/helpers/api.ts`)
 - **Editor:** _create one in a global setup fixture_ (no seeded editor exists — see TC-AUTH-05 precondition). Needed for all RBAC/IDOR tests.
 
 ### Per-run reset
