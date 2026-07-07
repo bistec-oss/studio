@@ -61,7 +61,7 @@ Log in with username `adminBTG` / `BistecStudio2026!` (accounts sign in by usern
 
 - **[docs/cold-start.md](docs/cold-start.md)** — Complete setup & preflight checklist
 - **[docs/handoff.md](docs/handoff.md)** — Architecture overview, Path A/B design, provider registration
-- **[docs/e2e-test-plan.md](docs/e2e-test-plan.md)** — E2E test catalog (77 tests, ~4 min)
+- **[docs/e2e-test-plan.md](docs/e2e-test-plan.md)** — E2E test catalog (103 passing tests)
 - **[docs/code-review-findings.md](docs/code-review-findings.md)** — Code review & remediation status
 - **[docs/ui-reference/DESIGN_SYSTEM.md](docs/ui-reference/DESIGN_SYSTEM.md)** — UI/design system
 - **[.specclaw/changes/marketing-post-studio-v1/design.md](.specclaw/changes/marketing-post-studio-v1/design.md)** — Architecture, Prisma schema, API routes, provider abstraction
