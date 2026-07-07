@@ -56,12 +56,13 @@ async function runBriefingModel(system: string, messages: ChatMessage[]): Promis
 }
 
 // Shared campaign context (brand voice + source documents + current briefing)
-// for both assistant prompts.
-async function buildCampaignContext(campaignId: string): Promise<string> {
+// for both assistant prompts. `brandKitId` (the brief's own kit selection)
+// overrides the campaign chain, matching generation-time precedence.
+async function buildCampaignContext(campaignId?: string, brandKitId?: string): Promise<string> {
   const [kit, docs, activeBriefing] = await Promise.all([
-    resolveBrandKit(campaignId),
-    collectCampaignDocsContext(campaignId),
-    getActiveCampaignBriefing(campaignId),
+    resolveBrandKit(campaignId, brandKitId),
+    campaignId ? collectCampaignDocsContext(campaignId) : Promise.resolve({ text: '', truncated: false }),
+    campaignId ? getActiveCampaignBriefing(campaignId) : Promise.resolve(null),
   ])
 
   const sections: string[] = []
@@ -140,6 +141,50 @@ export async function enhanceBriefing(campaignId: string, content: string): Prom
   const userMessage = content.trim()
     ? `Improve this campaign briefing:\n\n${content}`
     : 'Draft a campaign briefing from the campaign context.'
+
+  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
+  return stripCodeFences(reply).trim()
+}
+
+export interface EnhancePostBriefInput {
+  topic: string
+  content: string
+  goal?: string
+  tone?: string
+  campaignId?: string
+  brandKitId?: string
+}
+
+// One-shot rewrite of a POST brief (the wizard's Content step) — the
+// per-post twin of enhanceBriefing. Grounded in the same context the
+// generation itself will use: the resolved brand voice plus, when a campaign
+// is selected, its active briefing and source documents.
+export async function enhancePostBrief(input: EnhancePostBriefInput): Promise<string> {
+  if (MOCK_AI) return buildMockBriefingEnhance(input.content)
+
+  const context = await buildCampaignContext(input.campaignId, input.brandKitId)
+  const system = [
+    'You improve briefs for single social media posts in bistec-studio. The brief is the prompt an AI copywriter and an AI designer act on to produce ONE Instagram/LinkedIn image post.',
+    'Rewrite the brief the user provides: keep every concrete fact, sharpen vague statements, make the key message and call-to-action explicit, and add helpful specifics from the campaign context when they clearly apply to this post.',
+    'If the user provides only a topic, draft the brief from the topic and the context.',
+    'Stay focused on this one post — do not restate the whole campaign briefing.',
+    'Reply with ONLY the improved brief as plain text — no preamble, no commentary, no code fences, no headings. Roughly 40-120 words.',
+    context ? `\n# Campaign context\n\n${context}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const details = [
+    `Topic: ${input.topic}`,
+    input.goal ? `Goal: ${input.goal}` : '',
+    input.tone ? `Tone: ${input.tone}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const userMessage = input.content.trim()
+    ? `${details}\n\nImprove this post brief:\n\n${input.content}`
+    : `${details}\n\nDraft a post brief for this topic.`
 
   const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
   return stripCodeFences(reply).trim()

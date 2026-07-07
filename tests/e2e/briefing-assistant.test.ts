@@ -129,6 +129,37 @@ test.describe('Briefing assistant', () => {
     await admin.dispose()
   })
 
+  test('post-brief enhance: editor-accessible, mock rewrite, drafts from topic, input guards', async ({ request }) => {
+    // POST /api/briefs/enhance is withAuth (not withAdmin) — editors write briefs.
+    const editor = await loginAs(request, EDITOR_EMAIL, PASSWORD)
+    const base = '/api/briefs/enhance'
+
+    const withText = await editor.post(base, {
+      topic: 'Q3 launch',
+      content: 'my rough post brief',
+      goal: 'awareness',
+      tone: 'professional',
+      campaignId,
+    })
+    expect(withText.status()).toBe(200)
+    expect((await withText.json()).draft).toBe('Enhanced: my rough post brief')
+
+    // Topic-only drafts from context (empty content).
+    const fromTopic = await editor.post(base, { topic: 'Q3 launch', content: '' })
+    expect(fromTopic.status()).toBe(200)
+    expect((await fromTopic.json()).draft).toBe(
+      'Enhanced: Mock briefing drafted from campaign context.',
+    )
+
+    // Nothing to work with → 400; unknown campaign → 404.
+    expect((await editor.post(base, { topic: '', content: '  ' })).status()).toBe(400)
+    expect(
+      (await editor.post(base, { topic: 'x', content: 'y', campaignId: 'nonexistent' })).status(),
+    ).toBe(404)
+
+    await editor.dispose()
+  })
+
   test('editors are forbidden from upload, delete, chat, and enhance (list is readable)', async ({ request }) => {
     const editor = await loginAs(request, EDITOR_EMAIL, PASSWORD)
     const base = `/api/campaigns/${campaignId}`

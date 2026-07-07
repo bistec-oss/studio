@@ -76,6 +76,8 @@ export default function NewBriefPage() {
             setGoal={wizard.setGoal}
             tone={wizard.tone}
             setTone={wizard.setTone}
+            campaignId={wizard.campaignId}
+            brandKitId={wizard.brandKitId}
           />
         )}
 
