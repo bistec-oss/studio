@@ -127,6 +127,10 @@ export async function runGenerationJobs(): Promise<void> {
     try {
       const brief = await ensureBrief(entry)
 
+      // Deliberately NOT wrapped in withUserClaudeAuth: scheduled generations
+      // always run on the SHARED server credential, even though the planner is
+      // known (entry.createdById) — a user's expired/revoked personal token
+      // must never fail an unattended run. (Product decision, 2026-07-07.)
       const { draft } = await generateDraftForBrief(brief, { templateId: entry.templateId })
 
       await executePostAction(entry, draft)

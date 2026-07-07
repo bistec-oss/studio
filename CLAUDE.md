@@ -4,6 +4,15 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-07)
 
+**✅ Per-user Claude OAuth tokens (CLI mode) — 2026-07-07** (see `docs/handoff.md` top section):
+
+- Users connect their own Claude account at **`/settings`** (paste a `claude setup-token` token); in CLI mode their generations bill their own subscription. New `UserClaudeToken` model (migration `20260707164417`, AES-256-GCM + masked `keyPrefix`).
+- **AsyncLocalStorage auth context**: routes wrap model-calling spans in `withUserClaudeAuth(user.userId, fn)` (`src/lib/agent/userToken.ts`); the single spawn site `runClaudeCli` reads it (`src/lib/agent/claudeAuth.ts`). Callers that never set context — **scheduler worker, MCP/ACP** — always use the shared `CLAUDE_CODE_OAUTH_TOKEN` (deliberate). Token precedence per spawn: user token → shared env token → dev's logged-in session.
+- **Auth-failure handling:** typed `ClaudeCliError` + `isClaudeAuthFailure()`; on a rejected user token the call marks the row INVALID and retries ONCE on the shared credential. Save-time validation = live haiku ping (`MOCK_AI` seam for E2E; skipped/dormant in API mode).
+- Routes: `GET/PUT/DELETE /api/me/claude-token` (withAuth, self-service); `GET /api/me` gained `cliMode` + `claudeToken`. UI: `/settings` nav item + `ClaudeTokenCard` + dismissible `ClaudeTokenPrompt` banner (CLI mode only).
+- **Docker:** runner stage installs the Claude Code CLI (+ writable HOME) — VPS can run `DESIGN_PROVIDER=cli`; scheduled generation in the container now works in CLI mode (shared token). **MinIO pin bumped to `RELEASE.2025-09-07T16-13-09Z`** (old pin crash-loops on the volume's xl-meta-v3 format — do not pin back).
+- Gates: tsc, lint, 135/135 unit, full E2E 109/0 (7 new §O cases), docker build. Deploy: `npx prisma migrate deploy` + image rebuild; no new env vars. Live-token flows not yet runtime-verified (needs a real `setup-token` token).
+
 **✅ Post-brief Enhance with AI + full-screen export lightbox — 2026-07-07** (see `docs/handoff.md` top section):
 
 - **Enhance with AI on the brief wizard Content step:** `enhancePostBrief()` (`src/lib/campaign/briefingAssistant.ts`) — per-post twin of the campaign-briefing enhance, same mode-agnostic Sonnet call, grounded in `resolveBrandKit(campaignId, brandKitId)` + campaign briefing/docs when a campaign is selected; drafts from just the topic. Route `POST /api/briefs/enhance` is **`withAuth` (editor-accessible)**, unlike the admin-only campaign enhance. UI: Before/After Accept/Discard flow in `ContentStep.tsx`; reuses the `buildMockBriefingEnhance` MOCK_AI seam; +1 §N E2E case.

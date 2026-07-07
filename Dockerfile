@@ -63,6 +63,12 @@ WORKDIR /app
 # openssl: Prisma's runtime OpenSSL detection needs it (see builder stage note).
 RUN apk add --no-cache libc6-compat chromium openssl
 
+# Claude Code CLI — CLI-mode generation (DESIGN_PROVIDER=cli) spawns `claude -p`
+# per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN env (the shared server
+# token, or a user's personal token injected per-call by claudeCli.ts). Installed
+# as root so `claude` lands on PATH at /usr/local/bin.
+RUN npm install -g @anthropic-ai/claude-code
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -70,6 +76,11 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# The Claude CLI writes config/cache under ~/.claude* — the system user needs a
+# real, writable home for headless `claude -p` to work.
+RUN mkdir -p /home/nextjs && chown nextjs:nodejs /home/nextjs
+ENV HOME=/home/nextjs
 
 # Copy production deps and built output
 COPY --from=deps /app/node_modules ./node_modules

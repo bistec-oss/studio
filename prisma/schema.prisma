@@ -69,6 +69,14 @@ enum ProviderSlot {
   IMAGE
 }
 
+// Lifecycle of a user's personal Claude OAuth token (`claude setup-token`).
+// INVALID = an auth failure was observed mid-call (expired/revoked); the UI
+// prompts the user to reconnect and generation falls back to the shared token.
+enum ClaudeTokenStatus {
+  ACTIVE
+  INVALID
+}
+
 enum ArtifactType {
   LOGO
   FONT
@@ -105,6 +113,25 @@ model User {
   briefs        Brief[]
   posts         Post[]
   scheduledGenerations ScheduledGeneration[]
+  claudeToken   UserClaudeToken?
+}
+
+// A user's personal Claude Code OAuth token (pasted from `claude setup-token`).
+// Used by CLI-mode generation (`claude -p`) so calls bill the user's own Claude
+// subscription; absent/INVALID rows fall back to the shared server token.
+// Separate 1:1 model (not fields on User) so the ciphertext never rides along
+// in the widely-selected better-auth User rows. Mirrors the AvailableProvider
+// secret pattern: AES-256-GCM ciphertext + a display-only masked suffix.
+model UserClaudeToken {
+  id              String            @id @default(cuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedToken  String // AES-256-GCM via src/lib/crypto.ts — never returned to clients
+  keyPrefix       String // display-only masked suffix `…${token.slice(-4)}`
+  status          ClaudeTokenStatus @default(ACTIVE)
+  lastValidatedAt DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 }
 
 model Session {

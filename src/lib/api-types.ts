@@ -10,10 +10,32 @@ import type { Role } from '@/lib/auth'
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 
+export type ClaudeTokenStatus = 'ACTIVE' | 'INVALID'
+
+// GET/PUT/DELETE /api/me/claude-token — the user's personal Claude OAuth
+// token. Only the masked suffix ever leaves the server.
+export type ClaudeTokenInfo =
+  | {
+      connected: true
+      status: ClaudeTokenStatus
+      keyPrefix: string
+      connectedAt: string
+      lastValidatedAt: string | null
+    }
+  | { connected: false }
+
 // GET /api/me
 export interface MeResponse {
   userId: string
   role: Role
+  // Whether the server runs CLI-mode generation (DESIGN_PROVIDER=cli) — the
+  // only mode where personal Claude tokens are used; gates the connect UI.
+  cliMode: boolean
+  claudeToken: {
+    status: ClaudeTokenStatus
+    keyPrefix: string
+    connectedAt: string
+  } | null
 }
 
 // ── Shared reference shapes ─────────────────────────────────────────────

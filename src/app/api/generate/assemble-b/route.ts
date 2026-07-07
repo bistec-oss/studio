@@ -6,6 +6,7 @@ import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { generateDraftForBrief, NoBrandKitError } from '@/lib/agent/generateDraft'
 import { AgentToolLimitError } from '@/lib/agent/types'
+import { withUserClaudeAuth } from '@/lib/agent/userToken'
 
 const bodySchema = z.object({ briefId: z.string() })
 
@@ -23,7 +24,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   if (forbidden) return forbidden
 
   try {
-    const { draft } = await generateDraftForBrief(brief)
+    // CLI mode bills the acting user's personal Claude token when connected
+    // (shared server token otherwise) — see src/lib/agent/userToken.ts.
+    const { draft } = await withUserClaudeAuth(user.userId, () => generateDraftForBrief(brief))
     return NextResponse.json({ draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl) })
   } catch (err) {
     if (err instanceof NoBrandKitError) {

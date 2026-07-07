@@ -1,5 +1,6 @@
 import { spawn } from "child_process"
 import { env } from "@/lib/env"
+import { currentClaudeAuth } from "@/lib/agent/claudeAuth"
 
 // Resolve the Claude Code CLI binary. On Windows the npm shim is `claude.cmd`,
 // which needs a shell to launch; elsewhere `claude` runs directly.
@@ -35,6 +36,38 @@ export interface ClaudeCliOptions {
   // Per-call model (CLI alias or full id). Path A design passes "haiku", Path B
   // "sonnet". Overridden by CLAUDE_CLI_MODEL when that env var is set.
   model?: string
+  // Explicit OAuth token override: bypasses the per-user ALS auth context AND
+  // the retry-once-with-shared behaviour. Used only by validateClaudeToken()
+  // (userToken.ts) to test a candidate token — normal call sites never set it.
+  authToken?: string
+}
+
+// Non-zero-exit CLI failure with the raw process output attached, so callers
+// (isClaudeAuthFailure) can classify it. Timeout/ENOENT/buffer-limit failures
+// stay plain Errors — they say nothing about the token's validity.
+export class ClaudeCliError extends Error {
+  constructor(
+    message: string,
+    public exitCode: number | null,
+    public stderr: string,
+    public stdout: string,
+  ) {
+    super(message)
+    this.name = "ClaudeCliError"
+  }
+}
+
+// Does this error mean the OAuth token was rejected (expired/revoked/garbage)?
+// Pure + exported for unit tests. Deliberately conservative: only non-zero-exit
+// ClaudeCliErrors whose output matches a known auth-failure phrasing — anything
+// else (timeouts, prompt-size, buffer, generic exit 1) must NOT invalidate a
+// stored token or trigger the shared-credential retry.
+const AUTH_FAILURE_RE =
+  /oauth token (is )?(invalid|expired|revoked)|invalid api key|please run \/login|authentication[_ ]?error|not (logged in|authenticated)|\b401\b/i
+export function isClaudeAuthFailure(err: unknown): boolean {
+  if (!(err instanceof ClaudeCliError)) return false
+  if (err.exitCode === 0) return false
+  return AUTH_FAILURE_RE.test(`${err.stderr}\n${err.stdout}`)
 }
 
 // Dev-mode diagnostics. CLI mode is a local dev convenience, so log by default;
@@ -81,9 +114,6 @@ function killTree(child: ReturnType<typeof spawn>, label: string) {
 const MAX_PROMPT_CHARS = 600_000
 
 export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}): Promise<string> {
-  const { cmd, shell } = claudeCommand()
-  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model } = opts
-
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new Error(
       `Prompt too large for CLI mode (${prompt.length} chars > ${MAX_PROMPT_CHARS}). ` +
@@ -91,20 +121,61 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
     )
   }
 
+  // Token-validation path: run once with the candidate token, never retry.
+  if (opts.authToken) return runClaudeCliOnce(prompt, opts, opts.authToken)
+
+  // Per-user auth (set at the route entry via withUserClaudeAuth — see
+  // claudeAuth.ts for the ALS design note). Absent context ⇒ shared credential,
+  // exactly the pre-feature behaviour (scheduler worker, MCP/ACP, scripts).
+  const auth = currentClaudeAuth()
+  if (!auth) return runClaudeCliOnce(prompt, opts, undefined)
+
+  try {
+    return await runClaudeCliOnce(prompt, opts, auth.token)
+  } catch (err) {
+    if (!isClaudeAuthFailure(err)) throw err
+    // The user's token was rejected (expired/revoked). Mark it INVALID so the
+    // UI prompts a reconnect, then complete THIS call on the shared credential
+    // so the user's work isn't lost. One retry only; a second failure surfaces.
+    cliLog(
+      opts.label ?? "",
+      `user token auth failure (user ${auth.userId}) — marking token INVALID, retrying once with shared credential`,
+    )
+    await auth.onAuthFailure().catch((e: unknown) => {
+      cliLog(opts.label ?? "", `failed to mark token INVALID: ${(e as Error).message}`)
+    })
+    return runClaudeCliOnce(prompt, opts, undefined)
+  }
+}
+
+function runClaudeCliOnce(
+  prompt: string,
+  opts: ClaudeCliOptions,
+  tokenOverride: string | undefined,
+): Promise<string> {
+  const { cmd, shell } = claudeCommand()
+  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model } = opts
+
   // CLI-mode auth, in order of preference:
-  //   1. CLAUDE_CODE_OAUTH_TOKEN — a long-lived token from `claude setup-token`,
-  //      so headless spawns work without (and independent of) the developer's
-  //      interactive login. Forwarded explicitly below.
-  //   2. The developer's logged-in Claude Code session (when no token is set).
-  // ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are stripped either way: the CLI
-  // prefers them over both sources above, so a stray invalid/placeholder key in
-  // the server env would make `claude -p` exit 1 (and a real one would silently
-  // bill the API instead of the subscription).
+  //   1. tokenOverride — the acting user's personal token (from the ALS auth
+  //      context) or a candidate token under validation (opts.authToken).
+  //   2. CLAUDE_CODE_OAUTH_TOKEN — the SHARED server token from
+  //      `claude setup-token`, so headless spawns work without (and independent
+  //      of) the developer's interactive login.
+  //   3. The developer's logged-in Claude Code session (when neither is set).
+  // The token travels via env, never argv (argv would leak through `shell: true`
+  // on win32 and process listings). ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are
+  // stripped either way: the CLI prefers them over all sources above, so a stray
+  // invalid/placeholder key in the server env would make `claude -p` exit 1 (and
+  // a real one would silently bill the API instead of the subscription).
   const childEnv = { ...process.env }
   delete childEnv.ANTHROPIC_API_KEY
   delete childEnv.ANTHROPIC_AUTH_TOKEN
-  if (env.CLAUDE_CODE_OAUTH_TOKEN) {
-    childEnv.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN
+  const oauthToken = tokenOverride ?? env.CLAUDE_CODE_OAUTH_TOKEN
+  if (oauthToken) {
+    childEnv.CLAUDE_CODE_OAUTH_TOKEN = oauthToken
+  } else {
+    delete childEnv.CLAUDE_CODE_OAUTH_TOKEN
   }
 
   // --strict-mcp-config + no --mcp-config => load ZERO MCP servers. Without it the
@@ -186,7 +257,14 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
       finish(() => {
         if (code !== 0) {
           cliLog(label, `exited code=${code} at ${elapsed()}`)
-          reject(new Error(`Claude CLI exited with code ${code}: ${stderr.trim().slice(0, 500)}`))
+          reject(
+            new ClaudeCliError(
+              `Claude CLI exited with code ${code}: ${stderr.trim().slice(0, 500)}`,
+              code,
+              stderr,
+              stdout,
+            ),
+          )
         } else {
           cliLog(label, `done at ${elapsed()} · ${stdout.length} chars`)
           resolve(stdout.trim())

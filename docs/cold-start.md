@@ -189,6 +189,17 @@ draft pages all work; Puppeteer rendering, `generateImage`, and MinIO upload are
 > consumes your logged-in Claude credits, so prefer the API path (or the mock E2E suite)
 > for routine work.
 
+> **Whose Claude account pays?** In CLI mode a user who has connected a personal token
+> at `/settings` (from `claude setup-token`) bills their OWN subscription; everyone else
+> — plus the scheduler worker and MCP/ACP — uses the shared `CLAUDE_CODE_OAUTH_TOKEN`
+> from `.env` (or, unset, your logged-in session). `TOKEN_ENCRYPTION_KEY` also protects
+> these stored user tokens. The Docker image ships the Claude CLI, so `DESIGN_PROVIDER=cli`
+> works in the container too.
+
+> **MinIO image pin:** the compose pins `minio/minio:RELEASE.2025-09-07T16-13-09Z`. Do
+> NOT pin back to a pre-2025 release — the volume's on-disk format ("xl meta version 3")
+> makes older images crash-loop with `decodeXLHeaders: Unknown xl meta version 3`.
+
 For E2E tests with everything stubbed (no AI, no Puppeteer, no social):
 
 ```bash

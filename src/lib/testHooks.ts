@@ -85,6 +85,20 @@ export function buildMockBriefingEnhance(content: string): string {
   return `Enhanced: ${content || 'Mock briefing drafted from campaign context.'}`
 }
 
+/**
+ * Deterministic Claude-token save-time validation (MOCK_AI). The real path
+ * spawns a `claude -p` ping with the candidate token, which the E2E env can't
+ * do (claude-html mode, no CLI). A token containing "invalid" fails; anything
+ * else passes — so tests can drive both the 200 and 422 branches of
+ * PUT /api/me/claude-token.
+ */
+export function mockClaudeTokenValidation(token: string): { ok: boolean; error?: string } {
+  if (token.includes('invalid')) {
+    return { ok: false, error: 'Token was rejected by Claude (mock validation)' }
+  }
+  return { ok: true }
+}
+
 /** Deterministic 1×1 transparent PNG returned by the mock Puppeteer renderer. */
 export const MOCK_PNG_BUFFER = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

@@ -1,9 +1,27 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-07 (latest: post-brief Enhance with AI + full-screen export lightbox — see top section below)
+**Date:** 2026-07-07 (latest: per-user Claude OAuth tokens — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## 2026-07-07 (latest) — Per-user Claude OAuth tokens (CLI mode)
+
+**Branch: `main`.** Each app user can now connect their **own Claude account**: they run `claude setup-token` on their own machine (no official third-party "Sign in with Claude" OAuth exists — the paste flow is the supported mechanism) and paste the `sk-ant-oat01-…` token at the new **`/settings`** page. In CLI mode (`DESIGN_PROVIDER=cli`) every Claude call the user triggers — copy, Path A/B design, regenerate copy/design, refine (incl. the background decision), briefing chat/enhance, post-brief enhance — then runs on **their** subscription. Gates: tsc clean, lint 0 errors (9 pre-existing warnings), **135/135 unit** (37 new), **full E2E 109 passed / 0 failed** (7 new §O cases in `settings-claude-token.test.ts`), Docker image builds.
+
+1. **Schema** (migration `20260707164417_user_claude_token`): `UserClaudeToken` 1:1 with `User` — `encryptedToken` (AES-256-GCM via `crypto.ts`), display-only `keyPrefix` (`…last4`), `status ACTIVE|INVALID`, `lastValidatedAt`. Mirrors the `AvailableProvider` secret pattern; ciphertext never leaves the server.
+2. **AsyncLocalStorage auth context, not signature threading.** `src/lib/agent/claudeAuth.ts` (ALS, zero app imports) + `src/lib/agent/userToken.ts` (resolver): routes wrap their model-calling span in `withUserClaudeAuth(user.userId, fn)`; the single spawn site `runClaudeCli` (`claudeCli.ts`) reads `currentClaudeAuth()`. Explicit threading would have touched 14+ signatures incl. the provider-agnostic `CopyProvider` interface. **Fail-safe default:** any caller that never enters the context — the scheduler worker, MCP/ACP, scripts — uses the shared credential, which is exactly the product decision (scheduled generations must never fail on a user's expired token; MCP/ACP are M2M).
+3. **Precedence per `claude -p` spawn:** ALS user token → shared `CLAUDE_CODE_OAUTH_TOKEN` → developer's logged-in session. Token travels via child env, never argv. `opts.authToken` is an explicit override used only by save-time validation (bypasses ALS, never retries).
+4. **Retry-once on auth failure:** a non-zero exit is now a typed `ClaudeCliError` (exit code + stderr/stdout); `isClaudeAuthFailure()` (exported, conservative regex — timeouts/ENOENT/buffer are plain `Error`s and never match) triggers: mark the row INVALID (`updateMany`, idempotent) → retry the same call ONCE on the shared credential so the user's work completes. Second failure propagates; non-auth failures never retry.
+5. **API:** `GET/PUT/DELETE /api/me/claude-token` (all `withAuth`, self-service, keyed to the session user). PUT: zod shape guard (`sk-ant-oat01-` + ≥20 chars) → `validateClaudeToken` — live `claude -p` haiku ping in CLI mode (fail closed), `mockClaudeTokenValidation` seam under `MOCK_AI` (token containing "invalid" → 422), `{ok, skipped}` in API mode (stored dormant) — → upsert. `GET /api/me` now also returns `cliMode` + masked `claudeToken` state (threaded through `useCurrentUser`).
+6. **UI:** `/settings` page (new nav item, all roles) with `ClaudeTokenCard` — status pill, numbered `claude setup-token` instructions, password-type paste field, Connect/Replace/Disconnect (`useConfirm`), amber reconnect banner on INVALID, API-mode informational note. `ClaudeTokenPrompt` — dismissible post-login banner in `AppShell` (CLI mode only), per-user + per-state dismissal (`localStorage`), so a token going INVALID re-surfaces it.
+7. **Docker:** the runner stage now installs the **Claude Code CLI** (`npm i -g @anthropic-ai/claude-code`) + a writable `HOME=/home/nextjs` — the VPS can run `DESIGN_PROVIDER=cli`. Side effect: **scheduled generation in the container now works in CLI mode too** (shared token; previously documented as API-mode-only).
+8. **Env repair on this machine (not code):** `docker-compose.yml`'s MinIO pin bumped `RELEASE.2024-10-13` → **`RELEASE.2025-09-07T16-13-09Z`** — the volume's on-disk format is now "xl meta version 3" (written when a newer MinIO ran against it during the 2026-07-07 prod-standalone verification), which the old pin can't read (crash-loop: `decodeXLHeaders: Unknown xl meta version 3`). A wipe would have destroyed the `bistecprod` service account, so the pin moved forward instead. Also: this machine's `node_modules` was synced (`npm install`), 4 pending migrations applied, and the stale E2E test DB dropped + re-seeded (its admin predated SUPER_ADMIN).
+
+> **⚠️ Deploy:** `npx prisma migrate deploy` (1 new migration) → rebuild the Docker image (CLI + MinIO pin). No new env vars — `CLAUDE_CODE_OAUTH_TOKEN` is re-documented as the shared fallback. Personal tokens are CLI-mode-only; API mode (`claude-html`) keeps shared API keys for everything.
+> **Not runtime-verified with a real token:** the live validation ping + a real user-token generation + the revoked-token retry path need a real `claude setup-token` token on a CLI-mode dev server (unit + mock-E2E cover the logic; see the manual smoke checklist in the plan).
 
 ---
 

@@ -8,6 +8,7 @@ import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { AgentToolLimitError } from '@/lib/agent/types'
+import { withUserClaudeAuth } from '@/lib/agent/userToken'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
 
@@ -46,7 +47,11 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
 
   try {
     // Run the new design first — if it fails, the draft is left untouched.
-    const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
+    // CLI mode bills the acting user's personal Claude token when connected
+    // (shared server token otherwise) — see src/lib/agent/userToken.ts.
+    const result = await withUserClaudeAuth(user.userId, () =>
+      runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
+    )
 
     // Snapshot the design we are replacing as a revision (so "go back" works) —
     // revision-number allocation + P2002 collision retry via the shared helper.

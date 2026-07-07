@@ -46,6 +46,9 @@ export async function generatePost(args: GeneratePostArgs) {
   // Shared brief→draft orchestrator: kit precedence (campaign → project →
   // system default; no explicit kit on this surface), campaign briefing, copy,
   // Path B design, Draft persistence — identical to the web routes.
+  // Deliberately NOT wrapped in withUserClaudeAuth: MCP/ACP callers hold
+  // server API keys (M2M trust boundary), not app-user sessions — CLI-mode
+  // calls here always use the shared server credential.
   try {
     const { draft } = await generateDraftForBrief(brief)
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }

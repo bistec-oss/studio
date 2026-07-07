@@ -17,6 +17,7 @@ export interface ApiClient {
   cookie: string
   post(path: string, body?: unknown): ReturnType<APIRequestContext['post']>
   get(path: string): ReturnType<APIRequestContext['get']>
+  put(path: string, body?: unknown): ReturnType<APIRequestContext['put']>
   patch(path: string, body?: unknown): ReturnType<APIRequestContext['patch']>
   del(path: string): ReturnType<APIRequestContext['delete']>
   multipart(
@@ -40,6 +41,7 @@ export async function loginAs(
     cookie,
     post: (path, body) => ctx.post(path, { data: body }),
     get: (path) => ctx.get(path),
+    put: (path, body) => ctx.put(path, { data: body }),
     patch: (path, body) => ctx.patch(path, { data: body }),
     del: (path) => ctx.delete(path),
     multipart: (path, multipart) => ctx.post(path, { multipart: multipart as never }),

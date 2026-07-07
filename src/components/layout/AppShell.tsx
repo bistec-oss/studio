@@ -4,10 +4,11 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Users, Menu, X } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
+import { ClaudeTokenPrompt } from '@/components/settings/ClaudeTokenPrompt'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 
 interface NavItem {
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Library',   href: '/library',            icon: <BookOpen size={18} /> },
   { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
   { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
+  { label: 'Settings',  href: '/settings',           icon: <UserCog size={18} /> },
   { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
   { label: 'Users',     href: '/admin/users',        icon: <Users size={18} />, superAdminOnly: true },
 ]
@@ -132,6 +134,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Main content */}
           <main className="flex-1 md:ml-64 overflow-y-auto">
             <div className="max-w-canvas mx-auto px-4 md:px-8 py-6">
+              {/* CLI mode only: nudge users without a (valid) personal Claude token */}
+              <ClaudeTokenPrompt />
               {children}
             </div>
           </main>

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAdmin, parseBody } from '@/lib/api/handler'
 import { enhanceBriefing } from '@/lib/campaign/briefingAssistant'
+import { withUserClaudeAuth } from '@/lib/agent/userToken'
 
 type Params = { id: string }
 
@@ -11,7 +12,7 @@ const enhanceSchema = z.object({
   content: z.string().max(20_000),
 })
 
-export const POST = withAdmin<Params>(async (req, { params }) => {
+export const POST = withAdmin<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, enhanceSchema)
   if (body.response) return body.response
 
@@ -21,7 +22,11 @@ export const POST = withAdmin<Params>(async (req, { params }) => {
   })
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
-  const draft = await enhanceBriefing(params.id, body.data.content)
+  // CLI mode bills the acting user's personal Claude token when connected
+  // (shared server token otherwise) — see src/lib/agent/userToken.ts.
+  const draft = await withUserClaudeAuth(user.userId, () =>
+    enhanceBriefing(params.id, body.data.content)
+  )
   if (!draft) {
     return NextResponse.json({ error: 'The model returned an empty draft — try again' }, { status: 502 })
   }

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAdmin, parseBody } from '@/lib/api/handler'
 import { runBriefingChat } from '@/lib/campaign/briefingAssistant'
+import { withUserClaudeAuth } from '@/lib/agent/userToken'
 
 type Params = { id: string }
 
@@ -24,7 +25,7 @@ const chatSchema = z.object({
     }),
 })
 
-export const POST = withAdmin<Params>(async (req, { params }) => {
+export const POST = withAdmin<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, chatSchema)
   if (body.response) return body.response
 
@@ -34,6 +35,10 @@ export const POST = withAdmin<Params>(async (req, { params }) => {
   })
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
-  const result = await runBriefingChat(params.id, body.data.messages)
+  // CLI mode bills the acting user's personal Claude token when connected
+  // (shared server token otherwise) — see src/lib/agent/userToken.ts.
+  const result = await withUserClaudeAuth(user.userId, () =>
+    runBriefingChat(params.id, body.data.messages)
+  )
   return NextResponse.json(result)
 })

@@ -7,6 +7,7 @@ import { resolveExportUrl } from '@/lib/storage/minio'
 import { generateDraftForBrief, TemplateNotFoundError } from '@/lib/agent/generateDraft'
 import { PathATemplateError } from '@/lib/agent/pathA'
 import { AgentToolLimitError } from '@/lib/agent/types'
+import { withUserClaudeAuth } from '@/lib/agent/userToken'
 
 const bodySchema = z.object({ briefId: z.string(), templateId: z.string() })
 
@@ -24,7 +25,11 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   if (forbidden) return forbidden
 
   try {
-    const { draft } = await generateDraftForBrief(brief, { templateId })
+    // CLI mode bills the acting user's personal Claude token when connected
+    // (shared server token otherwise) — see src/lib/agent/userToken.ts.
+    const { draft } = await withUserClaudeAuth(user.userId, () =>
+      generateDraftForBrief(brief, { templateId })
+    )
     return NextResponse.json({ draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl) })
   } catch (err) {
     if (err instanceof TemplateNotFoundError) {

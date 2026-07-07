@@ -17,6 +17,8 @@ import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/pro
 import { generateBackgroundForRefine } from '@/lib/agent/background'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
+import { resolveClaudeAuthForUser } from '@/lib/agent/userToken'
+import { runWithClaudeAuth } from '@/lib/agent/claudeAuth'
 
 export const maxDuration = 120
 
@@ -110,10 +112,18 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   // Refine uses the same model as the originating path: Path A → haiku, Path B → sonnet.
   const path = pathForDesignMode(draft.brief.designMode)
 
+  // CLI mode bills the acting user's personal Claude token when connected
+  // (shared server token otherwise). Resolved ONCE here and applied to both
+  // model-calling spans below (background decision + the refine agent call)
+  // so they can't observe different tokens. No-op (null) outside CLI mode.
+  const claudeAuth = await resolveClaudeAuthForUser(user.userId)
+
   // Background pre-step: generates a new background ONLY when the instruction
   // asks for one (e.g. "change the background to a city skyline"); null
   // otherwise, and on any failure. See agent/background.ts.
-  const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction)
+  const backgroundImageUrl = await runWithClaudeAuth(claudeAuth, () =>
+    generateBackgroundForRefine(draft.brief, kit, instruction)
+  )
 
   const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
   const userMessage = buildRefineUserMessage({
@@ -129,15 +139,17 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   // the edit directly.
   if (isCliMode()) {
     try {
-      const result = await runDesignAgentCli({
-        systemPrompt,
-        userMessage,
-        briefId: draft.brief.id,
-        inlineAssets,
-        width,
-        height,
-        model: modelFor(path, 'cli'),
-      })
+      const result = await runWithClaudeAuth(claudeAuth, () =>
+        runDesignAgentCli({
+          systemPrompt,
+          userMessage,
+          briefId: draft.brief.id,
+          inlineAssets,
+          width,
+          height,
+          model: modelFor(path, 'cli'),
+        })
+      )
       return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
