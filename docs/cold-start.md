@@ -134,7 +134,7 @@ npm run db:seed
 Runs `scripts/seed-admin.mjs` then `scripts/seed-brandkit.mjs` (admin first so the brand
 kit's `createdBy` resolves to a real admin id). Both are idempotent. Result:
 
-- Admin login: username **`adminBTG`** / `BistecStudio2026!` (change after first login). The account is a **SUPER_ADMIN** (can manage users at `/admin/users`); sign-in is by username since the username switch — the email `admin@bisteccare.lk` is internal (and still works in the login form as a legacy fallback).
+- Admin login: username **`adminBTG`** / `BistecStudio2026!` (the seeded initial password — change after first login; on the primary dev machine it has since been changed locally). The account is a **SUPER_ADMIN** (can manage users at `/admin/users`); sign-in is by username since the username switch — the email `admin@bisteccare.lk` is internal (and still works in the login form as a legacy fallback). A password can be reset directly via better-auth's hash + `internalAdapter.updatePassword` (see `PATCH /api/admin/users/[id]` for the in-app flow; super-admin accounts must be reset via script/DB since the API refuses super-admin targets).
 - Default **"Bistec"** brand kit: Glacier palette, Inter + JetBrains Mono (Google Fonts), active brand-voice prompt v1
 
 Optional: seed a 3:4 portrait template on the default kit so Path A has a portrait option out of the box (the brief filters templates by the chosen size):

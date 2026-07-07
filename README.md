@@ -41,7 +41,7 @@ npm run db:seed
 npm run dev  # http://localhost:3000
 ```
 
-Log in with username `adminBTG` / `BistecStudio2026!` (accounts sign in by username; the seeded admin is a super-admin and can create more users at `/admin/users`).
+Log in with username `adminBTG` / `BistecStudio2026!` — that's the seeded initial password; change it after first login (accounts sign in by username; the seeded admin is a super-admin and can create more users at `/admin/users`). On the primary dev machine the `adminBTG` password has since been changed locally (ask Damian).
 
 ## Scripts
 
