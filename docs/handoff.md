@@ -1,13 +1,33 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-07 (latest: super-admin user management + username sign-in + AI briefing assistant — see top section below)
+**Date:** 2026-07-07 (latest: framework upgrade to Next 16 / React 19 — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-07-07 (latest) — Super-admin user management, username sign-in, AI briefing assistant, UI fixes
+## 2026-07-07 (latest) — Framework upgrade: Next.js 16.2 + React 19.2 + tooling majors
+
+**Branch: `main`** — phased upgrade (safe bumps → Next/React → tooling majors), each phase individually gated. Final gates: tsc clean, lint 0 errors, 98/98 unit (vitest 4), `next build` (Turbopack) green, full E2E green.
+
+1. **Next.js 14.2 → 16.2, React 18.3 → 19.2.** Key migration points baked into the code:
+   - **Async request APIs:** `headers()` is awaited in `src/lib/auth.ts`; route-handler `params` is a `Promise` — **`withAuth` (handler.ts) resolves it centrally**, so all wrapped handlers keep synchronous `{ params }` destructuring. Only the two `requireRole`-direct routes (`brandkits/[id]/prompts/generate|improve`) await `ctx.params` themselves.
+   - **`src/middleware.ts` → `src/proxy.ts`** (function `proxy`; nodejs runtime). Same cookie-presence gate.
+   - **`next.config.mjs`:** `experimental.serverComponentsExternalPackages` → top-level `serverExternalPackages`; new **`experimental.proxyClientMaxBodySize: '16mb'`** — Next 16 buffers request bodies at 10MB when a proxy exists and silently TRUNCATES larger ones, which 500'd multipart uploads before `validateUpload()` could reply 400 (the app-level 10MB cap stays authoritative).
+   - **Turbopack is the default builder** (dev + build). No custom webpack config existed, so no flag needed.
+   - **`next lint` is removed** → `eslint.config.mjs` flat config (`eslint .`), eslint 9 + eslint-config-next 16. The new `react-hooks/set-state-in-effect` rule is downgraded to `warn` (6 pre-existing hydration-init patterns in ThemeProvider etc. — refactor to `useSyncExternalStore` later).
+   - React 19 types: `useRef<T>(null)` now yields `RefObject<T | null>` (brief wizard file-input ref).
+   - Next 16 allows only ONE `next dev` per project (lockfile) — stop the :3000 dev server before `test:e2e:serve`.
+2. **Tooling majors:** lucide-react 1.x (**brand icons removed** — Instagram/LinkedIn are now inline SVGs in `admin/settings/page.tsx`), p-limit 7 (ESM-only; worker esbuild bundle verified), vitest 4, lint-staged 17, @types/node 24. `test:e2e:serve` now uses `dotenv-cli` (Node 24 rejects `--env-file` inside NODE_OPTIONS).
+3. **Test-infra fix surfaced by the faster stack:** PUBLISH_NOW E2E was flaky because `Post.scheduledAt` is stamped from the **app clock** while the publish claim compares Postgres `now()` — Docker clock skew makes a due-now post momentarily unclaimable. The test now forces `scheduledAt` into the past before ticking (mirrors `makeDueAndTick`).
+4. **Deferred majors (backlog, deliberately NOT upgraded):** Prisma 7, Tailwind 4, zod 4, ESLint 10, TypeScript 6, @anthropic-ai/sdk 0.110, openai 6, puppeteer-core 25. Each is an independent migration; land separately.
+
+> **⚠️ Deploy:** `npm install`. Node ≥ 20.9 required (Docker `node:20-alpine` floats and satisfies it). No schema/migration changes.
+
+---
+
+## 2026-07-07 — Super-admin user management, username sign-in, AI briefing assistant, UI fixes
 
 **Branch: `main`.** Gates: tsc clean, **98/98 unit tests** (26 new), full E2E green including two new suites (`user-management.test.ts`, `briefing-assistant.test.ts`). New deps: `pdf-parse` (v2), `mammoth`.
 

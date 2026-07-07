@@ -8,6 +8,13 @@ const nextConfig = {
   // Standalone output traces it into the image. (Renamed from
   // experimental.serverComponentsExternalPackages in Next 15/16.)
   serverExternalPackages: ['pdf-parse', 'pdfjs-dist'],
+  // Next 16 caps request bodies at 10MB when a proxy is present and TRUNCATES
+  // anything larger, which breaks multipart parsing (500) before the routes'
+  // own validateUpload() 10MB check can answer with a clean 400. Give the
+  // proxy layer headroom so the app-level cap stays the authoritative gate.
+  experimental: {
+    proxyClientMaxBodySize: '16mb',
+  },
 };
 
 export default nextConfig;

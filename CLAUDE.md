@@ -4,6 +4,15 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-07)
 
+**✅ Framework upgrade: Next.js 16.2 + React 19.2 — 2026-07-07** (see `docs/handoff.md` top section):
+
+- **Async request APIs:** `withAuth` resolves the now-Promise route `params` centrally (`src/lib/api/handler.ts`) — wrapped handlers keep sync `{ params }`. `headers()` awaited in `auth.ts`. `src/middleware.ts` → **`src/proxy.ts`** (fn `proxy`).
+- **next.config:** top-level `serverExternalPackages`; `experimental.proxyClientMaxBodySize: '16mb'` (Next 16 truncates >10MB bodies when a proxy exists — broke multipart uploads). Turbopack is the default builder.
+- **Lint:** `next lint` removed → `eslint.config.mjs` flat config, `npm run lint` = `eslint .` (eslint 9). `react-hooks/set-state-in-effect` downgraded to warn (6 legacy hydration-init patterns).
+- **Tooling majors:** lucide 1.x (brand icons → inline SVGs in settings), p-limit 7, vitest 4, lint-staged 17, @types/node 24; `test:e2e:serve` uses dotenv-cli. **One `next dev` per project** — stop :3000 before `test:e2e:serve`.
+- **Deferred majors (backlog):** Prisma 7, Tailwind 4, zod 4, ESLint 10, TS 6, AI SDKs, puppeteer 25 — each a separate migration.
+- Gates: tsc, lint, 98/98 unit, Turbopack build, full E2E green. Deploy: `npm install`; Node ≥ 20.9; no migrations.
+
 **✅ Super-admin user management + username sign-in + AI briefing assistant — 2026-07-07** (see `docs/handoff.md` top section):
 
 - **Role hierarchy:** `Role` enum gains `SUPER_ADMIN`; ALL role checks go through `hasRole()` (`src/lib/roles.ts`, pure) — never compare role strings. `withSuperAdmin` wrapper; `useCurrentUser().isSuperAdmin`. Seeded admin is SUPER_ADMIN; promote others via `scripts/promote-super-admin.mjs <email-or-username> [new-username]`.

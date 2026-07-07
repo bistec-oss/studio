@@ -300,6 +300,15 @@ test.describe('Scheduled-generation queue — worker flow', () => {
     const after = await prisma!.scheduledGeneration.findUnique({ where: { id: entry.id } })
     expect(after!.status).toBe('COMPLETED')
 
+    // PUBLISH_NOW stamps scheduledAt from the APP clock, but the claim query
+    // compares against Postgres now() — Docker clock skew can leave a due-now
+    // post momentarily unclaimable. Force it firmly into the past so the tick
+    // is deterministic (same pattern as makeDueAndTick for generation entries).
+    await prisma!.post.updateMany({
+      where: { draftId: after!.draftId! },
+      data: { scheduledAt: new Date(Date.now() - 60_000) },
+    })
+
     const tick = await admin.post('/api/test/scheduler-tick', {})
     expect(tick.status()).toBe(200)
 
