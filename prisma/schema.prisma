@@ -45,6 +45,24 @@ enum PostStatus {
   CANCELLED
 }
 
+// Lifecycle of a scheduled post generation (mirrors Post's H12 machinery:
+// RUNNING overloads nextRetryAt as the worker lease deadline).
+enum GenerationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// What happens after a scheduled generation completes: hold the draft for
+// human review, auto-create SCHEDULED posts at publishAt, or publish at once.
+enum PostGenerationAction {
+  HOLD
+  SCHEDULE_PUBLISH
+  PUBLISH_NOW
+}
+
 enum ProviderSlot {
   COPY
   IMAGE
@@ -77,6 +95,7 @@ model User {
   // app relations
   briefs        Brief[]
   posts         Post[]
+  scheduledGenerations ScheduledGeneration[]
 }
 
 model Session {
@@ -147,6 +166,50 @@ model Campaign {
   projects     ProjectCampaign[]
   briefs       Brief[]
   briefings    CampaignBriefing[]
+  scheduledGenerations ScheduledGeneration[]
+}
+
+// A planned post under a campaign: per-post brief specifics + a generation
+// time. The scheduler worker claims due entries (FOR UPDATE SKIP LOCKED, same
+// pattern as Post publishing), generates a Draft via the shared pipeline, then
+// executes postAction. Retries with backoff on failure; FAILED is re-runnable.
+model ScheduledGeneration {
+  id          String               @id @default(cuid())
+  campaignId  String
+  campaign    Campaign             @relation(fields: [campaignId], references: [id])
+  createdById String
+  createdBy   User                 @relation(fields: [createdById], references: [id])
+  // Per-post brief specifics (the campaign briefing carries the rest).
+  topic       String
+  description String?
+  goal        String
+  tone        String
+  channels    Channel[]
+  aspectRatio AspectRatio          @default(SQUARE)
+  designMode  DesignMode
+  templateId  String?
+  template    BrandKitTemplate?    @relation("ScheduledGenerationTemplate", fields: [templateId], references: [id])
+  // Scheduling
+  generateAt  DateTime
+  postAction  PostGenerationAction @default(HOLD)
+  publishAt   DateTime?
+  // Lifecycle — mirrors Post's H12 fields (nextRetryAt doubles as the RUNNING lease).
+  status      GenerationStatus     @default(PENDING)
+  errorReason String?
+  retryCount  Int                  @default(0)
+  nextRetryAt DateTime?
+  // Results: the Brief is created on the first run attempt and reused across
+  // retries; the Draft is set on success.
+  briefId     String?
+  brief       Brief?               @relation(fields: [briefId], references: [id])
+  draftId     String?
+  draft       Draft?               @relation(fields: [draftId], references: [id])
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @default(now()) @updatedAt
+
+  @@index([status, generateAt])
+  @@index([status, nextRetryAt])
+  @@index([campaignId])
 }
 
 // Versioned free-text campaign briefing — the campaign-level "80% of the brief"
@@ -198,6 +261,7 @@ model Brief {
   referenceTemplate   BrandKitTemplate?  @relation("BriefReferenceTemplate", fields: [referenceTemplateId], references: [id])
   createdAt           DateTime           @default(now())
   drafts              Draft[]
+  scheduledGenerations ScheduledGeneration[]
 
   @@index([userId])
   @@index([campaignId])
@@ -223,6 +287,7 @@ model Draft {
   updatedAt       DateTime        @default(now()) @updatedAt
   posts           Post[]
   revisions       DraftRevision[]
+  scheduledGenerations ScheduledGeneration[]
 
   @@index([briefId])
 }
@@ -280,6 +345,7 @@ model BrandKitTemplate {
   aspectRatio        AspectRatio @default(SQUARE)
   createdAt          DateTime @default(now())
   referencedByBriefs Brief[]  @relation("BriefReferenceTemplate")
+  scheduledGenerations ScheduledGeneration[] @relation("ScheduledGenerationTemplate")
 
   @@index([brandKitId])
 }

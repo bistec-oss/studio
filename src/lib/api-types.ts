@@ -5,7 +5,7 @@
 // in sync with the routes it documents; when a route's `select`/`include`
 // changes, update the matching type here rather than re-declaring an
 // inline interface in a page.
-import type { AspectRatio } from '@prisma/client'
+import type { AspectRatio, Channel, DesignMode } from '@prisma/client'
 import type { Role } from '@/lib/auth'
 
 // ── Auth ─────────────────────────────────────────────────────────────────
@@ -48,6 +48,47 @@ export interface Campaign {
   brandKit: BrandKitRef | null
   projects: Array<{ project: ProjectRef }>
   _count: { briefs: number }
+}
+
+// GET /api/campaigns/[id]/briefing — versioned campaign briefing rows
+export interface CampaignBriefing {
+  id: string
+  campaignId: string
+  content: string
+  version: number
+  isActive: boolean
+  createdBy: string
+  createdAt: string
+}
+
+// GET/POST /api/campaigns/[id]/queue — scheduled-generation queue entries
+export type GenerationStatus = 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+export type PostGenerationAction = 'HOLD' | 'SCHEDULE_PUBLISH' | 'PUBLISH_NOW'
+
+export interface ScheduledGeneration {
+  id: string
+  campaignId: string
+  createdById: string
+  topic: string
+  description: string | null
+  goal: string
+  tone: string
+  channels: Channel[]
+  aspectRatio: AspectRatio
+  designMode: DesignMode
+  templateId: string | null
+  template: { id: string; name: string } | null
+  generateAt: string
+  postAction: PostGenerationAction
+  publishAt: string | null
+  status: GenerationStatus
+  errorReason: string | null
+  retryCount: number
+  nextRetryAt: string | null
+  briefId: string | null
+  draftId: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 // GET /api/campaigns/[id]/brandkit
