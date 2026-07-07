@@ -1,12 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import type { Channel } from '@prisma/client'
-import { resolveCopyProvider } from '@/providers/registry'
-import { resolveBrandKit } from '@/lib/brandkit/resolve'
-import { runPathBDesign } from '@/lib/agent/pathB'
-import { buildBriefInput } from '@/lib/agent/briefInput'
+import { generateDraftForBrief, NoBrandKitError } from '@/lib/agent/generateDraft'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { getSystemUserId } from '@/mcp/systemUser'
-import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 
 interface GeneratePostArgs {
   topic: string
@@ -47,33 +43,20 @@ export async function generatePost(args: GeneratePostArgs) {
     },
   })
 
-  // Kit precedence: campaign → project → system default (no explicit kit on
-  // this surface). Path B requires a kit, matching assemble-b.
-  const kit = await resolveBrandKit(args.campaignId ?? undefined)
-  if (!kit) {
-    throw new Error(
-      'No brand kit found — configure a brand kit for this campaign, or set a system default.'
-    )
+  // Shared brief→draft orchestrator: kit precedence (campaign → project →
+  // system default; no explicit kit on this surface), campaign briefing, copy,
+  // Path B design, Draft persistence — identical to the web routes.
+  try {
+    const { draft } = await generateDraftForBrief(brief)
+    return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }
+  } catch (err) {
+    if (err instanceof NoBrandKitError) {
+      throw new Error(
+        'No brand kit found — configure a brand kit for this campaign, or set a system default.'
+      )
+    }
+    throw err
   }
-
-  const copyProvider = await resolveCopyProvider(args.copyProviderKey)
-  const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit))
-
-  const result = await runPathBDesign(brief, kit, copyText)
-
-  const draft = await prisma.draft.create({
-    data: {
-      briefId: brief.id,
-      copyText,
-      htmlContent: result.htmlContent,
-      // result.exportUrl is an EXPORTS object key; stored as-is, signed per read.
-      exportUrl: result.exportUrl,
-      status: 'EXPORTED',
-      promptVersion: PROMPT_VERSION,
-    },
-  })
-
-  return { draftId: draft.id, exportUrl: await resolveExportUrl(result.exportUrl), htmlContent: result.htmlContent }
 }
 
 export async function getDraft(args: { id: string }) {
