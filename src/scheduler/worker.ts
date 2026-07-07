@@ -1,6 +1,7 @@
 import { runScheduledJobs } from "../lib/scheduler/jobRunner"
 import { runGenerationJobs } from "../lib/scheduler/generationRunner"
 import { isCliMode } from "../lib/agent/config"
+import { env } from "../lib/env"
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -21,15 +22,24 @@ async function loop(name: string, run: () => Promise<void>) {
 async function main() {
   console.log("[scheduler] starting, poll interval:", POLL_INTERVAL_MS, "ms")
 
-  // Scheduled generation spawns `claude -p` in CLI mode — a binary the Docker
-  // scheduler image does not ship. Warn loudly rather than fail silently per
-  // entry; publishing is unaffected.
+  // Scheduled generation spawns `claude -p` in CLI mode. The Docker image ships
+  // the Claude Code CLI (since the 2026-07-07 per-user-token feature), and the
+  // worker ALWAYS uses the shared CLAUDE_CODE_OAUTH_TOKEN — never a user's
+  // personal token. Warn when that shared token is missing: a headless
+  // container has no logged-in session to fall back to, so every scheduled
+  // generation would fail. Publishing is unaffected either way.
   if (isCliMode()) {
-    console.warn(
-      "[generation] ⚠ DESIGN_PROVIDER=cli — scheduled generation requires the `claude` CLI on this host. " +
-        "Inside the Docker scheduler container it is NOT installed and every scheduled generation will fail; " +
-        "use API mode (DESIGN_PROVIDER=claude-html + ANTHROPIC_API_KEY) or run the worker on a host with the CLI."
-    )
+    if (env.CLAUDE_CODE_OAUTH_TOKEN) {
+      console.log(
+        "[generation] DESIGN_PROVIDER=cli — scheduled generations spawn `claude -p` on the shared CLAUDE_CODE_OAUTH_TOKEN."
+      )
+    } else {
+      console.warn(
+        "[generation] ⚠ DESIGN_PROVIDER=cli with no CLAUDE_CODE_OAUTH_TOKEN set — headless `claude -p` spawns have " +
+          "no credential to run on (a container has no logged-in Claude session), so scheduled generations will fail. " +
+          "Set CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or use API mode (DESIGN_PROVIDER=claude-html + ANTHROPIC_API_KEY)."
+      )
+    }
   }
 
   await Promise.all([

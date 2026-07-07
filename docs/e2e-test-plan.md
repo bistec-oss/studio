@@ -1,7 +1,9 @@
 # bistec-studio — E2E Test Plan
 
 **Created:** 2026-06-23
-**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last run (2026-07-07): **103 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last full run (2026-07-07, post-§O): **109 passed, 0 failed, 7 skipped** (`npm run test:e2e:mock`; the machine lacked `BISTEC_API_KEYS` in `.env.test`, so 3 §J ACP-auth cases skipped on top of the 4 intentional skips below — CI sets the keys as job env and runs them). A GitHub Actions gate (`.github/workflows/e2e.yml`) runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+
+> **Update (2026-07-07, per-user Claude tokens):** new suite **`settings-claude-token.test.ts` (§O, 7 cases)** — self-service `GET/PUT/DELETE /api/me/claude-token` lifecycle (connect → replace → disconnect, masked `keyPrefix`, raw token never in any response/DOM), zod shape guard (400) vs validation failure (422 — under `MOCK_AI` a token containing `invalid` fails via the `mockClaudeTokenValidation` seam; the live path spawns a `claude -p` ping and can't run in this claude-html env), per-user isolation, proxy-redirect on unauthenticated calls, `/settings` page render (API-mode note, no CLI banner) and connect-via-form. `GET /api/me` now also returns `cliMode` + `claudeToken`. Test infra: `ApiClient` gained a `put()` method (`tests/helpers/api.ts`).
 
 > **Update (2026-07-07, post-brief enhance):** §N gains one case in `briefing-assistant.test.ts` — **post-brief enhance** (`POST /api/briefs/enhance`, `withAuth` so _editor_-accessible unlike the campaign enhance): mock rewrite via the shared `buildMockBriefingEnhance` seam, topic-only drafting, 400 when topic AND content are blank, 404 on unknown campaign. Suite verified 7/7; expected full-suite count 103 → **104 passed** (full run not re-executed this session).
 
