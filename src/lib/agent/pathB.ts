@@ -28,6 +28,7 @@ export async function runPathBDesign(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
+  campaignBriefing?: string | null,
 ): Promise<PathBDesignResult> {
   // Feed-to-AI artifact URLs (brand reference imagery).
   const artifacts = await prisma.brandKitArtifact.findMany({
@@ -64,7 +65,7 @@ export async function runPathBDesign(
   // Background pre-step: Claude (Haiku) decides + gpt-image generates a
   // full-bleed background before the design call. Null on skip/failure — the
   // design proceeds with CSS/SVG visuals as before. See agent/background.ts.
-  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText)
+  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing)
 
   const systemPrompt = buildPathBSystemPrompt({
     kit,
@@ -76,6 +77,7 @@ export async function runPathBDesign(
     backgroundImageUrl,
   })
   const userMessage = buildPathBUserMessage({
+    campaignBriefing,
     topic: brief.topic,
     description: brief.description,
     goal: brief.goal,

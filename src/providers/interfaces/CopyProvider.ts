@@ -11,6 +11,9 @@ export interface BriefInput {
   // lets copy match the selected kit's voice instead of a hardcoded brand.
   brandName?: string
   brandVoice?: string
+  // Active campaign briefing (campaign-level context shared by every post in
+  // the campaign), when the brief belongs to a campaign that has one.
+  campaignBriefing?: string
 }
 
 export interface CopyProvider {

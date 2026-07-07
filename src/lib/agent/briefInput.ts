@@ -19,10 +19,14 @@ export function parseBriefImages(json: unknown): BriefImage[] {
 }
 
 // Builds the provider-facing BriefInput from a Brief row (+ optional resolved
-// brand kit for voice context). Shared by every copy-generation call site
-// (assemble-a, assemble-b, the copy route, regenerate-copy, ACP) so the shape
-// stays identical everywhere.
-export function buildBriefInput(brief: Brief, kit?: ResolvedBrandKit | null): BriefInput {
+// brand kit for voice context, + optional active campaign briefing). Shared by
+// every copy-generation call site (assemble-a, assemble-b, the copy route,
+// regenerate-copy, ACP) so the shape stays identical everywhere.
+export function buildBriefInput(
+  brief: Brief,
+  kit?: ResolvedBrandKit | null,
+  campaignBriefing?: string | null,
+): BriefInput {
   return {
     topic: brief.topic,
     description: brief.description ?? '',
@@ -31,5 +35,6 @@ export function buildBriefInput(brief: Brief, kit?: ResolvedBrandKit | null): Br
     channels: brief.channels,
     brandName: kit?.name,
     brandVoice: kit?.voicePrompt ?? undefined,
+    campaignBriefing: campaignBriefing ?? undefined,
   }
 }

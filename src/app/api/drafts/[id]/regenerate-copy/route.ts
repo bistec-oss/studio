@@ -4,6 +4,7 @@ import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth } from '@/lib/api/handler'
 import { resolveCopyProvider } from '@/providers/registry'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { buildBriefInput } from '@/lib/agent/briefInput'
 
 export const maxDuration = 120
@@ -25,7 +26,8 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
     const provider = await resolveCopyProvider(draft.brief.copyProviderKey ?? undefined)
     // Brand voice follows the same kit precedence as design generation.
     const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
-    const copyText = await provider.generateCopy(buildBriefInput(draft.brief, kit))
+    const campaignBriefing = await getActiveCampaignBriefing(draft.brief.campaignId)
+    const copyText = await provider.generateCopy(buildBriefInput(draft.brief, kit, campaignBriefing))
 
     const previousCopyText = draft.copyText
     await prisma.draft.update({

@@ -14,10 +14,17 @@ export interface PathAPromptOptions {
   height: number
   hasInlineAssets: boolean
   additionalImageUrl?: string | null
+  // Active campaign briefing — Path A gets no other brief context (copy already
+  // encodes it), so the briefing's design-relevant direction lands here.
+  campaignBriefing?: string | null
 }
 
 export function buildPathASystemPrompt(opts: PathAPromptOptions): string {
-  const { kit, mode, width, height, hasInlineAssets, additionalImageUrl } = opts
+  const { kit, mode, width, height, hasInlineAssets, additionalImageUrl, campaignBriefing } = opts
+
+  const briefingSection = campaignBriefing
+    ? `\n\nCampaign context (applies to every post in this campaign):\n${campaignBriefing}`
+    : ''
 
   const imageInstruction = additionalImageUrl
     ? `\n- A user-provided image is supplied (URL below). You MUST embed it in the template's primary photo/subject slot (e.g. the avatar/photo/headshot area), replacing whatever placeholder graphic — a decorative SVG, a coloured shape, or a sample photo — currently fills that slot. Use an <img> that covers the slot (object-fit: cover) or set it as that element's background-image. This specific URL is allowed.`
@@ -25,7 +32,7 @@ export function buildPathASystemPrompt(opts: PathAPromptOptions): string {
 
   return `You are a professional social media design agent. Your task is to fill an HTML/CSS brand template with the provided content.
 
-${kit ? buildBrandKitSystemContext(kit) : ''}
+${kit ? buildBrandKitSystemContext(kit) : ''}${briefingSection}
 
 Instructions:
 - Fill the template with the provided copy text. Replace placeholder text with the actual content.

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { AgentToolLimitError } from '@/lib/agent/types'
@@ -41,9 +42,11 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
     )
   }
 
+  const campaignBriefing = await getActiveCampaignBriefing(draft.brief.campaignId)
+
   try {
     // Run the new design first — if it fails, the draft is left untouched.
-    const result = await runPathBDesign(draft.brief, kit, draft.copyText)
+    const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
 
     // Snapshot the design we are replacing as a revision (so "go back" works) —
     // revision-number allocation + P2002 collision retry via the shared helper.

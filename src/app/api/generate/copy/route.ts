@@ -5,6 +5,7 @@ import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveCopyProvider } from '@/providers/registry'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { buildBriefInput } from '@/lib/agent/briefInput'
 
 const bodySchema = z.object({ briefId: z.string() })
@@ -25,8 +26,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
     // Brand voice for copy comes from the same kit precedence as design:
     // explicit brief kit → campaign → project → system default.
     const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
+    const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
 
-    const copyText = await provider.generateCopy(buildBriefInput(brief, kit))
+    const copyText = await provider.generateCopy(buildBriefInput(brief, kit, campaignBriefing))
     return NextResponse.json({ copyText })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)

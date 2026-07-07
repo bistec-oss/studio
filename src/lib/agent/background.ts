@@ -128,6 +128,7 @@ export async function generateBackgroundForBrief(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
+  campaignBriefing?: string | null,
 ): Promise<string | null> {
   if (MOCK_AI) return null
   try {
@@ -138,6 +139,7 @@ export async function generateBackgroundForBrief(
       goal: brief.goal,
       tone: brief.tone,
       copyText,
+      campaignBriefing,
     })
     return await decideAndGenerate(prompt, {
       brandKitId: kit.id,

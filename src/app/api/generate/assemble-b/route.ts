@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
 import { runPathBDesign } from '@/lib/agent/pathB'
@@ -33,12 +34,16 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
     )
   }
 
+  // Campaign-level briefing (when the brief's campaign has an active one) —
+  // injected into copy and design prompts alongside the brand voice.
+  const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
+
   // Generate copy — brand voice comes from the resolved kit.
   const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
-  const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit))
+  const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit, campaignBriefing))
 
   try {
-    const result = await runPathBDesign(brief, kit, copyText)
+    const result = await runPathBDesign(brief, kit, copyText, campaignBriefing)
 
     const draft = await prisma.draft.create({
       data: {

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { resolveCopyProvider } from '@/providers/registry'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -55,10 +56,14 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   // Resolve brand kit: explicit brief kit → campaign → project → system default.
   const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
 
+  // Campaign-level briefing (when the brief's campaign has an active one) —
+  // injected into copy and design prompts alongside the brand voice.
+  const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
+
   try {
     // Generate copy inline (avoid HTTP round-trip); brand voice comes from the kit.
     const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
-    const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit))
+    const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit, campaignBriefing))
 
     // Externalize inline data: assets (e.g. base64 logos/backgrounds) before the
     // template enters the prompt. The model sees compact placeholder tokens; the
@@ -75,6 +80,7 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
       height,
       hasInlineAssets,
       additionalImageUrl: brief.additionalImageUrl,
+      campaignBriefing,
     })
     const userMessage = buildPathAUserMessage({
       slimTemplate,

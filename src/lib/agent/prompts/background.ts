@@ -33,12 +33,22 @@ export interface GenerationDecisionOptions {
   goal: string
   tone: string
   copyText: string
+  // Active campaign briefing — campaign-level context that should inform the
+  // background mood/subject alongside the per-post brief.
+  campaignBriefing?: string | null
 }
 
 // Initial generation (Path B): biased toward generating — most posts benefit
 // from a real background; skip only when a flat/gradient design is clearly better.
 export function buildBackgroundDecisionPrompt(opts: GenerationDecisionOptions): BackgroundDecisionPrompt {
-  const { kit, topic, description, goal, tone, copyText } = opts
+  const { kit, topic, description, goal, tone, copyText, campaignBriefing } = opts
+
+  const briefingSection = campaignBriefing
+    ? `Campaign briefing (applies to every post in this campaign):
+${campaignBriefing}
+
+`
+    : ''
 
   const system = `You are the art director for a social media post pipeline. Decide whether this post should have an AI-generated background image, and if so, write the image-generation prompt.
 
@@ -50,7 +60,7 @@ ${IMAGE_PROMPT_RULES}
 
 ${OUTPUT_PROTOCOL}`
 
-  const user = `Brief:
+  const user = `${briefingSection}Brief:
 Topic: ${topic}
 Description: ${description || 'none'}
 Goal: ${goal}

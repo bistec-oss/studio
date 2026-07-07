@@ -64,22 +64,32 @@ export interface PathBUserMessageOptions {
   width: number
   height: number
   briefImages?: BriefImage[]
+  // Active campaign briefing — campaign-level context shared by every post in
+  // the campaign, rendered above the per-post brief fields.
+  campaignBriefing?: string | null
 }
 
 export type { BriefImage }
 
 export function buildPathBUserMessage(opts: PathBUserMessageOptions): string {
-  const { topic, description, goal, tone, channels, copyText, mode, width, height, briefImages = [] } = opts
+  const { topic, description, goal, tone, channels, copyText, mode, width, height, briefImages = [], campaignBriefing } = opts
 
   const imageSection = briefImages.length > 0
     ? `\n\nProvided images (follow intent rules from system prompt):\n${briefImages.map((img) => `- ${img.url} (intent: ${img.intent})`).join('\n')}`
+    : ''
+
+  const briefingSection = campaignBriefing
+    ? `Campaign briefing (applies to every post in this campaign — follow it alongside the brief below):
+${campaignBriefing}
+
+`
     : ''
 
   const finalStep = mode === 'api'
     ? `Call renderHtml(html, ${width}, ${height}) as your final step.`
     : `Output the complete HTML document.`
 
-  return `Create a social media post for the following brief:
+  return `${briefingSection}Create a social media post for the following brief:
 
 Topic: ${topic}
 Description: ${description || 'none'}

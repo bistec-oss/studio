@@ -15,9 +15,12 @@ export function buildCopyPrompt(brief: BriefInput): CopyPrompt {
   const voiceSection = brief.brandVoice
     ? `\n\nBrand voice guidelines:\n${brief.brandVoice}`
     : ''
+  const briefingSection = brief.campaignBriefing
+    ? `\n\nCampaign briefing (applies to every post in this campaign):\n${brief.campaignBriefing}`
+    : ''
 
   return {
-    system: `You are an expert social media copywriter for ${brandName}. Write compelling, on-brand copy for ${channelList} posts.${voiceSection}`,
+    system: `You are an expert social media copywriter for ${brandName}. Write compelling, on-brand copy for ${channelList} posts.${voiceSection}${briefingSection}`,
     user: `Topic: ${brief.topic}
 Description: ${brief.description}
 Goal: ${brief.goal}
