@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner, hasRole } from '@/lib/auth'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { queueEntrySchema, requiresAdmin, validateTemplateSelection } from '@/lib/campaign/queue'
 
@@ -37,7 +37,7 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
   // The gate applies to the current AND the requested action — an editor may
   // neither set auto-publish nor edit an entry that already has it.
-  if ((requiresAdmin(existing.postAction) || requiresAdmin(entry.postAction)) && user.role !== 'admin') {
+  if ((requiresAdmin(existing.postAction) || requiresAdmin(entry.postAction)) && !hasRole(user.role, 'admin')) {
     return NextResponse.json(
       { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
       { status: 403 }

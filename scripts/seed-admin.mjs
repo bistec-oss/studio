@@ -23,6 +23,8 @@ import { PrismaClient } from "@prisma/client"
 
 const ADMIN_EMAIL = "admin@bisteccare.lk"
 const ADMIN_NAME = "Admin"
+// Sign-in username (accounts log in by username since the username switch).
+const ADMIN_USERNAME = "adminBTG"
 const FIXED_TEST_PASSWORD = "BistecStudio2026!"
 
 function generatePassword() {
@@ -73,12 +75,18 @@ await auth.api.signUpEmail({
   body: { name: ADMIN_NAME, email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
 })
 
+// SUPER_ADMIN: the seeded admin is the account that manages users in-app.
 await prisma.user.update({
   where: { email: ADMIN_EMAIL },
-  data: { role: "ADMIN" },
+  data: {
+    role: "SUPER_ADMIN",
+    username: ADMIN_USERNAME.toLowerCase(),
+    displayUsername: ADMIN_USERNAME,
+  },
 })
 
 console.log("Admin user created")
+console.log(`  Username: ${ADMIN_USERNAME}`)
 console.log(`  Email:    ${ADMIN_EMAIL}`)
 console.log(`  Password: ${ADMIN_PASSWORD}  (${passwordSource})`)
 console.log("Change this password after first login.")

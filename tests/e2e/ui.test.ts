@@ -12,7 +12,8 @@ const MOCKED = () => !!(process.env.MOCK_AI && process.env.MOCK_PUPPETEER)
 
 async function pageLogin(page: Page) {
   await page.goto('/login')
-  await page.getByPlaceholder('Email address').fill(ADMIN_EMAIL)
+  // The login page takes a username; an email routes through the legacy flow.
+  await page.getByPlaceholder('Username').fill(ADMIN_EMAIL)
   await page.getByPlaceholder('Password').fill(ADMIN_PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await page.waitForURL(url => url.pathname === '/') // lands on the dashboard "/"

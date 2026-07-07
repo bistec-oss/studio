@@ -50,10 +50,11 @@ test.describe('Authentication & RBAC', () => {
   })
 
   // TC-AUTH-04 — /api/me returns the lower-cased role. Guards H13.
+  // The seeded admin is SUPER_ADMIN since the user-management feature.
   test('/api/me reports the role lower-cased for admin and editor', async ({ request }) => {
     const admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
     const adminMe = await (await admin.get('/api/me')).json()
-    expect(adminMe.role).toBe('admin')
+    expect(adminMe.role).toBe('super_admin')
     expect(adminMe.userId).toBeTruthy()
 
     const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)

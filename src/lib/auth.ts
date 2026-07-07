@@ -1,4 +1,6 @@
 import { betterAuth } from "better-auth"
+import { APIError } from "better-auth/api"
+import { username } from "better-auth/plugins"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { prisma } from "@/lib/prisma"
 import { headers } from "next/headers"
@@ -16,20 +18,45 @@ export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: { enabled: true },
+  // Accounts sign in with a username; email is kept internally (better-auth
+  // requires one) and synthesized for admin-created accounts.
+  plugins: [username()],
+  databaseHooks: {
+    session: {
+      create: {
+        // Deactivated accounts can't sign in (getCurrentUser also nulls out
+        // any session that predates deactivation — belt and braces).
+        before: async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { disabled: true },
+          })
+          if (user?.disabled) {
+            throw new APIError("FORBIDDEN", { message: "This account has been deactivated" })
+          }
+        },
+      },
+    },
+  },
   user: {
     additionalFields: {
-      role: { type: "string", required: false, defaultValue: "editor", input: false },
+      // defaultValue must match the DB enum casing (EDITOR) — Prisma rejects
+      // lowercase on create. getCurrentUser normalises to lowercase for checks.
+      role: { type: "string", required: false, defaultValue: "EDITOR", input: false },
+      disabled: { type: "boolean", required: false, defaultValue: false, input: false },
     },
   },
 })
 
-export type Role = "admin" | "editor"
+export { hasRole, normalizeRole, type Role } from "@/lib/roles"
+import { hasRole, normalizeRole, type Role } from "@/lib/roles"
 
 export async function requireRole(role: Role): Promise<{ userId: string } | NextResponse> {
   const session = await auth.api.getSession({ headers: headers() })
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  const userRole = ((session.user as { role?: string }).role ?? "editor").toLowerCase()
-  if (role === "admin" && userRole !== "admin") {
+  const sessionUser = session.user as { role?: string; disabled?: boolean }
+  if (sessionUser.disabled) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!hasRole(normalizeRole(sessionUser.role), role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   return { userId: session.user.id }
@@ -42,7 +69,7 @@ export function forbiddenIfNotOwner(
   user: { userId: string; role: Role },
   ownerId: string | null | undefined,
 ): NextResponse | null {
-  if (user.role === "admin") return null
+  if (hasRole(user.role, "admin")) return null
   if (ownerId && ownerId === user.userId) return null
   return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 }
@@ -59,10 +86,11 @@ export async function getDraftOwnerId(draftId: string): Promise<string | null> {
 export async function getCurrentUser() {
   const session = await auth.api.getSession({ headers: headers() })
   if (!session) return null
+  const sessionUser = session.user as { role?: string; disabled?: boolean }
+  // Deactivated accounts resolve to no user even with a live session cookie.
+  if (sessionUser.disabled) return null
   return {
     userId: session.user.id,
-    // Normalise case: the DB enum stores ADMIN/EDITOR, but call sites compare
-    // against lowercase "admin"/"editor".
-    role: (((session.user as { role?: string }).role ?? "editor").toLowerCase()) as Role,
+    role: normalizeRole(sessionUser.role),
   }
 }

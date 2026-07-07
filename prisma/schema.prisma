@@ -8,6 +8,7 @@ datasource db {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   EDITOR
 }
@@ -83,12 +84,20 @@ model User {
   id            String    @id @default(cuid())
   name          String
   email         String    @unique
+  // Sign-in identity (better-auth username plugin): `username` is the
+  // lowercase unique handle, `displayUsername` preserves the entered casing.
+  // Email is kept internally (better-auth requires it) but is not the login.
+  username        String?   @unique
+  displayUsername String?
   emailVerified Boolean   @default(false)
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   // app-level role (managed server-side only — never writable via sign-up)
   role          Role      @default(EDITOR)
+  // deactivated accounts keep their content/attribution but cannot log in;
+  // toggled only by super-admins via /api/admin/users
+  disabled      Boolean   @default(false)
   // better-auth relations
   sessions      Session[]
   accounts      Account[]
@@ -167,6 +176,27 @@ model Campaign {
   briefs       Brief[]
   briefings    CampaignBriefing[]
   scheduledGenerations ScheduledGeneration[]
+  documents    CampaignDocument[]
+}
+
+// A source document (strategy deck, product one-pager, …) handed in by an
+// admin to ground the AI briefing assistant. The original file lives in the
+// private campaign-docs MinIO bucket; parsedText is the extracted plain text
+// (capped — `truncated` marks a cut) injected into briefing chat/enhance prompts.
+model CampaignDocument {
+  id          String   @id @default(cuid())
+  campaignId  String
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  name        String
+  contentType String
+  sizeBytes   Int
+  objectKey   String
+  parsedText  String   @db.Text
+  truncated   Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([campaignId])
 }
 
 // A planned post under a campaign: per-post brief specifics + a generation

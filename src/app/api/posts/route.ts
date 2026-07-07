@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { hasRole } from '@/lib/auth'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
 import { Channel } from '@prisma/client'
@@ -87,7 +88,7 @@ export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') ?? '20', 10)))
 
-  const where = user.role === 'admin' ? {} : { userId: user.userId }
+  const where = hasRole(user.role, 'admin') ? {} : { userId: user.userId }
 
   const [posts, total] = await Promise.all([
     prisma.post.findMany({

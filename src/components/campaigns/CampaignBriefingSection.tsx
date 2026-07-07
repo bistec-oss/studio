@@ -3,10 +3,12 @@
 import React, { useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Sparkles, MessageSquareText } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { apiFetch } from '@/lib/apiFetch'
+import { BriefingAssistantPanel } from '@/components/campaigns/BriefingAssistantPanel'
 import type { CampaignBriefing } from '@/lib/api-types'
 
 // Versioned campaign briefing editor — the campaign-level context injected
@@ -25,6 +27,10 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState<'active' | 'history' | 'new'>('active')
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [enhancing, setEnhancing] = useState(false)
+  // Before/after review: the AI rewrite is only committed to the textarea on Accept.
+  const [enhanceResult, setEnhanceResult] = useState<{ original: string; draft: string } | null>(null)
 
   const { data: briefings = [] } = useQuery({
     queryKey: ['campaigns', campaignId, 'briefing'],
@@ -56,6 +62,33 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
     }
   }
 
+  async function enhance() {
+    setEnhancing(true)
+    try {
+      const { draft: aiDraft } = await apiFetch<{ draft: string }>(
+        `/api/campaigns/${campaignId}/briefing/enhance`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: draft }),
+        },
+      )
+      setEnhanceResult({ original: draft, draft: aiDraft })
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Enhance failed')
+    } finally {
+      setEnhancing(false)
+    }
+  }
+
+  function applyAssistantDraft(text: string) {
+    setDraft(text)
+    setEnhanceResult(null)
+    setView('new')
+    setAssistantOpen(false)
+    toast.success('Briefing draft applied — review and save it as a new version.')
+  }
+
   async function activate(briefingId: string) {
     try {
       await apiFetch(`/api/campaigns/${campaignId}/briefing/${briefingId}/activate`, { method: 'POST' })
@@ -71,11 +104,18 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
         <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
           Campaign Briefing
         </h3>
-        {active && (
-          <span className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted">
-            v{active.version}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button variant="ghost" size="sm" onClick={() => setAssistantOpen(true)}>
+              <MessageSquareText size={13} /> Draft with AI
+            </Button>
+          )}
+          {active && (
+            <span className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted">
+              v{active.version}
+            </span>
+          )}
+        </div>
       </div>
       <p className="text-xs text-light-text-muted dark:text-dark-text-muted mb-3">
         Shared context for every post generated under this campaign — injected into copy and
@@ -139,21 +179,58 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
 
           {view === 'new' && (
             <div className="space-y-3">
-              <textarea
-                value={draft}
-                onChange={e => setDraft(e.target.value)}
-                rows={8}
-                placeholder="Audience, key messages, themes, do's and don'ts for this campaign…"
-                className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-none"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={saveVersion} disabled={!draft.trim() || saving}>
-                  {saving ? 'Saving…' : 'Save as new version'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setDraft(''); setView('active') }}>
-                  Cancel
-                </Button>
-              </div>
+              {enhanceResult ? (
+                <div className="space-y-3">
+                  {enhanceResult.original.trim() && (
+                    <div>
+                      <p className="text-xs font-medium text-light-text-muted dark:text-dark-text-muted mb-1">Before</p>
+                      <div className="glass-input rounded-xl p-3 text-sm text-light-text-muted dark:text-dark-text-muted whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+                        {enhanceResult.original}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-medium text-primary dark:text-primary-light mb-1">AI suggestion</p>
+                    <div className="glass-input rounded-xl p-3 text-sm text-light-text dark:text-dark-text whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+                      {enhanceResult.draft}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => { setDraft(enhanceResult.draft); setEnhanceResult(null) }}>
+                      Accept suggestion
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setEnhanceResult(null)}>
+                      Discard
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    rows={8}
+                    placeholder="Audience, key messages, themes, do's and don'ts for this campaign…"
+                    className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-none"
+                  />
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" onClick={saveVersion} disabled={!draft.trim() || saving}>
+                      {saving ? 'Saving…' : 'Save as new version'}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={enhance} disabled={enhancing}>
+                      <Sparkles size={13} /> {enhancing ? 'Enhancing…' : 'Enhance with AI'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setDraft(''); setEnhanceResult(null); setView('active') }}>
+                      Cancel
+                    </Button>
+                  </div>
+                  {enhancing && (
+                    <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
+                      Rewriting with brand voice and campaign documents — this can take up to a minute.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -165,6 +242,15 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
         <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
           No briefing yet — posts under this campaign use only the brand voice.
         </p>
+      )}
+
+      {isAdmin && (
+        <BriefingAssistantPanel
+          campaignId={campaignId}
+          open={assistantOpen}
+          onClose={() => setAssistantOpen(false)}
+          onApply={applyAssistantDraft}
+        />
       )}
     </GlassPanel>
   )

@@ -4,6 +4,16 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-07)
 
+**✅ Super-admin user management + username sign-in + AI briefing assistant — 2026-07-07** (see `docs/handoff.md` top section):
+
+- **Role hierarchy:** `Role` enum gains `SUPER_ADMIN`; ALL role checks go through `hasRole()` (`src/lib/roles.ts`, pure) — never compare role strings. `withSuperAdmin` wrapper; `useCurrentUser().isSuperAdmin`. Seeded admin is SUPER_ADMIN; promote others via `scripts/promote-super-admin.mjs <email-or-username> [new-username]`.
+- **Username sign-in** (better-auth `username()` plugin): login is by username (dev admin = **`adminBTG`**, password unchanged); email is internal only (synthetic `<username>@users.bistec.internal` for admin-created accounts). Gotcha: better-auth additionalField `role` default must be `"EDITOR"` (enum casing).
+- **User management** at `/admin/users` (super-admin only): create (name/username/role/initial password), role toggle, **deactivate** (soft; sessions revoked + sign-in blocked via session-create hook) / reactivate, password reset. No self-modify, no touching super-admins.
+- **AI briefing assistant** on the campaign page: upload PDF/DOCX/TXT/MD source docs (`CampaignDocument`, private `campaign-docs` bucket, max 5×10MB, parsed text capped), chat to converge on a briefing (` ```briefing ` block → "Apply to editor"), and an **Enhance with AI** before/after on the briefing editor. Sonnet via `src/lib/campaign/briefingAssistant.ts` (works in API + CLI modes; `MOCK_AI` seams). All admin-only; saving still uses the versioned briefing flow.
+- **UI:** modals now scroll internally and never exceed the viewport (`Modal.tsx`); sidebar logo removed; navbar logo bigger.
+- **⚠️ Deploy:** `npm install` (pdf-parse, mammoth) → `npx prisma migrate deploy` (`20260707065911`, `20260707135943`) → promote your admin. `pdf-parse`/`pdfjs-dist` are `serverComponentsExternalPackages` in `next.config.mjs` (webpack breaks pdfjs otherwise).
+- Tests: 98/98 unit; E2E + 2 new suites green (`user-management`, `briefing-assistant`).
+
 **✅ Campaign briefing + scheduled post generation — 2026-07-07** (see `docs/handoff.md` top section):
 
 - **Versioned campaign briefing** (`CampaignBriefing`, mirrors `BrandKitPrompt`): campaign-level free-text context injected into every generation under the campaign (copy + Path A/B + background prompts; refine excluded) on top of the brand voice. `GET/POST /api/campaigns/[id]/briefing` + `[vid]/activate`; writes admin-only. Loader: `getActiveCampaignBriefing()` (`src/lib/campaign/briefing.ts`). `PROMPT_VERSION=2026-07-07.1`.

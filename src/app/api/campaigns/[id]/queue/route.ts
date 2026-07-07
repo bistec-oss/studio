@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withAuth, parseBody } from '@/lib/api/handler'
+import { hasRole } from '@/lib/auth'
 import { queueEntrySchema, requiresAdmin, validateTemplateSelection } from '@/lib/campaign/queue'
 
 type Params = { id: string }
@@ -36,7 +37,7 @@ export const POST = withAuth<Params>(async (req, { params }, user) => {
   const entry = body.data
 
   // Auto-publish entries are a deferred publish — admin-only, matching POST /api/posts.
-  if (requiresAdmin(entry.postAction) && user.role !== 'admin') {
+  if (requiresAdmin(entry.postAction) && !hasRole(user.role, 'admin')) {
     return NextResponse.json(
       { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
       { status: 403 }

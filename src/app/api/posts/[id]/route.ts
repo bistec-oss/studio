@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withAuth, withAdmin } from '@/lib/api/handler'
+import { hasRole } from '@/lib/auth'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
 type Params = { id: string }
@@ -15,7 +16,7 @@ export const GET = withAuth<Params>(async (_req, { params }, user) => {
 
   if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (user.role !== 'admin' && post.userId !== user.userId) {
+  if (!hasRole(user.role, 'admin') && post.userId !== user.userId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -1,9 +1,24 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-07 (latest: versioned campaign briefing + scheduled post generation — see top section below)
+**Date:** 2026-07-07 (latest: super-admin user management + username sign-in + AI briefing assistant — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
+
+---
+
+## 2026-07-07 (latest) — Super-admin user management, username sign-in, AI briefing assistant, UI fixes
+
+**Branch: `main`.** Gates: tsc clean, **98/98 unit tests** (26 new), full E2E green including two new suites (`user-management.test.ts`, `briefing-assistant.test.ts`). New deps: `pdf-parse` (v2), `mammoth`.
+
+1. **Role hierarchy + super-admin** (migration `20260707065911`). `Role` enum gains `SUPER_ADMIN`; all checks go through **`hasRole` in `src/lib/roles.ts`** (pure module: `super_admin > admin > editor`) — never compare role strings directly. `withSuperAdmin` joins `withAuth`/`withAdmin` in `src/lib/api/handler.ts`; `useCurrentUser` exposes `isSuperAdmin` (and `isAdmin` is true for super-admins). The seeded admin is now SUPER_ADMIN (`scripts/seed-admin.mjs`); promote any account with `node --env-file=.env scripts/promote-super-admin.mjs <email-or-username> [new-username]`.
+2. **Username sign-in** (better-auth `username()` plugin + `usernameClient()`, migration `20260707135943`: `User.username` unique + `displayUsername`). The login page takes a username (an email still routes through the legacy email flow); the dev/seed admin is **`adminBTG`**, seed editor `editor`. better-auth still requires an email internally — admin-created accounts get a synthetic `<username>@users.bistec.internal`. **Gotcha fixed along the way:** the `role` additionalField default had to be `"EDITOR"` (DB-enum casing) — lowercase made every app-instance sign-up 500.
+3. **User management** (`/admin/users` page + `GET/POST /api/admin/users`, `PATCH /api/admin/users/[id]` — all `withSuperAdmin`). Create = name/username/role/initial password (via `auth.api.signUpEmail` then server-side role set; password shared out-of-band). Role toggle admin⇄editor; **"delete" = deactivate** (`User.disabled`): sessions revoked immediately, sign-in blocked by a `databaseHooks.session.create.before` hook (403), live sessions null out via `getCurrentUser`. Reactivation + password reset (`ctx.password.hash` + `internalAdapter.updatePassword`). Guards: no self-modify, no touching SUPER_ADMIN accounts, `super_admin` never assignable via the API. Self-signup remains enabled (EDITOR).
+4. **Campaign source documents** (`CampaignDocument`, same migration; private MinIO bucket `campaign-docs`). `POST/GET /api/campaigns/[id]/documents` (+`[docId]` DELETE): PDF/DOCX/TXT/MD, 10MB cap, **max 5 per campaign**, parsed to text at upload (`src/lib/campaign/documents.ts` — pdf-parse v2 `PDFParse`/mammoth), per-file cap 60k chars, prompt-context cap 50k (`buildDocsContext`). **`next.config.mjs` gotcha:** `pdf-parse`/`pdfjs-dist` must be in `serverComponentsExternalPackages` — webpack RSC bundling breaks pdfjs otherwise.
+5. **AI briefing assistant** (`src/lib/campaign/briefingAssistant.ts`). Mode-agnostic Sonnet helper (API `messages[]` / CLI transcript-folded `claude -p`, `MOCK_AI` seams `buildMockBriefingReply`/`buildMockBriefingEnhance`): **chat** `POST /api/campaigns/[id]/briefing/chat` (stateless; client owns the transcript; reply carries a ` ```briefing ` fenced block → `extractBriefingBlock` → `briefingDraft`) and **enhance** `POST .../briefing/enhance` (rewrite of the editor text, drafts from context when empty). Both admin-only, grounded in brand voice + docs + active briefing. UI: `BriefingAssistantPanel` (Drawer: doc upload/list/delete + chat + "Apply to editor") and an **Enhance with AI** before/after accept/discard flow in `CampaignBriefingSection`; applying only fills the textarea — saving stays the normal versioned flow.
+6. **UI fixes.** `Modal.tsx` content is now `max-h-[calc(100dvh-2rem)]` with a scrollable body and pinned header/footer (fixes QueueEntryModal et al. on short screens); sidebar logo removed; topbar logo enlarged (26→40).
+
+> **⚠️ Deploy:** `npm install` (new deps) → `npx prisma migrate deploy` (2 new migrations) → `node --env-file=.env scripts/promote-super-admin.mjs <your admin> adminBTG`. The `campaign-docs` bucket is auto-created by `initBuckets()`. No new env vars. E2E note: sign-in probes in tests need a **fresh cookie jar** — a stale session cookie makes better-auth 403 (`MISSING_OR_NULL_ORIGIN`) on sign-in POSTs.
 
 ---
 

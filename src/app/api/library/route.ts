@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/api/handler"
+import { hasRole } from "@/lib/auth"
 import { resolveExportUrl } from "@/lib/storage/minio"
 import { PostStatus } from "@prisma/client"
 
@@ -64,7 +65,7 @@ export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
   }
 
   // Non-admins only see drafts from their own briefs (IDOR fix).
-  if (user.role !== "admin") {
+  if (!hasRole(user.role, "admin")) {
     const ownership = { brief: { userId: user.userId } }
     where.AND = where.AND ? [...where.AND, ownership] : [ownership]
   }

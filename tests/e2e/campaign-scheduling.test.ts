@@ -189,7 +189,8 @@ test.describe('Campaign page UI — briefing + queue sections', () => {
 
   async function pageLogin(page: Page) {
     await page.goto('/login')
-    await page.getByPlaceholder('Email address').fill(ADMIN_EMAIL)
+    // The login page takes a username; an email routes through the legacy flow.
+    await page.getByPlaceholder('Username').fill(ADMIN_EMAIL)
     await page.getByPlaceholder('Password').fill(ADMIN_PASSWORD)
     await page.getByRole('button', { name: 'Sign in' }).click()
     await page.waitForURL(url => url.pathname === '/')
@@ -203,7 +204,10 @@ test.describe('Campaign page UI — briefing + queue sections', () => {
     await pageLogin(page)
     await page.goto(`/campaigns/${camp.id}`)
 
-    await expect(page.getByText('Campaign Briefing')).toBeVisible()
+    // Heading role: the queue empty-state paragraph also contains the phrase
+    // "campaign briefing" while the list query is still loading (getByText is
+    // case-insensitive), which would make a bare text locator ambiguous.
+    await expect(page.getByRole('heading', { name: 'Campaign Briefing' })).toBeVisible()
     await expect(page.getByText('UI briefing content marker')).toBeVisible()
     await expect(page.getByText(/Planned Posts \(1\)/)).toBeVisible()
     await expect(page.getByText('Queued')).toBeVisible()
@@ -213,6 +217,18 @@ test.describe('Campaign page UI — briefing + queue sections', () => {
 
 test.describe('Scheduled-generation queue — worker flow', () => {
   let admin: ApiClient
+
+  // The test DB is reused across runs: stale PENDING entries from previous
+  // suites (notably due __FAIL_GEN_ALWAYS__ retries) would be claimed by the
+  // tick's small batch and starve the entry under test. Cancel them up front.
+  test.beforeAll(async () => {
+    if (!dbAvailable) return
+    await prisma!.scheduledGeneration.updateMany({
+      where: { status: 'PENDING' },
+      data: { status: 'CANCELLED' },
+    })
+  })
+
   test.beforeEach(async ({ request }) => {
     admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
   })

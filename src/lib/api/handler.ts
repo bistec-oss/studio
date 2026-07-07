@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ZodType, ZodTypeDef } from 'zod'
-import { getCurrentUser, type Role } from '@/lib/auth'
+import { getCurrentUser, hasRole, type Role } from '@/lib/auth'
 
 // Shared route-handler infrastructure: one place for the auth check, the
 // role gate, JSON-body parsing/validation, and the unexpected-error envelope.
@@ -25,13 +25,13 @@ type AuthedHandler<P> = (
 // instead of Next's opaque default.
 export function withAuth<P = Record<string, string>>(
   handler: AuthedHandler<P>,
-  opts: { role?: 'admin' } = {}
+  opts: { role?: 'admin' | 'super_admin' } = {}
 ) {
   return async (req: NextRequest, ctx: RouteContext<P>): Promise<NextResponse> => {
     try {
       const user = await getCurrentUser()
       if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      if (opts.role === 'admin' && user.role !== 'admin') {
+      if (opts.role && !hasRole(user.role, opts.role)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
       return await handler(req, ctx, user)
@@ -44,6 +44,10 @@ export function withAuth<P = Record<string, string>>(
 
 export function withAdmin<P = Record<string, string>>(handler: AuthedHandler<P>) {
   return withAuth(handler, { role: 'admin' })
+}
+
+export function withSuperAdmin<P = Record<string, string>>(handler: AuthedHandler<P>) {
+  return withAuth(handler, { role: 'super_admin' })
 }
 
 // Parses and validates the JSON body. Returns { data } on success or

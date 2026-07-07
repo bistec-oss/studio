@@ -16,9 +16,13 @@ export function useCurrentUser() {
     retry: false,
   })
 
+  const role = data?.role?.toLowerCase()
+
   return {
     user: data ?? null,
-    isAdmin: data?.role?.toLowerCase() === 'admin',
+    // super_admin passes every admin gate (mirrors hasRole on the server)
+    isAdmin: role === 'admin' || role === 'super_admin',
+    isSuperAdmin: role === 'super_admin',
     isLoading,
     isError,
   }

@@ -65,6 +65,26 @@ export function shouldMockGenerateFail(promptContext: string): boolean {
   return promptContext.includes('__FAIL_GEN_ALWAYS__')
 }
 
+/**
+ * Deterministic briefing-assistant chat reply (MOCK_AI). Echoes the last user
+ * message and always carries a ```briefing block so tests can assert the
+ * draft-extraction path end-to-end.
+ */
+export function buildMockBriefingReply(lastUserMessage: string): string {
+  return [
+    `Mock briefing assistant reply for E2E tests. [${lastUserMessage}]`,
+    '',
+    '```briefing',
+    `Mock campaign briefing draft based on: ${lastUserMessage}`,
+    '```',
+  ].join('\n')
+}
+
+/** Deterministic "Enhance with AI" briefing rewrite (MOCK_AI). */
+export function buildMockBriefingEnhance(content: string): string {
+  return `Enhanced: ${content || 'Mock briefing drafted from campaign context.'}`
+}
+
 /** Deterministic 1×1 transparent PNG returned by the mock Puppeteer renderer. */
 export const MOCK_PNG_BUFFER = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',

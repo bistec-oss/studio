@@ -1,6 +1,6 @@
 import { ShieldAlert } from 'lucide-react'
 import Link from 'next/link'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUser, hasRole } from '@/lib/auth'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 
 // Server-side gate for every /admin page. The sidebar already hides the Admin
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser()
 
-  if (user?.role !== 'admin') {
+  if (!user || !hasRole(user.role, 'admin')) {
     return (
       <GlassPanel className="p-12 text-center max-w-md mx-auto mt-12">
         <ShieldAlert size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />

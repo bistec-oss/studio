@@ -7,7 +7,7 @@ import { GlassPanel, GlassInput, Button } from "@/components/ui"
 import { Logo } from "@/components/Logo"
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -18,7 +18,11 @@ export default function LoginPage() {
     setError("")
     setLoading(true)
 
-    const { error: authError } = await authClient.signIn.email({ email, password })
+    // Legacy escape hatch: an email address still signs in via the email flow
+    // (covers accounts predating the username switch).
+    const { error: authError } = username.includes("@")
+      ? await authClient.signIn.email({ email: username, password })
+      : await authClient.signIn.username({ username, password })
 
     if (authError) {
       setError(authError.message ?? "Invalid credentials")
@@ -39,12 +43,12 @@ export default function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <GlassInput
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
           />
           <GlassInput
             type="password"

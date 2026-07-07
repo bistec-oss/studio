@@ -36,9 +36,10 @@ await auth.api.signUpEmail({
 
 // Ensure the role is explicitly EDITOR (the non-admin floor) regardless of the
 // schema default, so the RBAC tests assert against a known-non-admin account.
+// Username: accounts sign in by username since the username switch.
 await prisma.user.update({
   where: { email: EDITOR_EMAIL },
-  data: { role: "EDITOR" },
+  data: { role: "EDITOR", username: "editor", displayUsername: "editor" },
 })
 
 console.log("Editor user created")

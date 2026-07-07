@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
+import { forbiddenIfNotOwner, hasRole } from '@/lib/auth'
 import { withAuth } from '@/lib/api/handler'
 import { requiresAdmin } from '@/lib/campaign/queue'
 
@@ -18,7 +18,7 @@ export const POST = withAuth<Params>(async (_req, { params }, user) => {
   if (forbidden) return forbidden
 
   // Re-arming an auto-publish entry re-arms a deferred publish — admin-only.
-  if (requiresAdmin(existing.postAction) && user.role !== 'admin') {
+  if (requiresAdmin(existing.postAction) && !hasRole(user.role, 'admin')) {
     return NextResponse.json(
       { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
       { status: 403 }

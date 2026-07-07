@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Menu, X } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, Users, Menu, X } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
@@ -15,6 +15,7 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   adminOnly?: boolean
+  superAdminOnly?: boolean
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -23,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
   { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
   { label: 'Admin',     href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
+  { label: 'Users',     href: '/admin/users',        icon: <Users size={18} />, superAdminOnly: true },
 ]
 
 function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
@@ -50,15 +52,15 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
 function Sidebar({ onClose }: { onClose?: () => void }) {
   // Hide admin-only entries from non-admins (server-side enforcement lives in
   // the /admin layout — this is just honest navigation).
-  const { isAdmin } = useCurrentUser()
-  const items = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin)
+  const { isAdmin, isSuperAdmin } = useCurrentUser()
+  const items = NAV_ITEMS.filter(
+    item => (!item.adminOnly || isAdmin) && (!item.superAdminOnly || isSuperAdmin)
+  )
 
   return (
     <aside className="glass-panel flex flex-col h-full w-64 p-4 gap-1 rounded-none">
-      {/* Logo / brand */}
-      <div className="flex items-center justify-between mb-6 px-1">
-        <Logo height={28} />
-        {onClose && (
+      {onClose && (
+        <div className="flex items-center justify-end mb-2 px-1">
           <button
             onClick={onClose}
             aria-label="Close sidebar"
@@ -66,8 +68,8 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           >
             <X size={16} />
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <nav className="flex flex-col gap-1">
         {items.map(item => (
@@ -101,7 +103,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Menu size={20} />
             </button>
-            <Logo height={26} />
+            <Logo height={40} />
           </div>
 
           <ThemeToggle />

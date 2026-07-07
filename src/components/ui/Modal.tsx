@@ -62,6 +62,9 @@ export function Modal({
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-[calc(100%-2rem)]',
             SIZE_CLASSES[size],
+            // Never taller than the viewport: header/footer stay pinned and the
+            // body scrolls, so tall forms remain fully usable on short screens.
+            'max-h-[calc(100dvh-2rem)] flex flex-col',
             'glass-panel rounded-xl p-6',
             'animate-scale-in',
             'focus:outline-none',
@@ -69,7 +72,7 @@ export function Modal({
           )}
         >
           {!hideHeader && (
-            <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-start justify-between gap-4 mb-4 flex-shrink-0">
               <Dialog.Title className="text-lg font-semibold text-light-text dark:text-dark-text">
                 {title}
               </Dialog.Title>
@@ -88,8 +91,8 @@ export function Modal({
             // hidden — callers rendering their own header still get a labelled dialog.
             <Dialog.Title className="sr-only">{title}</Dialog.Title>
           )}
-          {children}
-          {footer && <div className="flex gap-2 justify-end mt-5">{footer}</div>}
+          <div className="flex-1 overflow-y-auto min-h-0 -mx-1 px-1">{children}</div>
+          {footer && <div className="flex gap-2 justify-end mt-5 flex-shrink-0">{footer}</div>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

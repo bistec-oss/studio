@@ -4,6 +4,7 @@ import {
   HeadBucketCommand,
   PutObjectCommand,
   GetObjectCommand,
+  DeleteObjectCommand,
   PutBucketPolicyCommand,
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
@@ -26,6 +27,8 @@ const secretAccessKey = env.MINIO_SECRET_KEY
 export const BUCKET_IMAGES = env.MINIO_BUCKET_IMAGES
 export const BUCKET_EXPORTS = env.MINIO_BUCKET_EXPORTS
 export const BUCKET_BRANDKITS = env.MINIO_BUCKET_BRANDKITS
+// Campaign source documents (briefing assistant) — private, like EXPORTS.
+export const BUCKET_DOCS = env.MINIO_BUCKET_DOCS
 
 // Public-read buckets: objects are served via a stable, non-expiring URL. These
 // hold assets embedded into stored HTML (generated images, brief uploads,
@@ -130,6 +133,7 @@ export async function initBuckets(): Promise<void> {
         ensureBucket(BUCKET_IMAGES),
         ensureBucket(BUCKET_EXPORTS),
         ensureBucket(BUCKET_BRANDKITS),
+        ensureBucket(BUCKET_DOCS),
       ])
       // Buckets must exist before a policy can be attached.
       await Promise.all(PUBLIC_BUCKETS.map(setPublicReadPolicy))
@@ -207,6 +211,11 @@ export async function resolveExportUrl(
   if (!keyOrUrl) return null
   if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl
   return getPresignedUrl(BUCKET_EXPORTS, keyOrUrl)
+}
+
+// Best-effort object removal (used when the owning DB row is deleted).
+export async function deleteObject(bucket: string, key: string): Promise<void> {
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
 }
 
 export async function getPresignedUrl(
