@@ -1,13 +1,16 @@
 # bistec-studio — E2E Test Plan
 
 **Created:** 2026-06-23
-**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last run: **80 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`, ~5 min). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+**Status:** ✅ Full §6 catalog implemented **and green** (2026-06-30). Last run (2026-07-07): **103 passed, 0 failed, 4 skipped** (`npm run test:e2e:mock`). The 4 skips are intentional (see below). A GitHub Actions gate (`.github/workflows/e2e.yml`) now runs the whole suite — including the §K security-fix regressions — on every PR and push to `main`.
+
+> **Update (2026-07-07, super-admin + username + briefing assistant):** two new suites — **`user-management.test.ts` (§M)**: super-admin CRUD on `/api/admin/users` (create-with-password → username sign-in, role toggle, deactivate revokes sessions + blocks sign-in, reactivate + password reset, self/super-admin guards, plain-admin and editor 403s); **`briefing-assistant.test.ts` (§N)**: campaign document lifecycle (upload/list/type-gate/5-doc-cap/delete), MOCK_AI chat (` ```briefing ` block → `briefingDraft`), enhance rewrite, transcript validation, editor 403s. Contract changes baked into existing specs: the seeded admin is **SUPER_ADMIN** (TC-AUTH-04 expects `super_admin`), the login page takes a **username** (pageLogin helpers fill the `Username` placeholder — an email still routes through the legacy flow). **Two hard-won test-infra rules:** (1) sign-in probes need a **fresh cookie jar per attempt** — a stale session cookie makes better-auth 403 (`MISSING_OR_NULL_ORIGIN`) on sign-in POSTs, masking the status under test; (2) the worker-flow suite **cancels stale PENDING queue entries in `beforeAll`** — the reused test DB accumulates due `__FAIL_GEN_ALWAYS__` retries that starve the tick's claim batch.
 
 > **Update (2026-06-30, post size-picker):** the brief now picks a **size** (1:1 / 3:4) instead of platforms (channels default to both, chosen at publish time). Added **TC-GEN-A3** (3:4 portrait Path A → EXPORTED draft) and **TC-GEN-A4** (template/brief aspect-ratio mismatch → 400) in `path-a.test.ts`, plus a **3:4 portrait Path B** case in `path-b.test.ts`. **TC-UI-02/03** updated: step label is now "Size & Design" and Publish opens the shared `PublishDialog` (pick a channel + Confirm fires POST /api/posts). Net suite count 77 → 80 passed.
 
 ### Catalog implementation status (2026-06-30)
 
 All §6 cases are now written. New/changed files:
+
 - **Existing specs extended:** `brand-kit.test.ts` (TC-BK-02/04/05/06/07/08), `publish.test.ts` (TC-PUB-03/04/06/07/08/09), `path-a.test.ts` (TC-GEN-A2/03/04/05/06 + A3/A4 portrait & ratio-mismatch), `path-b.test.ts` (TC-GEN-B2 strengthened via DB + B3 portrait), `agui-refinement.test.ts` (TC-AGUI-06), `provider-registration.test.ts` (TC-PROV-06).
 - **New spec files:** `auth.test.ts` (§A), `resolution.test.ts` (§C), `export.test.ts` (§F), `library.test.ts` (§H), `acp.test.ts` (§J), `regression.test.ts` (§K), `ui.test.ts` (§L).
 - **New infra:**
@@ -21,20 +24,23 @@ All §6 cases are now written. New/changed files:
   - `npm run test:e2e:reg` runs the suite with `.env.test` loaded (handy for ad-hoc DB-aware runs); not required for a green run anymore (the H12 HTTP seam removed the reg-mode dependency).
 
 **Contract corrections baked in (differed from the original §6 wording):**
+
 - Unauthenticated API calls are **redirected to `/login` by middleware (3xx), not 401** (except `/api/acp`, which 401s at the route). TC-AUTH-03/07 assert the redirect.
 - TC-GEN-A1/B1 etc. return **200** `{draftId,exportUrl}` (not 201) — already corrected in the skeleton, kept.
 
 **The 4 intentional skips (everything else passes):**
+
 - **TC-GEN-05** (generated image → public URL): the MOCK_AI agent never calls `generateImage` and there is no mock IMAGE-provider seam; the public-IMAGES-bucket guarantee it targets is covered by TC-REG-H10a.
 - **TC-REG-H11b** (concurrency cap): needs a real-Chromium serve (`MOCK_PUPPETEER` unset); skips in the mock run.
 - **TC-REG-H11a / H11c** (one Chromium process per run / relaunch-after-kill): require host process observation / killing Chromium — not auto-driveable from a black-box test; `test.skip` with rationale.
 
 **Resolved infra dependencies (now run in the standard mock suite):**
+
 - **DB-dependent cases** (TC-PUB-07/08, TC-EXP-01/03, TC-GEN-B2, TC-REG-H9/H10b/c) self-resolve the test DB via `tests/helpers/db.ts` (reads `.env.test`), so they run under `test:e2e:mock` — no reg-mode needed.
 - **Scheduler** (TC-REG-H12a/b/c) drive the scheduler over the `/api/test/scheduler-tick` HTTP seam, so they run in the standard mock suite (no app-module import, no reg-mode).
 - **ACP authenticated** (TC-ACP-02/03/04/05) read `BISTEC_API_KEYS` from `.env.test` / job env. TC-ACP-05 is folded into the generate_post output-signing assertion (the MCP stdio surface isn't HTTP-reachable).
-**Owner:** _unassigned_
-**Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
+  **Owner:** _unassigned_
+  **Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
 
 This document is the authoritative test design. Implement the cases below as Playwright specs under `tests/e2e/`. Every case lists an **ID**, **precondition**, **steps**, **expected result**, and (where relevant) the **finding it guards**.
 
@@ -44,13 +50,13 @@ This document is the authoritative test design. Implement the cases below as Pla
 
 A Playwright skeleton existed under `tests/e2e/` but was **not functional as written**. All five blockers below are now **RESOLVED** (2026-06-23) — the 6 spec files (19 tests) run and pass. History kept for traceability.
 
-| # | Problem (original) | Resolution |
-|---|---|---|
-| 1 | **Mock hooks never implemented.** Tests gated on `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL` but nothing in `src/` read them. | ✅ Implemented in **`src/lib/testHooks.ts`** + 5 seam points (see §3). Dormant unless the flag is `true`. |
-| 2 | **Contract drift — `/api/posts`.** Spec sent `{channels:[…]}`, expected an array. | ✅ Spec rewritten to singular `channel`, expects `{postId,status}` (201). |
-| 3 | **Contract drift — `/api/generate/assemble-a/-b`.** Spec asserted `draft.htmlContent/status/imageUrl` and **201**. Route returns **200 `{draftId,exportUrl}`**. | ✅ Spec asserts `{draftId,exportUrl}` at 200, then `GET /api/drafts/[id]` for status/htmlContent/imageUrl. |
-| 4 | **Port mismatch** (config `:3001` vs dev `:3000`). | ✅ Test app runs on **`:3001`** (`npm run test:e2e:serve`), matching the config default. |
-| 5 | **No DB isolation / teardown.** | ✅ Dedicated **`bistec_studio_test`** DB (`npm run test:e2e:db`); the dev DB is never touched. (Per-run truncation between runs still TODO — see §2.) |
+| #   | Problem (original)                                                                                                                                              | Resolution                                                                                                                                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Mock hooks never implemented.** Tests gated on `MOCK_AI`/`MOCK_PUPPETEER`/`MOCK_SOCIAL` but nothing in `src/` read them.                                      | ✅ Implemented in **`src/lib/testHooks.ts`** + 5 seam points (see §3). Dormant unless the flag is `true`.                                             |
+| 2   | **Contract drift — `/api/posts`.** Spec sent `{channels:[…]}`, expected an array.                                                                               | ✅ Spec rewritten to singular `channel`, expects `{postId,status}` (201).                                                                             |
+| 3   | **Contract drift — `/api/generate/assemble-a/-b`.** Spec asserted `draft.htmlContent/status/imageUrl` and **201**. Route returns **200 `{draftId,exportUrl}`**. | ✅ Spec asserts `{draftId,exportUrl}` at 200, then `GET /api/drafts/[id]` for status/htmlContent/imageUrl.                                            |
+| 4   | **Port mismatch** (config `:3001` vs dev `:3000`).                                                                                                              | ✅ Test app runs on **`:3001`** (`npm run test:e2e:serve`), matching the config default.                                                              |
+| 5   | **No DB isolation / teardown.**                                                                                                                                 | ✅ Dedicated **`bistec_studio_test`** DB (`npm run test:e2e:db`); the dev DB is never touched. (Per-run truncation between runs still TODO — see §2.) |
 
 > **Bottom line (2026-06-23):** the 6 spec files are now green coverage, not drafts. The much larger §6 catalog (RBAC/IDOR, the §K remediation regression suite, §L browser flows) was still to be written at this point.
 >
@@ -80,6 +86,7 @@ E2E here means **black-box tests against a running app + real Postgres + real Mi
 ## 2. Test environment & preconditions
 
 ### Infrastructure
+
 1. Postgres + MinIO containers up (`docker compose up -d`), MinIO `:9000` published to host.
 2. A **dedicated test database** (e.g. `bistec_studio_test`) so runs are disposable. Point `DATABASE_URL` at it.
 3. Migrations applied: `npx prisma migrate deploy` (must include `20260623153740_h9_indexes` and `20260623154752_h12_scheduler_claim`).
@@ -116,10 +123,12 @@ BISTEC_ADMIN_API_KEYS=e2e-admin-key
 ```
 
 ### Known seeded accounts
+
 - **Admin:** `admin@bisteccare.lk` / `BistecStudio2026!` (role ADMIN)
 - **Editor:** _create one in a global setup fixture_ (no seeded editor exists — see TC-AUTH-05 precondition). Needed for all RBAC/IDOR tests.
 
 ### Per-run reset
+
 Add a global setup that truncates app tables (keep `User`/`Account`/`Session` for the seeded admin, or re-seed) between runs so counts/asserts are deterministic. `fullyParallel: false, workers: 1` is already set — keep it until isolation exists.
 
 ---
@@ -128,13 +137,13 @@ Add a global setup that truncates app tables (keep `User`/`Account`/`Session` fo
 
 The deterministic path uses small, test-only seams, all centralized in **`src/lib/testHooks.ts`** and each gated behind its env flag so production is untouched. **Implemented (2026-06-23):**
 
-| Flag | Seam point (file) | Behavior when set |
-|---|---|---|
-| `MOCK_AI` | `resolveCopyProvider` (`src/providers/registry.ts`) → stub copy provider; `runDesignAgent` (`src/lib/agent/designAgent.ts`) → emits `buildMockHtml()` (echoes the brand kit's first hex colour from the prompt) then renders via the mocked Puppeteer path to get a **real EXPORTS key**; returns `buildMockConflict()` JSON when the refine instruction contains `conflict_test`. Also short-circuits the admin brand-voice `prompts/generate` route. | No Anthropic/OpenAI calls. |
-| `MOCK_PUPPETEER` | `renderHtmlToPng` (`src/lib/renderer/puppeteer.ts`) | Skip Chromium; return `MOCK_PNG_BUFFER`. The MinIO upload still happens, so export keys remain real and signable (exercises H10). |
-| `MOCK_SOCIAL` | `publish()` in `src/lib/social/instagram.ts` + `linkedin.ts` | Return `{ platformId: 'mock-<channel>-<ts>' }` with no HTTP call. `MOCK_SOCIAL_FAIL=true` makes them throw `PublishError` — for the FAILED/retry/backoff cases (§G, §K). |
+| Flag             | Seam point (file)                                                                                                                                                                                                                                                                                                                                                                                                                                      | Behavior when set                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MOCK_AI`        | `resolveCopyProvider` (`src/providers/registry.ts`) → stub copy provider; `runDesignAgent` (`src/lib/agent/designAgent.ts`) → emits `buildMockHtml()` (echoes the brand kit's first hex colour from the prompt) then renders via the mocked Puppeteer path to get a **real EXPORTS key**; returns `buildMockConflict()` JSON when the refine instruction contains `conflict_test`. Also short-circuits the admin brand-voice `prompts/generate` route. | No Anthropic/OpenAI calls.                                                                                                                                               |
+| `MOCK_PUPPETEER` | `renderHtmlToPng` (`src/lib/renderer/puppeteer.ts`)                                                                                                                                                                                                                                                                                                                                                                                                    | Skip Chromium; return `MOCK_PNG_BUFFER`. The MinIO upload still happens, so export keys remain real and signable (exercises H10).                                        |
+| `MOCK_SOCIAL`    | `publish()` in `src/lib/social/instagram.ts` + `linkedin.ts`                                                                                                                                                                                                                                                                                                                                                                                           | Return `{ platformId: 'mock-<channel>-<ts>' }` with no HTTP call. `MOCK_SOCIAL_FAIL=true` makes them throw `PublishError` — for the FAILED/retry/backoff cases (§G, §K). |
 
-> The brief's `copyProviderKey` must still reference a real enabled COPY provider (brief creation validates it) — the seed registers the keyless `cli` provider, and the specs pass `copyProviderKey: 'cli'`. `MOCK_AI` only stubs the *generation call*, not the validation.
+> The brief's `copyProviderKey` must still reference a real enabled COPY provider (brief creation validates it) — the seed registers the keyless `cli` provider, and the specs pass `copyProviderKey: 'cli'`. `MOCK_AI` only stubs the _generation call_, not the validation.
 
 > **Alternative (no mock flags):** run with `DESIGN_PROVIDER=cli` + real Puppeteer (`PUPPETEER_EXECUTABLE_PATH` + Claude CLI auth) + `MOCK_SOCIAL`. Slower, non-deterministic copy, but exercises the real render path.
 
@@ -154,35 +163,35 @@ The deterministic path uses small, test-only seams, all centralized in **`src/li
 
 ## 5. Real API contract reference (assert against these)
 
-| Endpoint | Method | Body | Success | Notes |
-|---|---|---|---|---|
-| `/api/auth/sign-in/email` | POST | `{email,password}` | 200 + `set-cookie` | session token |
-| `/api/me` | GET | — | 200 `{ role }` | server-side role (H13) |
-| `/api/admin/brandkits` | POST | `{name,colors,fonts}` | 200 kit | admin only |
-| `/api/admin/brandkits/[id]/templates` | POST | `{name,htmlTemplate}` | template `{id}` | admin |
-| `/api/admin/brandkits/[id]/prompts` | POST | `{content}` | 201 prompt / **409** on version race | H7 |
-| `/api/admin/brandkits/[id]/upload` | POST | multipart `file` | `{url,key,name}` | `url` is **public** (H10) |
-| `/api/admin/brandkits/[id]/artifacts` | POST | multipart | 201 artifact | `url` public (H10) |
-| `/api/campaigns` | POST | `{name,brandKitId?}` | campaign `{id}` | any role |
-| `/api/briefs` | POST | `{topic,goal,tone,channels[],designMode,copyProviderKey,campaignId?}` | **201** brief `{id}` | validation |
-| `/api/briefs/images` | POST | multipart | `{url,filename}` | `url` **public** (H10) |
-| `/api/generate/assemble-a` | POST | `{briefId,templateId}` | **200** `{draftId,exportUrl}` | `exportUrl` signed (H10). NOTE: 200, not 201 (verified in route). |
-| `/api/generate/assemble-b` | POST | `{briefId}` | **200** `{draftId,exportUrl}` | signed; 200 not 201. |
-| `/api/generate/export` | POST | `{draftId}` | `{exportUrl}` | signed; short-circuits if set |
-| `/api/drafts/[id]` | GET | — | draft detail, `exportUrl` signed | ownership |
-| `/api/drafts/[id]` | PATCH | `{copyText}` | updated draft | EXPORTED→IN_PROGRESS |
-| `/api/drafts/[id]/refine` | POST | `{instruction}` or `{overrideConflictId,instruction}` | `{reply,revisionId,exportUrl}` or `{conflict,explanation,conflictId}` | signed |
-| `/api/drafts/[id]/revisions` | GET | — | array, `exportUrl` signed | |
-| `/api/drafts/[id]/revisions/[rev]/restore` | POST | — | `{exportUrl}` signed | |
-| `/api/posts` | POST | `{draftId,channel,scheduledAt?}` | **201** `{postId,status}` | **singular `channel`**; PUBLISHED / SCHEDULED / FAILED |
-| `/api/posts` | GET | `?page&pageSize&status?` | `{posts,total,page,pageSize}` | admin=all, editor=own; `draft.exportUrl` signed |
-| `/api/posts/[id]` | GET | — | post, `draft.exportUrl` signed | ownership |
-| `/api/posts/[id]` | DELETE | — | `{postId,status:CANCELLED}` / **409** if not SCHEDULED | admin |
-| `/api/posts/[id]/publish` | POST | — | `{postId,status}` / 409 if not FAILED | admin retry |
-| `/api/library` | GET | `?page&pageSize&status&search` | `{drafts,total,...}` | non-admin filtered to own; `exportUrl` signed |
-| `/api/admin/providers` | POST | `{apiKey,slot,providerName?,label?}` | 201 / 422 / 400 | prefix auto-detect |
-| `/api/providers/available` | GET | `?slot=COPY\|IMAGE` | array (no secret fields) | |
-| `/api/acp/manifest`, `/api/acp/run` | * | — | **401 without valid key** | H1 |
+| Endpoint                                   | Method | Body                                                                  | Success                                                               | Notes                                                             |
+| ------------------------------------------ | ------ | --------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `/api/auth/sign-in/email`                  | POST   | `{email,password}`                                                    | 200 + `set-cookie`                                                    | session token                                                     |
+| `/api/me`                                  | GET    | —                                                                     | 200 `{ role }`                                                        | server-side role (H13)                                            |
+| `/api/admin/brandkits`                     | POST   | `{name,colors,fonts}`                                                 | 200 kit                                                               | admin only                                                        |
+| `/api/admin/brandkits/[id]/templates`      | POST   | `{name,htmlTemplate}`                                                 | template `{id}`                                                       | admin                                                             |
+| `/api/admin/brandkits/[id]/prompts`        | POST   | `{content}`                                                           | 201 prompt / **409** on version race                                  | H7                                                                |
+| `/api/admin/brandkits/[id]/upload`         | POST   | multipart `file`                                                      | `{url,key,name}`                                                      | `url` is **public** (H10)                                         |
+| `/api/admin/brandkits/[id]/artifacts`      | POST   | multipart                                                             | 201 artifact                                                          | `url` public (H10)                                                |
+| `/api/campaigns`                           | POST   | `{name,brandKitId?}`                                                  | campaign `{id}`                                                       | any role                                                          |
+| `/api/briefs`                              | POST   | `{topic,goal,tone,channels[],designMode,copyProviderKey,campaignId?}` | **201** brief `{id}`                                                  | validation                                                        |
+| `/api/briefs/images`                       | POST   | multipart                                                             | `{url,filename}`                                                      | `url` **public** (H10)                                            |
+| `/api/generate/assemble-a`                 | POST   | `{briefId,templateId}`                                                | **200** `{draftId,exportUrl}`                                         | `exportUrl` signed (H10). NOTE: 200, not 201 (verified in route). |
+| `/api/generate/assemble-b`                 | POST   | `{briefId}`                                                           | **200** `{draftId,exportUrl}`                                         | signed; 200 not 201.                                              |
+| `/api/generate/export`                     | POST   | `{draftId}`                                                           | `{exportUrl}`                                                         | signed; short-circuits if set                                     |
+| `/api/drafts/[id]`                         | GET    | —                                                                     | draft detail, `exportUrl` signed                                      | ownership                                                         |
+| `/api/drafts/[id]`                         | PATCH  | `{copyText}`                                                          | updated draft                                                         | EXPORTED→IN_PROGRESS                                              |
+| `/api/drafts/[id]/refine`                  | POST   | `{instruction}` or `{overrideConflictId,instruction}`                 | `{reply,revisionId,exportUrl}` or `{conflict,explanation,conflictId}` | signed                                                            |
+| `/api/drafts/[id]/revisions`               | GET    | —                                                                     | array, `exportUrl` signed                                             |                                                                   |
+| `/api/drafts/[id]/revisions/[rev]/restore` | POST   | —                                                                     | `{exportUrl}` signed                                                  |                                                                   |
+| `/api/posts`                               | POST   | `{draftId,channel,scheduledAt?}`                                      | **201** `{postId,status}`                                             | **singular `channel`**; PUBLISHED / SCHEDULED / FAILED            |
+| `/api/posts`                               | GET    | `?page&pageSize&status?`                                              | `{posts,total,page,pageSize}`                                         | admin=all, editor=own; `draft.exportUrl` signed                   |
+| `/api/posts/[id]`                          | GET    | —                                                                     | post, `draft.exportUrl` signed                                        | ownership                                                         |
+| `/api/posts/[id]`                          | DELETE | —                                                                     | `{postId,status:CANCELLED}` / **409** if not SCHEDULED                | admin                                                             |
+| `/api/posts/[id]/publish`                  | POST   | —                                                                     | `{postId,status}` / 409 if not FAILED                                 | admin retry                                                       |
+| `/api/library`                             | GET    | `?page&pageSize&status&search`                                        | `{drafts,total,...}`                                                  | non-admin filtered to own; `exportUrl` signed                     |
+| `/api/admin/providers`                     | POST   | `{apiKey,slot,providerName?,label?}`                                  | 201 / 422 / 400                                                       | prefix auto-detect                                                |
+| `/api/providers/available`                 | GET    | `?slot=COPY\|IMAGE`                                                   | array (no secret fields)                                              |                                                                   |
+| `/api/acp/manifest`, `/api/acp/run`        | *      | —                                                                     | **401 without valid key**                                             | H1                                                                |
 
 ---
 
@@ -198,7 +207,7 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 - **TC-AUTH-04 — `/api/me` returns role.** S: as admin GET `/api/me`. E: 200 `{role:'admin'}`. As editor → `'editor'`. **Guards H13.**
 - **TC-AUTH-05 — Admin-only mutations gated.** P: editor session. S: PATCH/DELETE `/api/campaigns/[id]`, `/api/projects/[id]`; POST `/api/posts`; any `/api/admin/*`. E: 403. **Guards H4.**
 - **TC-AUTH-06 — `requireRole` case-insensitive.** S: as admin (`ADMIN` in DB) hit an admin route. E: 200 (not 403). **Guards the role-casing bonus fix.**
-- **TC-AUTH-07 — middleware exact-prefix.** S: request a path that merely *prefixes* a protected one (e.g. `/admincustom`). E: not wrongly treated as protected/exempt. **Guards M9.**
+- **TC-AUTH-07 — middleware exact-prefix.** S: request a path that merely _prefixes_ a protected one (e.g. `/admincustom`). E: not wrongly treated as protected/exempt. **Guards M9.**
 
 ### B. Brand kits (admin)
 
@@ -294,7 +303,7 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 
 These are the highest-value additions — they guard the H7/H9/H10/H11/H12 fixes specifically and need targeted setups.
 
-- **TC-REG-H7a — Concurrent refine, no duplicate revision numbers.** P: one EXPORTED draft. S: fire **N=10 parallel** POST `/refine` (mock agent, instant). E: all succeed; revisions have **distinct** sequential numbers 1..N (the `@@unique` + `$transaction` retry holds; no 500s). 
+- **TC-REG-H7a — Concurrent refine, no duplicate revision numbers.** P: one EXPORTED draft. S: fire **N=10 parallel** POST `/refine` (mock agent, instant). E: all succeed; revisions have **distinct** sequential numbers 1..N (the `@@unique` + `$transaction` retry holds; no 500s).
 - **TC-REG-H7b — Concurrent prompt version save.** S: fire 5 parallel POST `/prompts`. E: distinct versions, at most one 409, no 500. **Guards H7.**
 - **TC-REG-H7c — No PENDING orphan on crash-shaped failure.** Covered by TC-PUB-03; additionally assert DB has zero `PENDING` posts after the suite.
 - **TC-REG-H9 — Index presence + query plan.** S: `SELECT indexname FROM pg_indexes WHERE tablename='Post'`; optionally `EXPLAIN` the scheduler's due-query. E: `(status,scheduledAt)` and `(status,nextRetryAt)` indexes exist and the due-query uses an index (not Seq Scan) on a seeded large table. **Guards H9.**
@@ -355,30 +364,30 @@ CI gate: **`.github/workflows/e2e.yml`** runs the whole suite (§A–§L, includ
 
 ## 9. Coverage traceability
 
-| Finding(s) | Guarded by |
-|---|---|
-| H1 ACP/MCP auth | TC-ACP-01/02/03 |
-| H2 IDOR | TC-AGUI-06, TC-LIB-01, ownership asserts across D/E/F |
-| H3 library leak | TC-LIB-01 |
-| H4 admin gating | TC-AUTH-05, TC-PUB-09, TC-BK-08, TC-RES-05 |
-| H5 publish button | TC-UI-03 |
-| H7 atomicity | TC-PUB-02/03, TC-REG-H7a/b/c |
-| H8 upload validation | TC-BK-07 |
-| H9 indexes | TC-REG-H9 |
-| H10 storage | TC-BK-04, TC-GEN-05, TC-PUB-08, TC-LIB-05, TC-ACP-05, TC-REG-H10a/b/c, TC-UI-04 |
-| H11 puppeteer | TC-REG-H11a/b/c |
-| H12 scheduler | TC-PUB-04, TC-REG-H12a/b/c |
-| H13 /api/me | TC-AUTH-04 |
-| M1 atomic default | TC-BK-02, TC-PROV-06 |
-| M4 soft-delete resolve | TC-RES-04 |
-| M5 artifact sync | TC-BK-06 |
-| M6 ACP validation | TC-ACP-03 |
-| M9 middleware prefix | TC-AUTH-07 |
-| M10 key prefix mask | TC-PROV-04 |
-| M11 bounded lists | TC-RES-06 |
-| M12 brief validation | TC-GEN-03/04 |
-| L1 IG header / system user | TC-ACP-04 |
-| L2 shared helpers | TC-REG-L2 |
-| Known Issue (oversized template) | TC-GEN-06 |
+| Finding(s)                       | Guarded by                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| H1 ACP/MCP auth                  | TC-ACP-01/02/03                                                                 |
+| H2 IDOR                          | TC-AGUI-06, TC-LIB-01, ownership asserts across D/E/F                           |
+| H3 library leak                  | TC-LIB-01                                                                       |
+| H4 admin gating                  | TC-AUTH-05, TC-PUB-09, TC-BK-08, TC-RES-05                                      |
+| H5 publish button                | TC-UI-03                                                                        |
+| H7 atomicity                     | TC-PUB-02/03, TC-REG-H7a/b/c                                                    |
+| H8 upload validation             | TC-BK-07                                                                        |
+| H9 indexes                       | TC-REG-H9                                                                       |
+| H10 storage                      | TC-BK-04, TC-GEN-05, TC-PUB-08, TC-LIB-05, TC-ACP-05, TC-REG-H10a/b/c, TC-UI-04 |
+| H11 puppeteer                    | TC-REG-H11a/b/c                                                                 |
+| H12 scheduler                    | TC-PUB-04, TC-REG-H12a/b/c                                                      |
+| H13 /api/me                      | TC-AUTH-04                                                                      |
+| M1 atomic default                | TC-BK-02, TC-PROV-06                                                            |
+| M4 soft-delete resolve           | TC-RES-04                                                                       |
+| M5 artifact sync                 | TC-BK-06                                                                        |
+| M6 ACP validation                | TC-ACP-03                                                                       |
+| M9 middleware prefix             | TC-AUTH-07                                                                      |
+| M10 key prefix mask              | TC-PROV-04                                                                      |
+| M11 bounded lists                | TC-RES-06                                                                       |
+| M12 brief validation             | TC-GEN-03/04                                                                    |
+| L1 IG header / system user       | TC-ACP-04                                                                       |
+| L2 shared helpers                | TC-REG-L2                                                                       |
+| Known Issue (oversized template) | TC-GEN-06                                                                       |
 
 > Items with no behavioral surface (M2 init race, M3 stdin, M7 polling, M8 crypto guards, M13 dead code) are best covered by unit tests; M7 polling can optionally be a UI test (draft auto-refresh while `IN_PROGRESS`).

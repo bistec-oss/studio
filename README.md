@@ -41,21 +41,21 @@ npm run db:seed
 npm run dev  # http://localhost:3000
 ```
 
-Log in with `admin@bisteccare.lk` / `BistecStudio2026!`.
+Log in with username `adminBTG` / `BistecStudio2026!` (accounts sign in by username; the seeded admin is a super-admin and can create more users at `/admin/users`).
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `npm run dev` | Start Next.js dev server on `http://localhost:3000` |
-| `npm run build` | Build for production |
-| `npm run db:seed` | Seed admin user + default brand kit |
-| `npm run test:e2e` | Run Playwright E2E tests |
-| `npm run test:e2e:mock` | Run E2E tests with mocked AI/Puppeteer/social |
+| Script                   | Purpose                                               |
+| ------------------------ | ----------------------------------------------------- |
+| `npm run dev`            | Start Next.js dev server on `http://localhost:3000`   |
+| `npm run build`          | Build for production                                  |
+| `npm run db:seed`        | Seed admin user + default brand kit                   |
+| `npm run test:e2e`       | Run Playwright E2E tests                              |
+| `npm run test:e2e:mock`  | Run E2E tests with mocked AI/Puppeteer/social         |
 | `npm run test:e2e:serve` | Start test-mode dev server on `http://localhost:3001` |
-| `npm run test:e2e:db` | Set up dedicated test database |
-| `npm run mcp` | Run MCP server (`tsx src/mcp/server.ts`) |
-| `npm run typecheck` | Run TypeScript type checking |
+| `npm run test:e2e:db`    | Set up dedicated test database                        |
+| `npm run mcp`            | Run MCP server (`tsx src/mcp/server.ts`)              |
+| `npm run typecheck`      | Run TypeScript type checking                          |
 
 ## Documentation
 
