@@ -1,13 +1,27 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-07 (latest: framework upgrade to Next 16 / React 19 — see top section below)
+**Date:** 2026-07-07 (latest: post-brief Enhance with AI + full-screen export lightbox — see top section below)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-07-07 (latest) — Framework upgrade: Next.js 16.2 + React 19.2 + tooling majors
+## 2026-07-07 (latest) — Post-brief "Enhance with AI" + full-screen export preview (lightbox)
+
+**Branch: `main`** — two features, one session. Gates: tsc clean, lint 0 errors (9 pre-existing warnings), 98/98 unit, briefing-assistant E2E suite 7/7 (full suite not re-run for the UI-only lightbox change).
+
+1. **Enhance with AI on the brief wizard's Content step** (commit `d460df9`). `enhancePostBrief()` in `src/lib/campaign/briefingAssistant.ts` is the per-POST twin of the campaign-briefing `enhanceBriefing()`: same mode-agnostic Sonnet call (`runBriefingModel` — Anthropic SDK in API mode, `claude -p` with `CLAUDE_CODE_OAUTH_TOKEN` in CLI mode), grounded in what generation itself will use — the brand voice via `resolveBrandKit(campaignId, brandKitId)` (the brief's explicit kit selection wins) plus the active campaign briefing + source documents when a campaign is selected. Prompt targets one post (~40–120 words, explicit key message + CTA) and can draft from just the topic. `buildCampaignContext()` was generalised to optional `campaignId`/`brandKitId` (campaign-briefing callers unchanged).
+   - **Route: `POST /api/briefs/enhance`** — **`withAuth`, not `withAdmin`** (editors write briefs; the campaign-briefing enhance stays admin-only). Body `{topic, content, goal?, tone?, campaignId?, brandKitId?}`; 400 when topic AND content are blank; 404 on unknown campaign; reuses the `buildMockBriefingEnhance` MOCK_AI seam.
+   - **UI:** `ContentStep.tsx` gains the button (enabled once topic or brief text exists) with the same Before / AI suggestion / Accept / Discard review flow as `CampaignBriefingSection` — the rewrite only reaches the brief field on Accept. The wizard page threads `campaignId`/`brandKitId` through as props.
+   - **E2E:** new §N case in `tests/e2e/briefing-assistant.test.ts` (editor access, mock rewrite, topic-only drafting, 400 guard, campaign 404).
+2. **Full-screen export preview** (`src/components/ui/ImageLightbox.tsx`). New shared lightbox on the same Radix Dialog base as `Modal` (focus trap, Esc, click-outside free): near-opaque blurred backdrop, export fitted to the viewport, glass caption bar with topic + `dimensionsLabel()` (JetBrains Mono) and a **Download** button (fetch→blob→save with a slugged filename — a plain `<a download>` would navigate since MinIO is another origin). Wired in two places: the **draft page** Preview panel image (click-to-open, hover `Maximize2` hint, `cursor-zoom-in`) and **library tiles** (`PostCard` — hover/focus expand icon top-right that opens the lightbox WITHOUT navigating; tile click still goes to the draft). No-export tiles are unchanged. Note: tiles crop with `object-cover`, so the lightbox is where portrait posts show uncropped.
+
+Also this session (ops, not committed as code): verified the **production standalone server** runs locally the way the VPS image does (`npm run build` → copy `.next/static` + `public` into `.next/standalone` → `node server.js`). The `env.ts` production gate correctly refused the dev `minioadmin` creds — resolved by creating a MinIO service account (`bistecprod`, readwrite, via `mc admin user add` in the container; dev creds/`.env`/`.env.test` untouched) and passing it as process env. Login page + proxy cookie-gate verified (unauthenticated API POSTs 307 → `/login`).
+
+---
+
+## 2026-07-07 — Framework upgrade: Next.js 16.2 + React 19.2 + tooling majors
 
 **Branch: `main`** — phased upgrade (safe bumps → Next/React → tooling majors), each phase individually gated. Final gates: tsc clean, lint 0 errors, 98/98 unit (vitest 4), `next build` (Turbopack) green, full E2E green.
 

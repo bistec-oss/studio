@@ -1,11 +1,12 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
-import { ImageIcon, Trash2 } from 'lucide-react'
+import { ImageIcon, Trash2, Maximize2 } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { StatusChip } from '@/components/ui/StatusChip'
+import { ImageLightbox } from '@/components/ui/ImageLightbox'
 import type { AspectRatio } from '@prisma/client'
 import { aspectClassFor } from '@/lib/aspectRatio'
 import { channelLabel } from '@/lib/channels'
@@ -54,6 +55,7 @@ function deriveStatus(draft: PostCardDraft): ChipStatus {
 
 export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }: PostCardProps) {
   const chipStatus = deriveStatus(draft)
+  const [showPreview, setShowPreview] = useState(false)
 
   return (
     <GlassPanel className="flex flex-col overflow-hidden">
@@ -63,12 +65,29 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }:
         className={`relative ${aspectClassFor(draft.brief.aspectRatio)} w-full bg-light-border/30 dark:bg-dark-border/30 overflow-hidden block group`}
       >
         {draft.exportUrl ? (
-          <img
-            src={draft.exportUrl}
-            alt={draft.brief.topic}
-            loading="lazy"
-            className="w-full h-full object-cover transition-transform group-hover:scale-105"
-          />
+          <>
+            <img
+              src={draft.exportUrl}
+              alt={draft.brief.topic}
+              loading="lazy"
+              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+            />
+            {/* Expand-to-full-screen — the tile itself still navigates to the draft. */}
+            <button
+              aria-label={`View ${draft.brief.topic} full screen`}
+              title="View full screen"
+              className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-white
+                opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity
+                hover:bg-black/60"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setShowPreview(true)
+              }}
+            >
+              <Maximize2 size={14} />
+            </button>
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <ImageIcon
@@ -151,6 +170,16 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }:
           )}
         </div>
       </div>
+
+      {draft.exportUrl && (
+        <ImageLightbox
+          open={showPreview}
+          onClose={() => setShowPreview(false)}
+          src={draft.exportUrl}
+          topic={draft.brief.topic}
+          aspectRatio={draft.brief.aspectRatio}
+        />
+      )}
     </GlassPanel>
   )
 }

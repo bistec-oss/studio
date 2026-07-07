@@ -4,6 +4,12 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 
 ## ✅ Outstanding work — START HERE (updated 2026-07-07)
 
+**✅ Post-brief Enhance with AI + full-screen export lightbox — 2026-07-07** (see `docs/handoff.md` top section):
+
+- **Enhance with AI on the brief wizard Content step:** `enhancePostBrief()` (`src/lib/campaign/briefingAssistant.ts`) — per-post twin of the campaign-briefing enhance, same mode-agnostic Sonnet call, grounded in `resolveBrandKit(campaignId, brandKitId)` + campaign briefing/docs when a campaign is selected; drafts from just the topic. Route `POST /api/briefs/enhance` is **`withAuth` (editor-accessible)**, unlike the admin-only campaign enhance. UI: Before/After Accept/Discard flow in `ContentStep.tsx`; reuses the `buildMockBriefingEnhance` MOCK_AI seam; +1 §N E2E case.
+- **Full-screen export preview:** shared `src/components/ui/ImageLightbox.tsx` (Radix Dialog, Frozen Light backdrop, topic + dimensions caption, blob-download button). Wired into the draft page Preview image (click-to-open) and library `PostCard` tiles (hover expand icon; tile click still navigates).
+- No schema changes, no migrations, no new env vars.
+
 **✅ Framework upgrade: Next.js 16.2 + React 19.2 — 2026-07-07** (see `docs/handoff.md` top section):
 
 - **Async request APIs:** `withAuth` resolves the now-Promise route `params` centrally (`src/lib/api/handler.ts`) — wrapped handlers keep sync `{ params }`. `headers()` awaited in `auth.ts`. `src/middleware.ts` → **`src/proxy.ts`** (fn `proxy`).

@@ -12,7 +12,9 @@ import {
   ArrowLeft,
   Sparkles,
   Undo2,
+  Maximize2,
 } from 'lucide-react'
+import { ImageLightbox } from '@/components/ui/ImageLightbox'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
@@ -87,6 +89,7 @@ export default function DraftDetailPage() {
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
   const { isAdmin } = useCurrentUser()
   const [showPublish, setShowPublish] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const [regenDesign, setRegenDesign] = useState(false)
   // Snapshot = revisionNumber of the design taken before the last regenerate (Undo target).
   const designUndo = useUndoableAction<number>(async (rev) => {
@@ -242,12 +245,22 @@ export default function DraftDetailPage() {
             </h3>
             <div className={`relative ${aspectClassFor(draft.brief.aspectRatio)} w-full rounded-xl overflow-hidden bg-light-border/30 dark:bg-dark-border/30`}>
               {draft.exportUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={draft.exportUrl}
-                  alt={draft.brief.topic}
-                  className="w-full h-full object-contain"
-                />
+                <button
+                  onClick={() => setShowPreview(true)}
+                  aria-label="View full screen"
+                  title="View full screen"
+                  className="group block w-full h-full cursor-zoom-in focus:outline-none"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={draft.exportUrl}
+                    alt={draft.brief.topic}
+                    className="w-full h-full object-contain"
+                  />
+                  <span className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Maximize2 size={14} />
+                  </span>
+                </button>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                   <ImageIcon size={32} className="text-light-text-muted dark:text-dark-text-muted opacity-40" />
@@ -370,6 +383,17 @@ export default function DraftDetailPage() {
           </GlassPanel>
         </div>
       </div>
+
+      {/* Full-screen preview of the exported PNG. */}
+      {draft.exportUrl && (
+        <ImageLightbox
+          open={showPreview}
+          onClose={() => setShowPreview(false)}
+          src={draft.exportUrl}
+          topic={draft.brief.topic}
+          aspectRatio={draft.brief.aspectRatio}
+        />
+      )}
 
       {/* Publish dialog — channel + optional schedule (shared with Library). */}
       {showPublish && (
