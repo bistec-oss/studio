@@ -29,6 +29,20 @@ node --env-file=.env -e "const{PrismaClient}=require('@prisma/client');new Prism
 curl -sf http://localhost:9000/minio/health/live && echo "MinIO OK" || echo "MinIO UNREACHABLE on :9000"
 ```
 
+> **⚠️ Admin credentials are PER-MACHINE.** Each dev machine has its own Postgres, so the
+> `adminBTG` password is whatever was set **on that machine** — a password change on one
+> machine (or a value you saw in a handoff note) does not carry over. Before starting the
+> dev server, confirm you know **this machine's** admin password:
+>
+> - **Fresh setup:** choose it yourself — `SEED_ADMIN_PASSWORD=<your password> npm run db:seed`
+>   (or let the seed script generate one; it prints it **once** — save it).
+> - **Existing DB, password unknown:** reset it locally (super-admin accounts can't be reset
+>   through the API — use better-auth's `ctx.password.hash` + `internalAdapter.updatePassword`
+>   in a one-off script, or ask the machine's usual user).
+>
+> Don't burn time debugging "Invalid credentials" / assuming the app is broken — it's almost
+> always the other machine's password.
+
 If all four preflight lines and both probes pass, skip to §6 and start the server.
 
 ---
@@ -134,7 +148,7 @@ npm run db:seed
 Runs `scripts/seed-admin.mjs` then `scripts/seed-brandkit.mjs` (admin first so the brand
 kit's `createdBy` resolves to a real admin id). Both are idempotent. Result:
 
-- Admin login: username **`adminBTG`**. The initial password is **printed once by the seed script** (set `SEED_ADMIN_PASSWORD` beforehand to choose it; otherwise a random one is generated) — change it after first login. The account is a **SUPER_ADMIN** (can manage users at `/admin/users`); sign-in is by username since the username switch — the email `admin@bisteccare.lk` is internal (and still works in the login form as a legacy fallback). A password can be reset directly via better-auth's hash + `internalAdapter.updatePassword` (see `PATCH /api/admin/users/[id]` for the in-app flow; super-admin accounts must be reset via script/DB since the API refuses super-admin targets).
+- Admin login: username **`adminBTG`**. The initial password is **printed once by the seed script** (set `SEED_ADMIN_PASSWORD` beforehand to choose it; otherwise a random one is generated) — change it after first login. **The password is per-machine** (each dev machine has its own DB — see the §0 warning); the person setting up the machine picks and owns it. The account is a **SUPER_ADMIN** (can manage users at `/admin/users`); sign-in is by username since the username switch — the email `admin@bisteccare.lk` is internal (and still works in the login form as a legacy fallback). A password can be reset directly via better-auth's hash + `internalAdapter.updatePassword` (see `PATCH /api/admin/users/[id]` for the in-app flow; super-admin accounts must be reset via script/DB since the API refuses super-admin targets).
 - Default **"Bistec"** brand kit: Glacier palette, Inter + JetBrains Mono (Google Fonts), active brand-voice prompt v1
 
 Optional: seed a 3:4 portrait template on the default kit so Path A has a portrait option out of the box (the brief filters templates by the chosen size):

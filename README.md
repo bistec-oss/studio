@@ -41,7 +41,7 @@ npm run db:seed
 npm run dev  # http://localhost:3000
 ```
 
-Log in with username `adminBTG` — the initial password is printed once by the seed script (`npm run db:seed`; or set `SEED_ADMIN_PASSWORD` beforehand). Change it after first login. Accounts sign in by username; the seeded admin is a super-admin and can create more users at `/admin/users`.
+Log in with username `adminBTG` — the initial password is printed once by the seed script (`npm run db:seed`; or set `SEED_ADMIN_PASSWORD` beforehand to choose your own). Change it after first login. **The admin password is per-machine** — every dev machine has its own database, so use the password set on _that_ machine, not one from another setup (see `docs/cold-start.md` §0). Accounts sign in by username; the seeded admin is a super-admin and can create more users at `/admin/users`.
 
 ## Scripts
 
