@@ -25,7 +25,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
 
 ### Wave 2 — API + wizard + dashboard
 
-- [ ] `T3` — API routes
+- [x] `T3` — API routes
   - Files: `src/app/api/brief-drafts/route.ts`, `src/app/api/brief-drafts/[id]/route.ts`
   - Estimate: small
   - Depends: T2
