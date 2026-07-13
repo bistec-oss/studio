@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
 // Requires MOCK_SOCIAL=true (and MOCK_AI/MOCK_PUPPETEER to mint a draft) in the
@@ -42,8 +42,9 @@ async function createExportedDraft(
   })
   const brief = await briefRes.json()
   const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
-  expect(assembleRes.status()).toBe(200)
+  expect(assembleRes.status()).toBe(202)
   const { draftId } = await assembleRes.json()
+  await waitForDraft(api, draftId) // generation is async — wait for EXPORTED
   return draftId
 }
 

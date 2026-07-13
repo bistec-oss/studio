@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -29,6 +29,7 @@ async function createExportedDraft(api: ApiClient, topic = 'Reg Test'): Promise<
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
   const assembled = await (await api.post('/api/generate/assemble-b', { briefId: brief.id })).json()
+  await waitForDraft(api, assembled.draftId)
   return assembled.draftId
 }
 
@@ -44,6 +45,9 @@ test.describe('§K — H7 atomicity', () => {
     if (!MOCKED()) { test.skip(); return }
     const draftId = await createExportedDraft(api, `H7a-${Date.now()}`)
 
+    // Generation records an initial v1 "Original design" revision (F2), so the
+    // baseline is 1; N concurrent refines must append N distinct, contiguous ones.
+    const baseline = ((await (await api.get(`/api/drafts/${draftId}/revisions`)).json()) as unknown[]).length
     const N = 10
     const results = await Promise.all(
       Array.from({ length: N }, (_, i) =>
@@ -55,9 +59,10 @@ test.describe('§K — H7 atomicity', () => {
 
     const revisions = await (await api.get(`/api/drafts/${draftId}/revisions`)).json()
     const numbers = revisions.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
-    expect(numbers.length).toBe(N)
-    expect(new Set(numbers).size).toBe(N) // all distinct
-    numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1)) // contiguous 1..N
+    const total = baseline + N
+    expect(numbers.length).toBe(total)
+    expect(new Set(numbers).size).toBe(total) // all distinct
+    numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1)) // contiguous 1..total
   })
 
   // TC-REG-H7b — Concurrent prompt version saves: distinct versions, ≤1 conflict, no 500.

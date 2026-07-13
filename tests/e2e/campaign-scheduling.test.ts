@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
 // Campaign briefing (versioned) + scheduled-generation queue.
@@ -109,7 +109,10 @@ test.describe('Campaign briefing — versioning + permissions', () => {
       designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
     })).json()
     const assembled = await admin.post('/api/generate/assemble-b', { briefId: brief.id })
-    expect(assembled.status()).toBe(200)
+    expect(assembled.status()).toBe(202)
+    // Generation is async — confirm it lands EXPORTED (route wiring end-to-end).
+    const draft = await waitForDraft(admin, (await assembled.json()).draftId)
+    expect(draft.status).toBe('EXPORTED')
   })
 })
 

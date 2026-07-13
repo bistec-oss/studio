@@ -27,21 +27,30 @@ export const POST = withAuth<Params>(async (_req, { params }, user) => {
   })
   if (!revision) return NextResponse.json({ error: 'Revision not found' }, { status: 404 })
 
-  // Render the snapshot at the brief's chosen canvas size.
-  const draft = await prisma.draft.findUnique({
-    where: { id: params.id },
-    select: { brief: { select: { aspectRatio: true } } },
-  })
-  const { width, height } = dimensionsFor(draft?.brief.aspectRatio)
-  const buffer = await renderHtmlToPng(revision.htmlSnapshot, width, height)
-  const key = exportKey('restore', params.id)
-  await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
+  // Switching versions just moves the pointer and reuses the revision's ALREADY
+  // rendered PNG — no Puppeteer, so switching is instant. Every revision stores
+  // its exportUrl (EXPORTS object key) at creation; only legacy rows that lack
+  // one fall back to a re-render.
+  let key = revision.exportUrl
+  if (!key) {
+    const draft = await prisma.draft.findUnique({
+      where: { id: params.id },
+      select: { brief: { select: { aspectRatio: true } } },
+    })
+    const { width, height } = dimensionsFor(draft?.brief.aspectRatio)
+    const buffer = await renderHtmlToPng(revision.htmlSnapshot, width, height)
+    key = exportKey('restore', params.id)
+    await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
+  }
 
   await prisma.draft.update({
     where: { id: params.id },
     data: {
       htmlContent: revision.htmlSnapshot,
       exportUrl: key,
+      // Move the "current version" pointer — this is what makes reverting
+      // reversible: you can jump forward again to any other revision.
+      currentRevisionNumber: revisionNumber,
       pendingConflict: Prisma.JsonNull,
     },
   })

@@ -10,6 +10,7 @@ import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
+import { ASPECT_LABELS } from '@/lib/aspectRatio'
 import { channelLabel } from '@/lib/channels'
 import { QueueEntryModal } from './QueueEntryModal'
 import type { ScheduledGeneration, GenerationStatus } from '@/lib/api-types'
@@ -125,7 +126,7 @@ export function ScheduledQueueSection({ campaignId, resolvedKitId, isAdmin }: Sc
                         ? `Template: ${entry.template?.name ?? '—'}`
                         : 'Freeform'}
                       {' · '}
-                      {entry.aspectRatio === 'PORTRAIT' ? '3:4' : '1:1'}
+                      {ASPECT_LABELS[entry.aspectRatio].split(' ')[0]}
                     </p>
                     {entry.status === 'FAILED' && entry.errorReason && (
                       <p className="text-xs text-red-600 dark:text-red-400 mt-0.5" title={entry.errorReason}>

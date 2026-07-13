@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 
 // §L — Critical UI browser flows (docs/e2e-test-plan.md). These drive a real
 // browser (Playwright `page`), so the app must be serving on :3001 and a browser
@@ -29,6 +29,7 @@ async function apiDraft(api: ApiClient, topic: string): Promise<string> {
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
   const assembled = await (await api.post('/api/generate/assemble-b', { briefId: brief.id })).json()
+  await waitForDraft(api, assembled.draftId)
   return assembled.draftId
 }
 

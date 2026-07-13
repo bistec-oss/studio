@@ -54,15 +54,28 @@ export function shouldMockPublishFail(caption: string): boolean {
   return false
 }
 
+// Per-prompt record so a __FAIL_GEN_ONCE__ generation fails its first attempt
+// and succeeds on retry — module-level state for the life of the serve process.
+const mockGenFailedOnce = new Set<string>()
+
 /**
  * Decide whether a mocked DESIGN generation should throw. Consulted only inside
- * the MOCK_AI branches of the design agents, so it is inert in production. A
- * "__FAIL_GEN_ALWAYS__" sentinel in the brief topic (which flows into the
- * prompt) drives deterministic generation failure — the scheduled-generation
- * retry/FAILED path's E2E counterpart to shouldMockPublishFail.
+ * the MOCK_AI branches of the design agents, so it is inert in production.
+ * Sentinels in the brief topic (which flows into the prompt):
+ *   - "__FAIL_GEN_ALWAYS__" → always fail (deterministic FAILED)
+ *   - "__FAIL_GEN_ONCE__"   → fail first attempt, succeed on retry (F1 retry path)
+ * The topic must be unique per draft for __FAIL_GEN_ONCE__ to isolate its state.
+ * The scheduled-generation + async-generation retry/FAILED counterpart to
+ * shouldMockPublishFail.
  */
 export function shouldMockGenerateFail(promptContext: string): boolean {
-  return promptContext.includes('__FAIL_GEN_ALWAYS__')
+  if (promptContext.includes('__FAIL_GEN_ALWAYS__')) return true
+  if (promptContext.includes('__FAIL_GEN_ONCE__')) {
+    if (mockGenFailedOnce.has(promptContext)) return false
+    mockGenFailedOnce.add(promptContext)
+    return true
+  }
+  return false
 }
 
 /**

@@ -62,7 +62,7 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   }
   // aspectRatio is optional; defaults to SQUARE for backward compatibility.
   if (aspectRatio != null && !isAspectRatio(aspectRatio)) {
-    return NextResponse.json({ error: 'aspectRatio must be SQUARE or PORTRAIT' }, { status: 400 })
+    return NextResponse.json({ error: 'aspectRatio must be SQUARE, PORTRAIT, or STORY' }, { status: 400 })
   }
   if (!copyProviderKey?.trim()) {
     return NextResponse.json({ error: 'copyProviderKey is required' }, { status: 400 })

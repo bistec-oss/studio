@@ -29,67 +29,195 @@ export interface GenerateDraftResult {
   backgroundImageUrl: string | null
 }
 
-// The one brief→draft generation orchestrator: brand-kit + campaign-briefing
-// resolution → copy → Path A/B design dispatch → Draft persistence. Shared by
-// the assemble-a/b routes, the MCP/ACP surface, and the scheduled-generation
-// runner so they can never drift. Callers own auth/ownership and error→HTTP
-// mapping; MOCK_AI seams live inside the providers/agents this calls.
-export async function generateDraftForBrief(
+interface ResolvedInputs {
+  kit: Awaited<ReturnType<typeof resolveBrandKit>>
+  campaignBriefing: Awaited<ReturnType<typeof getActiveCampaignBriefing>>
+  template: Awaited<ReturnType<typeof prisma.brandKitTemplate.findUnique>>
+}
+
+// Resolve + VALIDATE the inputs a generation needs, throwing the typed errors
+// (NoBrandKitError / TemplateNotFoundError / PathATemplateError) callers map to
+// 4xx. Shared by every generation lifecycle so validation can't drift.
+// `templateId` comes from the route (sync path) or the pending draft (async path).
+async function resolveGenerationInputs(
   brief: Brief,
-  opts?: { templateId?: string | null },
-): Promise<GenerateDraftResult> {
+  templateId: string | null | undefined,
+): Promise<ResolvedInputs> {
   // Brand kit precedence: explicit brief kit → campaign → project → system default.
   const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
-
   // Campaign-level briefing (when the brief's campaign has an active one) —
   // injected into copy and design prompts alongside the brand voice.
   const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
 
-  // Resolve + validate the design path's inputs BEFORE paying for copy.
-  const isTemplate = brief.designMode === 'TEMPLATE'
   let template = null
-  if (isTemplate) {
-    if (!opts?.templateId) throw new TemplateNotFoundError()
-    template = await prisma.brandKitTemplate.findUnique({ where: { id: opts.templateId } })
+  if (brief.designMode === 'TEMPLATE') {
+    if (!templateId) throw new TemplateNotFoundError()
+    template = await prisma.brandKitTemplate.findUnique({ where: { id: templateId } })
     if (!template) throw new TemplateNotFoundError()
     assertTemplateMatchesBrief(brief, template)
   } else if (!kit) {
     throw new NoBrandKitError()
   }
+  return { kit, campaignBriefing, template }
+}
 
-  const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
-  const copyText = await copyProvider.generateCopy(buildBriefInput(brief, kit, campaignBriefing))
+interface ProducedDesign {
+  htmlContent: string
+  exportUrl: string
+  backgroundImageUrl: string | null
+}
 
-  let htmlContent: string
-  let exportUrl: string
-  let backgroundImageUrl: string | null = null
-
+// Path A/B design dispatch → rendered PNG. The heavy model + Puppeteer work,
+// shared by the sync and async lifecycles.
+async function produceDesign(
+  brief: Brief,
+  { kit, campaignBriefing, template }: ResolvedInputs,
+  copyText: string,
+): Promise<ProducedDesign> {
   if (template) {
     const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing)
-    htmlContent = result.htmlContent
-    exportUrl = result.exportUrl
-  } else {
-    const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing)
-    htmlContent = result.htmlContent
-    exportUrl = result.exportUrl
-    backgroundImageUrl = result.backgroundImageUrl
+    return { htmlContent: result.htmlContent, exportUrl: result.exportUrl, backgroundImageUrl: null }
   }
+  const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing)
+  return {
+    htmlContent: result.htmlContent,
+    exportUrl: result.exportUrl,
+    backgroundImageUrl: result.backgroundImageUrl,
+  }
+}
 
-  const draft = await prisma.draft.create({
-    data: {
-      briefId: brief.id,
-      copyText,
-      htmlContent,
-      templateId: template?.id ?? null,
-      // exportUrl is an EXPORTS object key; stored as-is, signed per read.
-      exportUrl,
-      // Public URL of the AI-generated background (null when the pre-step
-      // skipped, and always null for Path A).
-      imageUrl: backgroundImageUrl,
-      status: 'EXPORTED',
-      promptVersion: PROMPT_VERSION,
-    },
+// Persist a freshly generated design onto a draft AND record it as revision v1
+// (the append-only history's origin — see F2). One transaction.
+async function finalizeDraftV1(
+  draftId: string,
+  design: ProducedDesign,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.draft.update({
+      where: { id: draftId },
+      data: {
+        htmlContent: design.htmlContent,
+        // exportUrl is an EXPORTS object key; stored as-is, signed per read.
+        exportUrl: design.exportUrl,
+        // Public URL of the AI-generated background (null when the pre-step
+        // skipped, and always null for Path A).
+        imageUrl: design.backgroundImageUrl,
+        status: 'EXPORTED',
+        promptVersion: PROMPT_VERSION,
+        currentRevisionNumber: 1,
+        failureReason: null,
+      },
+    })
+    await tx.draftRevision.create({
+      data: {
+        draftId,
+        revisionNumber: 1,
+        instruction: 'Original design',
+        htmlSnapshot: design.htmlContent,
+        exportUrl: design.exportUrl,
+      },
+    })
+  })
+}
+
+// SYNCHRONOUS brief→draft orchestrator: copy → design → render, then create the
+// draft (EXPORTED, with v1) at the END on success. Used by the NON-interactive
+// callers — MCP/ACP surface and the scheduled-generation runner — which want the
+// finished draft back and rely on the thrown typed errors (a failure creates NO
+// draft, so scheduler retries don't accumulate orphan FAILED drafts). The
+// interactive brief wizard uses createPendingDraft + runGenerationForDraft instead.
+export async function generateDraftForBrief(
+  brief: Brief,
+  opts?: { templateId?: string | null },
+): Promise<GenerateDraftResult> {
+  const inputs = await resolveGenerationInputs(brief, opts?.templateId)
+
+  const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
+  const copyText = await copyProvider.generateCopy(buildBriefInput(brief, inputs.kit, inputs.campaignBriefing))
+
+  const design = await produceDesign(brief, inputs, copyText)
+
+  const draft = await prisma.$transaction(async (tx) => {
+    const created = await tx.draft.create({
+      data: {
+        briefId: brief.id,
+        copyText,
+        htmlContent: design.htmlContent,
+        templateId: inputs.template?.id ?? null,
+        exportUrl: design.exportUrl,
+        imageUrl: design.backgroundImageUrl,
+        status: 'EXPORTED',
+        promptVersion: PROMPT_VERSION,
+        currentRevisionNumber: 1,
+      },
+    })
+    await tx.draftRevision.create({
+      data: {
+        draftId: created.id,
+        revisionNumber: 1,
+        instruction: 'Original design',
+        htmlSnapshot: design.htmlContent,
+        exportUrl: design.exportUrl,
+      },
+    })
+    return created
   })
 
-  return { draft, backgroundImageUrl }
+  return { draft, backgroundImageUrl: design.backgroundImageUrl }
+}
+
+// ── Async (interactive) lifecycle ────────────────────────────────────────────
+// The brief wizard wants to land on the preview page IMMEDIATELY and show
+// skeletons, so generation is split: createPendingDraft (fast, validated,
+// synchronous) then runGenerationForDraft (the heavy work, run in the background
+// and never awaited by the request). The draft page polls while IN_PROGRESS.
+
+// Validate inputs and create an IN_PROGRESS placeholder draft (empty copy, no
+// image yet). Throws the same typed errors as the sync path BEFORE any draft
+// exists, so the route can return a 4xx for bad input. copyText='' is the
+// "copy not written yet" sentinel the preview page renders as a skeleton.
+export async function createPendingDraft(
+  brief: Brief,
+  opts?: { templateId?: string | null },
+): Promise<Draft> {
+  const inputs = await resolveGenerationInputs(brief, opts?.templateId)
+  return prisma.draft.create({
+    data: {
+      briefId: brief.id,
+      copyText: '',
+      templateId: inputs.template?.id ?? null,
+      status: 'IN_PROGRESS',
+    },
+  })
+}
+
+// Run the heavy generation for an existing IN_PROGRESS draft: copy (persisted
+// as soon as it's ready, so the copy skeleton resolves independently of the
+// image) → design + render → finalize as EXPORTED with a v1 revision. On any
+// failure the draft is marked FAILED with the reason for the inline error card.
+// Designed to be fire-and-forget from the route; also reused by the retry route.
+export async function runGenerationForDraft(draftId: string): Promise<void> {
+  const draft = await prisma.draft.findUnique({ where: { id: draftId }, include: { brief: true } })
+  if (!draft) return
+  try {
+    const inputs = await resolveGenerationInputs(draft.brief, draft.templateId)
+
+    const copyProvider = await resolveCopyProvider(draft.brief.copyProviderKey ?? undefined)
+    const copyText = await copyProvider.generateCopy(
+      buildBriefInput(draft.brief, inputs.kit, inputs.campaignBriefing),
+    )
+    // Persist copy the moment it's ready — the preview page's copy skeleton
+    // resolves now while the image skeleton keeps animating.
+    await prisma.draft.update({ where: { id: draftId }, data: { copyText } })
+
+    const design = await produceDesign(draft.brief, inputs, copyText)
+    await finalizeDraftV1(draftId, design)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    await prisma.draft
+      .update({ where: { id: draftId }, data: { status: 'FAILED', failureReason: reason } })
+      .catch(() => {
+        /* draft deleted mid-flight — nothing to record */
+      })
+  }
 }

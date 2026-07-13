@@ -13,6 +13,7 @@ import {
   Sparkles,
   Undo2,
   Maximize2,
+  AlertTriangle,
 } from 'lucide-react'
 import { ImageLightbox } from '@/components/ui/ImageLightbox'
 import { Button } from '@/components/ui/Button'
@@ -45,8 +46,10 @@ interface DraftDetail {
   htmlContent: string | null
   exportUrl: string | null
   status: 'IN_PROGRESS' | 'EXPORTED' | 'PUBLISHED' | 'FAILED'
+  failureReason: string | null
   createdAt: string
   revisionCount: number
+  currentRevisionNumber: number | null
   brandKitName: string | null
   brief: {
     id: string
@@ -86,6 +89,7 @@ export default function DraftDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
   const { isAdmin } = useCurrentUser()
   const [showPublish, setShowPublish] = useState(false)
@@ -162,6 +166,19 @@ export default function DraftDetailPage() {
     }
   }
 
+  async function handleRetry() {
+    setRetrying(true)
+    try {
+      await apiFetch(`/api/drafts/${draftId}/retry`, { method: 'POST' })
+      // Back to IN_PROGRESS — refetch immediately; the poll takes over from here.
+      await fetchDraft()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Retry failed')
+    } finally {
+      setRetrying(false)
+    }
+  }
+
   async function handleRegenerateDesign() {
     setRegenDesign(true)
     try {
@@ -184,6 +201,12 @@ export default function DraftDetailPage() {
   }
 
   const isPathB = draft?.brief.designMode === 'GENERATE'
+  const isGenerating = draft?.status === 'IN_PROGRESS'
+  const isFailed = draft?.status === 'FAILED'
+  // Copy resolves independently of the image: show it the moment it's written,
+  // even while the design is still rendering.
+  const copyPending = isGenerating && !draft?.copyText
+  const ready = draft?.status === 'EXPORTED' || draft?.status === 'PUBLISHED'
 
   if (loading) {
     return (
@@ -232,8 +255,26 @@ export default function DraftDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left column */}
         <div className="lg:col-span-8 space-y-6">
-          <CopyEditor draft={draft} onSaved={() => fetchDraft()} />
-          <RefinementPanel draftId={draftId} onRefined={refreshAfterChange} />
+          {copyPending ? (
+            <GlassPanel className="p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted mb-3">
+                Copy
+              </h3>
+              <div className="space-y-2.5 animate-pulse" aria-label="Generating copy" role="status">
+                <div className="h-4 w-3/4 rounded bg-light-border/50 dark:bg-dark-border/50" />
+                <div className="h-4 w-full rounded bg-light-border/50 dark:bg-dark-border/50" />
+                <div className="h-4 w-5/6 rounded bg-light-border/50 dark:bg-dark-border/50" />
+                <div className="h-4 w-2/3 rounded bg-light-border/50 dark:bg-dark-border/50" />
+              </div>
+              <p className="mt-3 text-xs text-light-text-muted dark:text-dark-text-muted flex items-center gap-1.5">
+                <Loader2 size={11} className="animate-spin" /> Writing the copy…
+              </p>
+            </GlassPanel>
+          ) : (
+            <CopyEditor draft={draft} onSaved={() => fetchDraft()} />
+          )}
+          {/* Refinement only makes sense once there's a rendered design to refine. */}
+          {ready && <RefinementPanel draftId={draftId} onRefined={refreshAfterChange} />}
         </div>
 
         {/* Right column */}
@@ -261,6 +302,31 @@ export default function DraftDetailPage() {
                     <Maximize2 size={14} />
                   </span>
                 </button>
+              ) : isGenerating ? (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 animate-pulse bg-gradient-to-br from-light-border/40 to-transparent dark:from-dark-border/40"
+                  aria-label="Generating design"
+                  role="status"
+                >
+                  <Loader2 size={28} className="animate-spin text-primary/70 dark:text-primary-light/70" />
+                  <span className="text-xs text-light-text-muted dark:text-dark-text-muted">
+                    Designing your post…
+                  </span>
+                </div>
+              ) : isFailed ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                  <AlertTriangle size={28} className="text-red-500" />
+                  <span className="text-sm font-medium text-light-text dark:text-dark-text">
+                    Generation failed
+                  </span>
+                  <span className="text-xs text-light-text-muted dark:text-dark-text-muted line-clamp-3">
+                    {draft.failureReason ?? 'Something went wrong while generating this post.'}
+                  </span>
+                  <Button variant="secondary" size="sm" onClick={handleRetry} disabled={retrying}>
+                    {retrying ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                    Retry
+                  </Button>
+                </div>
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2">
                   <ImageIcon size={32} className="text-light-text-muted dark:text-dark-text-muted opacity-40" />
@@ -347,10 +413,15 @@ export default function DraftDetailPage() {
               </p>
             ) : (
               <ul className="space-y-2 max-h-80 overflow-y-auto">
-                {revisions.map((r) => (
+                {revisions.map((r) => {
+                  const isCurrent = r.revisionNumber === draft.currentRevisionNumber
+                  return (
                   <li
                     key={r.id}
-                    className="glass-input rounded-xl px-3 py-2 flex items-start justify-between gap-2"
+                    className={[
+                      'glass-input rounded-xl px-3 py-2 flex items-start justify-between gap-2',
+                      isCurrent ? 'ring-1 ring-primary/60 dark:ring-primary-light/60' : '',
+                    ].join(' ')}
                   >
                     <div className="min-w-0">
                       <p className="text-xs text-light-text dark:text-dark-text line-clamp-2">
@@ -363,21 +434,29 @@ export default function DraftDetailPage() {
                         {formatDateTime(r.createdAt)}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRestore(r.revisionNumber)}
-                      disabled={restoringRev !== null}
-                      className="flex-shrink-0"
-                    >
-                      {restoringRev === r.revisionNumber ? (
-                        <Loader2 size={12} className="animate-spin" />
-                      ) : (
-                        <RotateCcw size={12} />
-                      )}
-                    </Button>
+                    {isCurrent ? (
+                      <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-lg bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
+                        Current
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRestore(r.revisionNumber)}
+                        disabled={restoringRev !== null}
+                        className="flex-shrink-0"
+                        title={`Switch to v${r.revisionNumber}`}
+                      >
+                        {restoringRev === r.revisionNumber ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <RotateCcw size={12} />
+                        )}
+                      </Button>
+                    )}
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             )}
           </GlassPanel>

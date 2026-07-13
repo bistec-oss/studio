@@ -8,6 +8,38 @@ import { resolveExportUrl } from '@/lib/storage/minio'
 
 type Params = { id: string }
 
+// A generation running in-process is bounded by the same 15-min lease the
+// scheduled-generation runner uses. If a draft is still IN_PROGRESS well past
+// that, the run was almost certainly interrupted (e.g. a server restart), so
+// it's swept to FAILED lazily on read — the preview page then shows the inline
+// error card + Retry instead of an eternal skeleton.
+const STUCK_GENERATION_MS = 15 * 60_000
+
+const STUCK_REASON = 'Generation was interrupted. Please retry.'
+
+// Returns the EFFECTIVE status/reason after a possible sweep, so the response
+// reflects the recovery immediately (no extra round-trip).
+async function recoverIfStuck(
+  id: string,
+  status: string,
+  failureReason: string | null,
+  updatedAt: Date,
+): Promise<{ status: string; failureReason: string | null }> {
+  if (status !== 'IN_PROGRESS' || Date.now() - updatedAt.getTime() < STUCK_GENERATION_MS) {
+    return { status, failureReason }
+  }
+  await prisma.draft
+    .updateMany({
+      // Guard on status so we never clobber a run that finished between read and write.
+      where: { id, status: 'IN_PROGRESS' },
+      data: { status: 'FAILED', failureReason: STUCK_REASON },
+    })
+    .catch(() => {
+      /* best-effort recovery */
+    })
+  return { status: 'FAILED', failureReason: STUCK_REASON }
+}
+
 async function loadDraft(id: string) {
   const draft = await prisma.draft.findUnique({
     where: { id },
@@ -28,6 +60,10 @@ async function loadDraft(id: string) {
   })
   if (!draft) return null
 
+  // Sweep a draft stranded IN_PROGRESS by an interrupted run → FAILED, so the
+  // effective status/reason below reflect the recovery.
+  const effective = await recoverIfStuck(draft.id, draft.status, draft.failureReason, draft.updatedAt)
+
   const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
   return {
@@ -40,9 +76,11 @@ async function loadDraft(id: string) {
     htmlContent: draft.htmlContent,
     // exportUrl is stored as an EXPORTS object key — sign it for the browser.
     exportUrl: await resolveExportUrl(draft.exportUrl),
-    status: draft.status,
+    status: effective.status,
+    failureReason: effective.failureReason,
     createdAt: draft.createdAt,
     revisionCount: draft._count.revisions,
+    currentRevisionNumber: draft.currentRevisionNumber,
     brandKitName: kit?.name ?? null,
     brief: {
       id: draft.brief.id,

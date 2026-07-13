@@ -1,12 +1,14 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
 // Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment + seeded
 // 'cli' COPY provider.
 //
 // Real contract (src/app/api/generate/assemble-b/route.ts):
-//   POST /api/generate/assemble-b {briefId} → 200 {draftId, exportUrl}
+//   POST /api/generate/assemble-b {briefId} → 202 {draftId} (ASYNC, F1); the draft
+//   finishes EXPORTED in the background — poll via waitForDraft. NO_BRAND_KIT is
+//   validated synchronously → 422.
 
 const ADMIN_EMAIL = 'admin@bisteccare.lk'
 const ADMIN_PASSWORD = 'BistecStudio2026!'
@@ -47,14 +49,13 @@ test.describe('Path B — freeform design generation', () => {
     const brief = await briefRes.json()
 
     const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
-    expect(assembleRes.status()).toBe(200)
+    expect(assembleRes.status()).toBe(202)
     const assembled = await assembleRes.json()
     expect(assembled.draftId).toBeTruthy()
-    expect(assembled.exportUrl).toMatch(/^https?:\/\//)
 
-    const draftRes = await api.get(`/api/drafts/${assembled.draftId}`)
-    const draft = await draftRes.json()
+    const draft = await waitForDraft(api, assembled.draftId)
     expect(draft.status).toBe('EXPORTED')
+    expect(draft.exportUrl).toMatch(/^https?:\/\//)
     expect(draft.htmlContent).toBeTruthy()
   })
 
@@ -72,11 +73,10 @@ test.describe('Path B — freeform design generation', () => {
     })).json()
 
     const res = await api.post('/api/generate/assemble-b', { briefId: brief.id })
-    expect(res.status()).toBe(200)
-    const draftRes = await api.get(`/api/drafts/${(await res.json()).draftId}`)
-    const draft = await draftRes.json()
+    expect(res.status()).toBe(202)
+    const draft = await waitForDraft(api, (await res.json()).draftId)
     expect(draft.status).toBe('EXPORTED')
-    expect(draft.brief.aspectRatio).toBe('PORTRAIT')
+    expect((draft.brief as { aspectRatio: string }).aspectRatio).toBe('PORTRAIT')
   })
 
   test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async () => {

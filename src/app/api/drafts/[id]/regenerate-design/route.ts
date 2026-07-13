@@ -53,10 +53,15 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
       runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
     )
 
-    // Snapshot the design we are replacing as a revision (so "go back" works) —
-    // revision-number allocation + P2002 collision retry via the shared helper.
-    let previousRevisionNumber: number | null = null
-    if (draft.htmlContent) {
+    // The Undo target is whatever revision is currently live. The design history
+    // is an append-only log, so the live state is already the current revision —
+    // we do NOT snapshot "the previous" here (doing so, plus overwriting live with
+    // an unrecorded new design, is exactly what lost the regenerated design on Undo).
+    let previousRevisionNumber: number | null = draft.currentRevisionNumber ?? null
+
+    // Legacy guard: a draft created before currentRevisionNumber existed may have
+    // live content not captured as a revision. Snapshot it so Undo has a target.
+    if (previousRevisionNumber === null && draft.htmlContent) {
       previousRevisionNumber = await withNextRevisionNumber(draft.id, async (tx, revisionNumber) => {
         await tx.draftRevision.create({
           data: {
@@ -71,17 +76,32 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
       })
     }
 
-    await prisma.draft.update({
-      where: { id: draft.id },
-      data: {
-        htmlContent: result.htmlContent,
-        exportUrl: result.exportUrl,
-        // New background (or null when the pre-step skipped — clears the stale one).
-        imageUrl: result.backgroundImageUrl,
-        status: 'EXPORTED',
-        pendingConflict: Prisma.JsonNull,
-        promptVersion: PROMPT_VERSION,
-      },
+    // Append the NEW design as a revision and point the draft at it — so the user
+    // can jump forward to it again after an Undo, not just back.
+    await withNextRevisionNumber(draft.id, async (tx, revisionNumber) => {
+      await tx.draftRevision.create({
+        data: {
+          draftId: draft.id,
+          revisionNumber,
+          instruction: 'Regenerated design',
+          htmlSnapshot: result.htmlContent,
+          exportUrl: result.exportUrl,
+        },
+      })
+      await tx.draft.update({
+        where: { id: draft.id },
+        data: {
+          htmlContent: result.htmlContent,
+          exportUrl: result.exportUrl,
+          // New background (or null when the pre-step skipped — clears the stale one).
+          imageUrl: result.backgroundImageUrl,
+          status: 'EXPORTED',
+          currentRevisionNumber: revisionNumber,
+          pendingConflict: Prisma.JsonNull,
+          promptVersion: PROMPT_VERSION,
+        },
+      })
+      return revisionNumber
     })
 
     return NextResponse.json({

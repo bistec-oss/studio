@@ -5,6 +5,7 @@ import {
   aspectClassFor,
   isAspectRatio,
   ASPECT_VALUES,
+  ASPECT_LABELS,
 } from '@/lib/aspectRatio'
 
 describe('dimensionsFor', () => {
@@ -16,6 +17,10 @@ describe('dimensionsFor', () => {
     expect(dimensionsFor('PORTRAIT')).toEqual({ width: 1080, height: 1350 })
   })
 
+  it('STORY is 1080×1920 (9:16)', () => {
+    expect(dimensionsFor('STORY')).toEqual({ width: 1080, height: 1920 })
+  })
+
   it('null/undefined fall back to SQUARE (legacy rows)', () => {
     expect(dimensionsFor(undefined)).toEqual({ width: 1080, height: 1080 })
     expect(dimensionsFor(null)).toEqual({ width: 1080, height: 1080 })
@@ -23,9 +28,10 @@ describe('dimensionsFor', () => {
 })
 
 describe('isAspectRatio', () => {
-  it('accepts the two enum values', () => {
+  it('accepts the enum values', () => {
     expect(isAspectRatio('SQUARE')).toBe(true)
     expect(isAspectRatio('PORTRAIT')).toBe(true)
+    expect(isAspectRatio('STORY')).toBe(true)
     expect(ASPECT_VALUES.every(isAspectRatio)).toBe(true)
   })
 
@@ -43,12 +49,19 @@ describe('labels', () => {
   it('dimensionsLabel renders the pixel size used in prompts', () => {
     expect(dimensionsLabel('SQUARE')).toBe('1080×1080')
     expect(dimensionsLabel('PORTRAIT')).toBe('1080×1350')
+    expect(dimensionsLabel('STORY')).toBe('1080×1920')
     expect(dimensionsLabel(undefined)).toBe('1080×1080')
   })
 
   it('aspectClassFor maps to the Tailwind utility', () => {
-    expect(aspectClassFor('PORTRAIT')).toBe('aspect-[3/4]')
+    expect(aspectClassFor('PORTRAIT')).toBe('aspect-[4/5]')
+    expect(aspectClassFor('STORY')).toBe('aspect-[9/16]')
     expect(aspectClassFor('SQUARE')).toBe('aspect-square')
     expect(aspectClassFor(null)).toBe('aspect-square')
+  })
+
+  it('ASPECT_LABELS reflect the corrected 4:5 / 9:16 naming', () => {
+    expect(ASPECT_LABELS.PORTRAIT).toBe('4:5 Portrait')
+    expect(ASPECT_LABELS.STORY).toBe('9:16 Story')
   })
 })

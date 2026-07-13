@@ -12,23 +12,27 @@ export interface Dimensions {
   height: number
 }
 
-// 1:1 square (Instagram feed default) and 3:4 portrait (taller feed/Stories crop).
+// 1:1 square (Instagram feed default), 4:5 portrait (standard IG portrait, 1080×1350),
+// and 9:16 story/reel (1080×1920, published to the same feed channels for now).
 export const ASPECT_DIMENSIONS: Record<AspectRatio, Dimensions> = {
   SQUARE: { width: 1080, height: 1080 },
   PORTRAIT: { width: 1080, height: 1350 },
+  STORY: { width: 1080, height: 1920 },
 }
 
 // Short human label used in the wizard, review step, and admin template list.
+// PORTRAIT's pixels (1080×1350) are mathematically 4:5, so it's labelled "4:5".
 export const ASPECT_LABELS: Record<AspectRatio, string> = {
   SQUARE: '1:1 Square',
-  PORTRAIT: '3:4 Portrait',
+  PORTRAIT: '4:5 Portrait',
+  STORY: '9:16 Story',
 }
 
-// The two valid enum values, for runtime validation of request bodies.
-export const ASPECT_VALUES: AspectRatio[] = ['SQUARE', 'PORTRAIT']
+// The valid enum values, for runtime validation of request bodies.
+export const ASPECT_VALUES: AspectRatio[] = ['SQUARE', 'PORTRAIT', 'STORY']
 
 export function isAspectRatio(v: unknown): v is AspectRatio {
-  return v === 'SQUARE' || v === 'PORTRAIT'
+  return v === 'SQUARE' || v === 'PORTRAIT' || v === 'STORY'
 }
 
 // Pixel dimensions for a ratio. Null/undefined falls back to SQUARE so legacy
@@ -39,7 +43,14 @@ export function dimensionsFor(ratio: AspectRatio | null | undefined): Dimensions
 
 // Tailwind aspect-ratio utility class for preview tiles.
 export function aspectClassFor(ratio: AspectRatio | null | undefined): string {
-  return (ratio ?? 'SQUARE') === 'PORTRAIT' ? 'aspect-[3/4]' : 'aspect-square'
+  switch (ratio) {
+    case 'PORTRAIT':
+      return 'aspect-[4/5]'
+    case 'STORY':
+      return 'aspect-[9/16]'
+    default:
+      return 'aspect-square'
+  }
 }
 
 // "1080×1350" — used inside agent prompts.

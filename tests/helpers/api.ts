@@ -27,6 +27,24 @@ export interface ApiClient {
   dispose(): Promise<void>
 }
 
+// Generation is ASYNC (F1): assemble-a/b return 202 { draftId } and the draft
+// starts IN_PROGRESS, finishing (EXPORTED) or failing (FAILED) in the background.
+// Poll the draft until it leaves IN_PROGRESS. Under MOCK_AI this resolves almost
+// immediately; the generous budget covers a cold first render.
+export async function waitForDraft(
+  api: ApiClient,
+  draftId: string,
+  { timeoutMs = 30_000, intervalMs = 250 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const draft = await (await api.get(`/api/drafts/${draftId}`)).json()
+    if (draft.status && draft.status !== 'IN_PROGRESS') return draft
+    if (Date.now() > deadline) return draft // return whatever we have; caller asserts
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
 export async function loginAs(
   _request: APIRequestContext,
   email: string,

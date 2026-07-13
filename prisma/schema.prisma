@@ -23,6 +23,7 @@ enum DesignMode {
 enum AspectRatio {
   SQUARE
   PORTRAIT
+  STORY
 }
 
 enum DraftStatus {
@@ -335,10 +336,19 @@ model Draft {
   templateId      String?
   exportUrl       String?
   pendingConflict Json?
+  // Which DraftRevision is currently active (revisionNumber, not id). The design
+  // history is an append-only log of DraftRevision rows; this pointer says which
+  // one the live htmlContent/exportUrl mirror, so reverting can move freely back
+  // AND forward without losing states. Null for legacy rows created before this
+  // field existed (treated as "latest revision").
+  currentRevisionNumber Int?
   // Prompt revision that produced the current design (prompts/shared.ts
   // PROMPT_VERSION) — lets output quality be correlated with prompt changes.
   promptVersion   String?
   status          DraftStatus     @default(IN_PROGRESS)
+  // Why the last generation attempt FAILED (model error, timeout, interruption).
+  // Shown on the preview page's inline error card; cleared on a successful retry.
+  failureReason   String?
   createdAt       DateTime        @default(now())
   // @default(now()) keeps the added column valid for pre-existing rows
   updatedAt       DateTime        @default(now()) @updatedAt

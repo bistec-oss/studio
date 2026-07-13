@@ -62,7 +62,7 @@ export function SizeDesignStep({
       {/* Post size */}
       <div className="mb-6">
         <FieldLabel>Post Size</FieldLabel>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {ASPECT_OPTIONS.map(({ value, icon: Icon, sub }) => {
             const selected = aspectRatio === value
             return (

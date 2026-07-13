@@ -18,8 +18,8 @@ const createSchema = z.object({
   name: z.string().trim().min(1, 'name is required'),
   htmlTemplate: z.string().trim().min(1, 'htmlTemplate is required'),
   aspectRatio: z
-    .enum(['SQUARE', 'PORTRAIT'], {
-      errorMap: () => ({ message: 'aspectRatio must be SQUARE or PORTRAIT' }),
+    .enum(['SQUARE', 'PORTRAIT', 'STORY'], {
+      errorMap: () => ({ message: 'aspectRatio must be SQUARE, PORTRAIT, or STORY' }),
     })
     .nullish(),
 })

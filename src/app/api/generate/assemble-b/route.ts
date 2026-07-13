@@ -3,16 +3,16 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth, parseBody } from '@/lib/api/handler'
-import { resolveExportUrl } from '@/lib/storage/minio'
-import { generateDraftForBrief, NoBrandKitError } from '@/lib/agent/generateDraft'
-import { AgentToolLimitError } from '@/lib/agent/types'
-import { withUserClaudeAuth } from '@/lib/agent/userToken'
+import { createPendingDraft, NoBrandKitError } from '@/lib/agent/generateDraft'
+import { startBackgroundGeneration } from '@/lib/agent/backgroundGeneration'
 
 const bodySchema = z.object({ briefId: z.string() })
 
-// Path B (freeform) — a thin HTTP adapter over generateDraftForBrief, the
-// shared brief→draft orchestrator (also used by assemble-a, MCP/ACP, and the
-// scheduled-generation runner).
+// Path B (freeform) — ASYNC. Validate + create an IN_PROGRESS draft synchronously
+// (bad input → 4xx now), then run the heavy generation in the background and
+// return the draft id immediately so the wizard can navigate to the polling
+// preview page. Non-interactive callers (MCP/ACP, scheduler) still use the
+// synchronous generateDraftForBrief.
 export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, bodySchema)
   if (body.response) return body.response
@@ -24,16 +24,15 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   if (forbidden) return forbidden
 
   try {
-    // CLI mode bills the acting user's personal Claude token when connected
-    // (shared server token otherwise) — see src/lib/agent/userToken.ts.
-    const { draft } = await withUserClaudeAuth(user.userId, () => generateDraftForBrief(brief))
-    return NextResponse.json({ draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl) })
+    const draft = await createPendingDraft(brief)
+    // Fire-and-forget: keeps running in-process after this response returns, on
+    // the acting user's CLI token (shared token otherwise). Errors are caught
+    // inside and recorded on the draft (status FAILED) for the inline error card.
+    await startBackgroundGeneration(draft.id, user.userId)
+    return NextResponse.json({ draftId: draft.id }, { status: 202 })
   } catch (err) {
     if (err instanceof NoBrandKitError) {
       return NextResponse.json({ code: 'NO_BRAND_KIT', message: err.message }, { status: 422 })
-    }
-    if (err instanceof AgentToolLimitError) {
-      return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
     }
     const message = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })

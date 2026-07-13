@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
 // §F — Export (docs/e2e-test-plan.md).
@@ -24,6 +24,7 @@ async function createExportedDraft(api: ApiClient): Promise<string> {
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
   const assembled = await (await api.post('/api/generate/assemble-b', { briefId: brief.id })).json()
+  await waitForDraft(api, assembled.draftId) // generation is async — wait for EXPORTED
   return assembled.draftId
 }
 

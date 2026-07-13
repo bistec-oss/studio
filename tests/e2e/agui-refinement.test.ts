@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 
 const ADMIN_EMAIL = 'admin@bisteccare.lk'
 const ADMIN_PASSWORD = 'BistecStudio2026!'
@@ -32,11 +32,11 @@ async function createExportedDraft(api: ApiClient) {
     campaignId: camp.id,
   })
   const brief = await briefRes.json()
+  // Generation is async: assemble returns 202 { draftId }; poll until EXPORTED.
   const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
-  if (assembleRes.status() !== 200) return null
+  if (assembleRes.status() !== 202) return null
   const { draftId } = await assembleRes.json()
-  // Return the full draft (assemble returns only {draftId,exportUrl}).
-  return (await api.get(`/api/drafts/${draftId}`)).json()
+  return waitForDraft(api, draftId)
 }
 
 test.describe('AGUI design refinement', () => {
@@ -117,6 +117,38 @@ test.describe('AGUI design refinement', () => {
     expect(restoreRes.status()).toBe(200)
     const restored = await restoreRes.json()
     expect(restored.exportUrl).toMatch(/^https?:\/\//)
+  })
+
+  // F2 — the design history is an append-only log with a "current version"
+  // pointer, so reverting can move BACK and then FORWARD again (the old flow
+  // lost the forward state). Generation records v1 up front.
+  test('version switching moves back and forward freely (F2)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+
+    // Generation records the original design as v1 and points at it.
+    expect(draft.currentRevisionNumber).toBe(1)
+    const revs = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
+    expect(revs.some((r: { revisionNumber: number }) => r.revisionNumber === 1)).toBe(true)
+
+    // Refine → appends v2 and the pointer advances to it.
+    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Add a subtle gradient' })
+    let after = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    expect(after.currentRevisionNumber).toBe(2)
+
+    // Jump BACK to v1 → the pointer follows.
+    const backRes = await api.post(`/api/drafts/${draft.id}/revisions/1/restore`, {})
+    expect(backRes.status()).toBe(200)
+    after = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    expect(after.currentRevisionNumber).toBe(1)
+
+    // Jump FORWARD to v2 → the previously-"lost" forward state is reachable again.
+    // (Before F2, reverting had no pointer and no way forward — this is the fix.)
+    const fwdRes = await api.post(`/api/drafts/${draft.id}/revisions/2/restore`, {})
+    expect(fwdRes.status()).toBe(200)
+    after = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    expect(after.currentRevisionNumber).toBe(2)
   })
 
   test('revision numbers are unique and contiguous (H7)', async () => {

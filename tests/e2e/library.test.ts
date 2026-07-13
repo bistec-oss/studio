@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 
 // §H — Library (docs/e2e-test-plan.md).
 //
@@ -24,6 +24,7 @@ async function adminDraft(admin: ApiClient, topic: string): Promise<string> {
     designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
   })).json()
   const assembled = await (await admin.post('/api/generate/assemble-b', { briefId: brief.id })).json()
+  await waitForDraft(admin, assembled.draftId)
   return assembled.draftId
 }
 
@@ -34,6 +35,7 @@ async function editorDraft(editor: ApiClient, topic: string): Promise<string> {
     designMode: 'GENERATE', copyProviderKey: 'cli',
   })).json()
   const assembled = await (await editor.post('/api/generate/assemble-b', { briefId: brief.id })).json()
+  await waitForDraft(editor, assembled.draftId)
   return assembled.draftId
 }
 

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 
 // Requires: MOCK_AI=true, MOCK_PUPPETEER=true in the APP's environment, and a
 // seeded enabled COPY provider with providerKey 'cli' (scripts/seed-cli-provider.mjs).
@@ -7,8 +7,10 @@ import { loginAs, type ApiClient } from '../helpers/api'
 // the brand kit's first colour; MOCK_PUPPETEER returns a 1×1 PNG uploaded to MinIO.
 //
 // Real contract (verified against src/app/api/generate/assemble-a/route.ts):
-//   POST /api/generate/assemble-a {briefId,templateId} → 200 {draftId, exportUrl}
-//   (exportUrl is a signed MinIO URL; status/htmlContent live on GET /api/drafts/[id])
+//   POST /api/generate/assemble-a {briefId,templateId} → 202 {draftId} (ASYNC, F1)
+//   The draft starts IN_PROGRESS and finishes EXPORTED in the background; poll
+//   GET /api/drafts/[id] (waitForDraft) for the final status/htmlContent/exportUrl.
+//   Bad input (missing template / ratio mismatch) is still validated synchronously → 4xx.
 
 const ADMIN_EMAIL = 'admin@bisteccare.lk'
 const ADMIN_PASSWORD = 'BistecStudio2026!'
@@ -55,21 +57,19 @@ test.describe('Path A — template-fill generation', () => {
     expect(briefRes.status()).toBe(201)
     const brief = await briefRes.json()
 
-    // Assemble Path A — route returns 200 { draftId, exportUrl }
+    // Assemble Path A — async: route returns 202 { draftId }
     const assembleRes = await api.post('/api/generate/assemble-a', {
       briefId: brief.id,
       templateId: template.id,
     })
-    expect(assembleRes.status()).toBe(200)
+    expect(assembleRes.status()).toBe(202)
     const assembled = await assembleRes.json()
     expect(assembled.draftId).toBeTruthy()
-    expect(assembled.exportUrl).toMatch(/^https?:\/\//) // signed MinIO URL (H10)
 
-    // Full draft state via GET /api/drafts/[id]
-    const draftRes = await api.get(`/api/drafts/${assembled.draftId}`)
-    expect(draftRes.status()).toBe(200)
-    const draft = await draftRes.json()
+    // Poll GET /api/drafts/[id] until generation finishes.
+    const draft = await waitForDraft(api, assembled.draftId)
     expect(draft.status).toBe('EXPORTED')
+    expect(draft.exportUrl).toMatch(/^https?:\/\//) // signed MinIO URL (H10)
     expect(draft.htmlContent).toBeTruthy()
     // The brand kit's colour reached the design agent and appears in the HTML.
     expect(draft.htmlContent).toContain('#0284c7')
@@ -168,7 +168,10 @@ test.describe('Path A — template-fill generation', () => {
     const res = await api.post('/api/generate/assemble-a', { briefId: brief.id, templateId: template.id })
     // Must not 5xx — externalization keeps the prompt small; the pipeline completes.
     expect(res.status()).toBeLessThan(500)
-    expect(res.status()).toBe(200)
+    expect(res.status()).toBe(202)
+    // The oversized template still completes (externalization) in the background.
+    const draft = await waitForDraft(api, (await res.json()).draftId)
+    expect(draft.status).toBe('EXPORTED')
   })
 
   // TC-GEN-A3 — A 3:4 PORTRAIT brief + matching PORTRAIT template assembles cleanly.
@@ -190,11 +193,10 @@ test.describe('Path A — template-fill generation', () => {
     })).json()
 
     const res = await api.post('/api/generate/assemble-a', { briefId: brief.id, templateId: template.id })
-    expect(res.status()).toBe(200)
-    const draftRes = await api.get(`/api/drafts/${(await res.json()).draftId}`)
-    const draft = await draftRes.json()
+    expect(res.status()).toBe(202)
+    const draft = await waitForDraft(api, (await res.json()).draftId)
     expect(draft.status).toBe('EXPORTED')
-    expect(draft.brief.aspectRatio).toBe('PORTRAIT')
+    expect((draft.brief as { aspectRatio: string }).aspectRatio).toBe('PORTRAIT')
   })
 
   // TC-GEN-A4 — A template whose size differs from the brief's chosen size is

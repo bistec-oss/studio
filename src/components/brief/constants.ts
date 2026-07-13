@@ -1,7 +1,7 @@
 // Static option lists and copy for the brief wizard steps.
 
 import React from 'react'
-import { Square, RectangleVertical } from 'lucide-react'
+import { Square, RectangleVertical, Smartphone } from 'lucide-react'
 import type { AspectRatio } from '@prisma/client'
 import { dimensionsLabel } from '@/lib/aspectRatio'
 import { CHANNEL_VALUES } from '@/lib/channels'
@@ -19,6 +19,7 @@ export const STEPS = ['Campaign', 'Size & Design', 'Content', 'Images', 'Review'
 export const ASPECT_OPTIONS: { value: AspectRatio; icon: React.ElementType; sub: string }[] = [
   { value: 'SQUARE', icon: Square, sub: dimensionsLabel('SQUARE') },
   { value: 'PORTRAIT', icon: RectangleVertical, sub: dimensionsLabel('PORTRAIT') },
+  { value: 'STORY', icon: Smartphone, sub: dimensionsLabel('STORY') },
 ]
 
 export const GOAL_OPTIONS = [

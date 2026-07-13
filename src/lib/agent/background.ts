@@ -40,9 +40,10 @@ function log(msg: string) {
 
 // Provider-native image size for the post's aspect ratio. gpt-image supports
 // 1024x1024 / 1536x1024 / 1024x1536; the design layer cover-crops to the exact
-// 1080×1080 / 1080×1350 canvas, so nearest-orientation is enough.
+// 1080×1080 / 1080×1350 / 1080×1920 canvas, so nearest-orientation is enough.
+// Both PORTRAIT (4:5) and STORY (9:16) are taller-than-wide → portrait source.
 export function imageSizeFor(aspectRatio: string): string {
-  return aspectRatio === 'PORTRAIT' ? '1024x1536' : '1024x1024'
+  return aspectRatio === 'PORTRAIT' || aspectRatio === 'STORY' ? '1024x1536' : '1024x1024'
 }
 
 // Tolerant strict-JSON extraction, mirroring the refine route's parseConflict:

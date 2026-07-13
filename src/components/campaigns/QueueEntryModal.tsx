@@ -9,7 +9,7 @@ import { Select } from '@/components/ui/Select'
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
 import { apiFetch } from '@/lib/apiFetch'
 import { CHANNEL_VALUES, channelLabel } from '@/lib/channels'
-import type { Channel } from '@prisma/client'
+import type { AspectRatio, Channel } from '@prisma/client'
 import type { ScheduledGeneration, PostGenerationAction } from '@/lib/api-types'
 
 // Create/edit modal for a scheduled-generation queue entry. The per-post
@@ -189,10 +189,11 @@ export function QueueEntryModal({ campaignId, resolvedKitId, isAdmin, entry, onC
             <SegmentedToggle
               options={[
                 { value: 'SQUARE', label: '1:1' },
-                { value: 'PORTRAIT', label: '3:4' },
+                { value: 'PORTRAIT', label: '4:5' },
+                { value: 'STORY', label: '9:16' },
               ]}
               value={aspectRatio}
-              onChange={v => setAspectRatio(v as 'SQUARE' | 'PORTRAIT')}
+              onChange={v => setAspectRatio(v as AspectRatio)}
             />
           </div>
           <div>

@@ -238,6 +238,8 @@ async function commitRevision(
       data: {
         htmlContent: newHtml,
         exportUrl: finalExportUrl,
+        // The refined state becomes the active revision.
+        currentRevisionNumber: revisionNumber,
         pendingConflict: Prisma.JsonNull,
         promptVersion: PROMPT_VERSION,
         ...(backgroundImageUrl ? { imageUrl: backgroundImageUrl } : {}),
