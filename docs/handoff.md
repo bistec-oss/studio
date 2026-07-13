@@ -19,6 +19,8 @@ Built in dependency order and merged to `main`; per-feature plans live in `docs/
 
 **Deploy:** `npx prisma migrate deploy` (migrations `20260713120000`, `20260713130000`, `20260713140000`); no new env vars.
 
+**CI (same day, follow-up commits):** the E2E gate — red on `main` since before 2026-07-07 — is now **green**. Root cause was a bad CI `TOKEN_ENCRYPTION_KEY` (`ci0000…`, 66 chars / invalid hex) that made `crypto.ts` throw, 500-ing the two credential-encrypting routes (per-user Claude token + provider registration); fixed to a valid 64-char hex key in `.github/workflows/e2e.yml`. ⚠️ That key MUST stay a valid 64-hex string. Also bumped the GitHub Actions off the deprecated Node 20 runtime (checkout v7, setup-node v6, cache v6, upload-artifact v7) and cleared two lint warnings (PostCard `<img>`, a `Record<string,any>` in `briefs/route`). Everything above is merged to `main` and CI-green.
+
 ---
 
 ## 2026-07-07 — Per-user Claude OAuth tokens (CLI mode)
