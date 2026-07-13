@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
-import { Channel, DesignMode } from '@prisma/client'
+import { Prisma, Channel, DesignMode, type AspectRatio } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
 
 // Permissive schema: only guards the JSON parse. The thorough hand-rolled
@@ -13,7 +13,24 @@ const createSchema = z.object({}).passthrough()
 export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   const parsed = await parseBody(req, createSchema)
   if (parsed.response) return parsed.response
-  const body = parsed.data as Record<string, any>
+  // Untrusted request body — every field is validated at runtime below; the cast
+  // just describes the shape those checks assume (no `any`).
+  const body = parsed.data as {
+    topic?: string
+    description?: string
+    goal?: string
+    tone?: string
+    channels?: unknown
+    aspectRatio?: AspectRatio
+    designMode?: string
+    campaignId?: string
+    brandKitId?: string
+    copyProviderKey?: string
+    imageProviderKey?: string
+    additionalImageUrl?: string
+    briefImages?: unknown
+    referenceTemplateId?: string
+  }
 
   const {
     topic,
@@ -141,7 +158,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
       copyProviderKey: copyProviderKey.trim(),
       imageProviderKey: imageProviderKey?.trim() ?? null,
       additionalImageUrl: additionalImageUrl ?? null,
-      briefImages: briefImages ?? null,
+      // Nullable Json column: use the Prisma sentinel rather than a bare null
+      // (validated to a {url,intent}[] above when present).
+      briefImages: briefImages == null ? Prisma.JsonNull : (briefImages as Prisma.InputJsonValue),
       referenceTemplateId: referenceTemplateId ?? null,
     },
   })

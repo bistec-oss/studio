@@ -66,6 +66,7 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }:
       >
         {draft.exportUrl ? (
           <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- MinIO signed URL, not a next/image source */}
             <img
               src={draft.exportUrl}
               alt={draft.brief.topic}
