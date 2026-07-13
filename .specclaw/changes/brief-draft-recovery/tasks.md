@@ -45,7 +45,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
 
 ### Wave 3 — E2E + gates
 
-- [ ] `T6` — E2E suite + full gates
+- [x] `T6` — E2E suite + full gates
   - Files: `tests/e2e/brief-draft-recovery.test.ts`, `docs/e2e-test-plan.md` (catalog entry)
   - Estimate: medium
   - Depends: T4, T5
