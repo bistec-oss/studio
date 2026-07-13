@@ -2,9 +2,12 @@
 
 import React, { useState } from 'react'
 import Link from 'next/link'
-import { Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { StatusChip } from '@/components/ui/StatusChip'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { apiFetch } from '@/lib/apiFetch'
 import type { DraftStatus } from '@prisma/client'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
 
@@ -41,16 +44,53 @@ export interface RecentDraftRow {
   } | null
 }
 
+// An unfinished (autosaved) brief-wizard session — rendered as a leading row
+// with Resume/Discard instead of a draft link.
+export interface UnfinishedBriefRow {
+  id: string
+  topic: string
+  updatedAtLabel: string
+}
+
 export function RecentDraftsCard({
   drafts,
+  unfinished = [],
   className,
 }: {
   drafts: RecentDraftRow[]
+  unfinished?: UnfinishedBriefRow[]
   className?: string
 }) {
+  const router = useRouter()
+  const confirm = useConfirm()
   const [expanded, setExpanded] = useState(false)
-  const rows = expanded ? drafts : drafts.slice(0, COLLAPSED_COUNT)
-  const hasMore = drafts.length > COLLAPSED_COUNT
+  const [discarding, setDiscarding] = useState<string | null>(null)
+
+  // Unfinished rows lead (most recent working state first) and share the
+  // collapsed-row budget with generated drafts.
+  const draftBudget = expanded ? drafts.length : Math.max(0, COLLAPSED_COUNT - unfinished.length)
+  const unfinishedRows = expanded ? unfinished : unfinished.slice(0, COLLAPSED_COUNT)
+  const rows = drafts.slice(0, draftBudget)
+  const hasMore = drafts.length + unfinished.length > COLLAPSED_COUNT
+
+  async function discardUnfinished(row: UnfinishedBriefRow) {
+    const ok = await confirm({
+      title: 'Discard this unfinished brief?',
+      description: `"${row.topic || 'Untitled brief'}" and its uploaded images will be deleted.`,
+      confirmLabel: 'Discard',
+    })
+    if (!ok) return
+    setDiscarding(row.id)
+    try {
+      await apiFetch(`/api/brief-drafts/${row.id}`, { method: 'DELETE' })
+      router.refresh()
+    } catch {
+      /* already gone — refresh reflects reality either way */
+      router.refresh()
+    } finally {
+      setDiscarding(null)
+    }
+  }
 
   return (
     <GlassPanel className={className}>
@@ -76,7 +116,7 @@ export function RecentDraftsCard({
         )}
       </div>
 
-      {drafts.length === 0 ? (
+      {drafts.length === 0 && unfinished.length === 0 ? (
         <p className="py-8 text-center text-sm text-light-text-muted dark:text-dark-text-muted">
           No drafts yet.{' '}
           <Link href="/brief" className="text-primary hover:underline dark:text-primary-light">
@@ -98,6 +138,47 @@ export function RecentDraftsCard({
               </tr>
             </thead>
             <tbody>
+              {unfinishedRows.map(u => (
+                <tr
+                  key={`unfinished-${u.id}`}
+                  className="group border-b border-black/5 last:border-0 dark:border-white/5"
+                >
+                  <td className="py-2.5 pr-3">
+                    <Link
+                      href={`/brief?resume=${u.id}`}
+                      className="font-medium text-light-text hover:text-primary dark:text-dark-text dark:hover:text-primary-light"
+                    >
+                      {u.topic || 'Untitled brief'}
+                    </Link>
+                  </td>
+                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
+                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
+                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
+                  <td className="py-2.5 pr-3">
+                    <StatusChip status="unfinished" />
+                  </td>
+                  <td className="py-2.5 text-light-text-muted dark:text-dark-text-muted">
+                    <span className="inline-flex items-center gap-2">
+                      {u.updatedAtLabel}
+                      <Link
+                        href={`/brief?resume=${u.id}`}
+                        className="text-xs font-medium text-primary hover:underline dark:text-primary-light"
+                      >
+                        Resume
+                      </Link>
+                      <button
+                        type="button"
+                        aria-label="Discard unfinished brief"
+                        disabled={discarding === u.id}
+                        onClick={() => void discardUnfinished(u)}
+                        className="text-light-text-muted transition-colors hover:text-red-600 disabled:opacity-50 dark:text-dark-text-muted dark:hover:text-red-400"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
               {rows.map(d => (
                 <tr
                   key={d.id}

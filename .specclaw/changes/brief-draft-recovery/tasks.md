@@ -37,7 +37,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
   - Depends: T3
   - Notes: `useSearchParams('resume')` rehydration on mount; 1.5s debounced PUT with single in-flight guard + trailing save; `finishedRef` stops autosave on Generate success then fire-and-forget DELETE with keepImages; silent failure everywhere. Existing consistency effect covers dangling ids — do not duplicate.
 
-- [ ] `T5` — Dashboard unfinished rows
+- [x] `T5` — Dashboard unfinished rows
   - Files: `src/app/(app)/page.tsx`, `src/components/dashboard/RecentDraftsCard.tsx`
   - Estimate: medium
   - Depends: T3

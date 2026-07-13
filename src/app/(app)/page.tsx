@@ -10,6 +10,8 @@ import {
   Activity,
 } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
+import { listBriefDrafts } from '@/lib/brief/briefDrafts'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { RecentDraftsCard } from '@/components/dashboard/RecentDraftsCard'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
@@ -66,6 +68,11 @@ async function getDashboardData() {
     prisma.availableProvider.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
   ])
 
+  // The viewer's own unfinished (autosaved) briefs — owner-scoped, so resolved
+  // from the session; listBriefDrafts also runs the lazy 7-day TTL sweep.
+  const currentUser = await getCurrentUser()
+  const unfinishedBriefs = currentUser ? await listBriefDrafts(currentUser.userId) : []
+
   // Build a merged, chronological activity feed from the available signals.
   type Event = { id: string; at: Date; text: string; kind: 'draft' | 'post' | 'provider' }
   const events: Event[] = [
@@ -91,7 +98,15 @@ async function getDashboardData() {
     .sort((a, b) => b.at.getTime() - a.at.getTime())
     .slice(0, 8)
 
-  return { draftsReady, postsPublished, activeCampaigns, aiProviders, recentDrafts, events }
+  return {
+    draftsReady,
+    postsPublished,
+    activeCampaigns,
+    aiProviders,
+    recentDrafts,
+    unfinishedBriefs,
+    events,
+  }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -171,6 +186,11 @@ export default async function DashboardPage() {
         {/* Recent drafts — collapsed 8 / expandable to the full fetched list */}
         <RecentDraftsCard
           className="p-5 lg:col-span-2"
+          unfinished={data.unfinishedBriefs.map(u => ({
+            id: u.id,
+            topic: u.topic,
+            updatedAtLabel: relativeTime(u.updatedAt),
+          }))}
           drafts={data.recentDrafts.map(d => ({
             id: d.id,
             status: d.status,
