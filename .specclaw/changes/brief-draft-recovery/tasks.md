@@ -12,7 +12,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
 
 ### Wave 1 — Data & service layer
 
-- [ ] `T1` — `BriefDraft` model + migration
+- [x] `T1` — `BriefDraft` model + migration
   - Files: `prisma/schema.prisma`, `prisma/migrations/*_brief_draft/`
   - Estimate: small
   - Notes: additive; `@@index([userId, updatedAt])`; run `migrate dev` against local DB, `generate`.
