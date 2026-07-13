@@ -7,11 +7,14 @@ project:
   description: "a marketing post and video, designer and generation tool for Bistec Care"
   repo: ""
 
-# Model routing — use the best model for each phase
+# Model routing — this project runs specclaw inside Claude Code, which can only
+# spawn Claude-family agents; the session model does all phases. (The previous
+# values — an OpenAI coding model and outdated Claude ids — were never usable
+# here and were silently ignored by the 2026-07-13 brief-draft-recovery build.)
 models:
-  planning: "anthropic/claude-opus-4-6"      # Proposals, specs, design
-  coding: "openai/gpt-5.1-codex"             # Implementation
-  review: "anthropic/claude-sonnet-4-5"       # Verification & code review
+  planning: "claude"                         # Proposals, specs, design
+  coding: "claude"                           # Implementation
+  review: "claude"                           # Verification & code review
 
 # Git strategy
 #
@@ -26,11 +29,13 @@ git:
   branch_prefix: "specclaw/"      # Prefix for feature branches
   worktree_dir: ".specclaw/worktrees"  # Base directory for worktrees (worktree-per-change only)
 
-# Build settings
+# Build settings — real gates so `specclaw-build finalize` verifies instead of
+# trivially passing on empty commands. (E2E stays manual: it needs the test DB
+# + a test server on :3001 — see docs/e2e-test-plan.md §0.)
 build:
-  test_command: ""                 # e.g., "npm test", "pytest"
-  lint_command: ""                 # e.g., "npm run lint"
-  build_command: ""                # e.g., "npm run build"
+  test_command: "npm run test:unit"
+  lint_command: "npm run lint"
+  build_command: "npm run build"
   parallel_tasks: 3               # Max concurrent agent spawns
   timeout_seconds: 300             # Per-task timeout
 
