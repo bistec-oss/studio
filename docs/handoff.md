@@ -18,6 +18,13 @@
 
 > **⚠️ Deploy:** `npx prisma migrate deploy` (adds `20260713124851_brief_draft`). No new env vars; no Docker image change.
 
+**Same-day live testing notes (CLI mode, real Claude account):**
+
+- **Refine is runtime-verified end-to-end in CLI mode** (first live run since the F1–F6 batch): background decision (haiku, ~6s) → design refine (sonnet, ~62s) → new revision + re-render, `POST /refine` 200 in 76s.
+- **Stale-`.next` footgun (cost ~30 min of debugging):** running `next dev` over the `.next/` produced by `npm run build` served stale/hybrid route modules — `GET /api/drafts/[id]` 200 while `/revisions` + `/refine` 404'd "Draft not found" for an existing draft; each route healed on recompile. Fix: `rm -rf .next` before `npm run dev` after any production build. Documented in `docs/cold-start.md` §6.
+- **Observed refine caveat (pre-existing, not new):** on a draft with 2 embedded brief images, the refine model dropped both `__INLINE_ASSET_n__` placeholders (`[designAgentCli] model dropped 2 asset placeholder(s)`) — the refined revision loses those images; version-switch back recovers. Candidate follow-up: auto-reinsert or reject when placeholders vanish.
+- **CLI-mode auth reminder:** two OAuth tokens hit their **weekly limit** mid-testing (instant `exit 1` from `claude -p`, sweeping copy/design failures). `runClaudeCli` correctly strips `ANTHROPIC_API_KEY`; the failing credential was the shared `CLAUDE_CODE_OAUTH_TOKEN` itself. Diagnose with: `echo hi | CLAUDE_CODE_OAUTH_TOKEN=<token> claude -p --model haiku` — a limit message + `EXIT 0` means the account is out of quota, not a code bug.
+
 ---
 
 ## 2026-07-13 — Six-feature batch (F1–F6)

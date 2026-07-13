@@ -165,6 +165,15 @@ node --env-file=.env scripts/seed-portrait-template.mjs   # idempotent
 npm run dev   # http://localhost:3000
 ```
 
+> **⚠️ Never start `next dev` on a `.next/` left behind by `npm run build`.** Dev mode
+> inherits the production build artifacts and serves stale/hybrid route modules with
+> impossible symptoms — observed 2026-07-13: `GET /api/drafts/[id]` 200 while
+> `/revisions` and `/refine` 404'd "Draft not found" **for a draft that existed**, on the
+> same DB and same query; each route healed only when its module recompiled. If you ran
+> a production build (or the E2E gates, which include one), `rm -rf .next` before
+> `npm run dev`. (Port note: if something else holds :3000, Next silently falls back to
+> :3001 — check the startup banner for the actual URL.)
+
 **Smoke test:**
 
 1. Log in at `/` with the admin credentials above (username `adminBTG`).
