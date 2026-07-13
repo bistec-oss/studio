@@ -81,9 +81,28 @@ export function shouldMockGenerateFail(promptContext: string): boolean {
 /**
  * Deterministic briefing-assistant chat reply (MOCK_AI). Echoes the last user
  * message and always carries a ```briefing block so tests can assert the
- * draft-extraction path end-to-end.
+ * draft-extraction path end-to-end. When the user message asks to SCHEDULE a
+ * series of posts (contains "schedule" or "scheme"), it instead emits a
+ * ```schedule block with a small deterministic plan so F4's auto-scheduling
+ * path can be asserted end-to-end.
  */
 export function buildMockBriefingReply(lastUserMessage: string): string {
+  const wantsSchedule = /schedul|scheme/i.test(lastUserMessage)
+  if (wantsSchedule) {
+    const plan = {
+      posts: [
+        { topic: 'Mock scheduled post 1', goal: 'awareness', tone: 'professional', daysFromNow: 1, postAction: 'HOLD' },
+        { topic: 'Mock scheduled post 2', goal: 'engagement', tone: 'casual', daysFromNow: 3, postAction: 'HOLD' },
+      ],
+    }
+    return [
+      `Mock scheduling reply for E2E tests. [${lastUserMessage}]`,
+      '',
+      '```schedule',
+      JSON.stringify(plan, null, 2),
+      '```',
+    ].join('\n')
+  }
   return [
     `Mock briefing assistant reply for E2E tests. [${lastUserMessage}]`,
     '',

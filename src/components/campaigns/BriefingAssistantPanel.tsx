@@ -3,10 +3,40 @@
 import React, { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Loader2, Paperclip, Send, Trash2 } from 'lucide-react'
+import { FileText, Loader2, Paperclip, Send, Trash2, ArrowUp, ArrowDown, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Modal'
 import { apiFetch } from '@/lib/apiFetch'
+import { CHANNEL_VALUES } from '@/lib/channels'
+
+// Shape the model proposes inside a ```schedule block (see briefingAssistant.ts).
+interface SchedulePlanItem {
+  topic: string
+  goal: string
+  tone: string
+  daysFromNow: number
+  postAction: 'HOLD' | 'SCHEDULE_PUBLISH' | 'PUBLISH_NOW'
+}
+
+// An editable row in the plan the admin reviews before approving. generateAt is
+// a datetime-local string ("YYYY-MM-DDTHH:mm") for the native picker.
+interface PlanRow {
+  topic: string
+  goal: string
+  tone: string
+  postAction: 'HOLD' | 'SCHEDULE_PUBLISH' | 'PUBLISH_NOW'
+  generateAt: string
+}
+
+// datetime-local value N days from now at 09:00 local.
+function localDateTimeInDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(9, 0, 0, 0)
+  // Adjust for the local timezone offset so toISOString slicing keeps local time.
+  const tzOffsetMs = d.getTimezoneOffset() * 60_000
+  return new Date(d.getTime() - tzOffsetMs).toISOString().slice(0, 16)
+}
 
 // AI briefing assistant: hand in source documents, converse until the model
 // converges on a briefing draft, then Apply drops it into the briefing editor
@@ -27,6 +57,7 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   briefingDraft?: string | null
+  schedulePlan?: SchedulePlanItem[] | null
 }
 
 interface BriefingAssistantPanelProps {
@@ -52,6 +83,9 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // The plan the admin is currently reviewing (from the latest ```schedule block).
+  const [plan, setPlan] = useState<PlanRow[] | null>(null)
+  const [scheduling, setScheduling] = useState(false)
 
   const { data: docs = [] } = useQuery({
     queryKey: ['campaigns', campaignId, 'documents'],
@@ -107,7 +141,11 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
     // Let the new message render before scrolling to it.
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
     try {
-      const result = await apiFetch<{ reply: string; briefingDraft: string | null }>(
+      const result = await apiFetch<{
+        reply: string
+        briefingDraft: string | null
+        schedulePlan: SchedulePlanItem[] | null
+      }>(
         `/api/campaigns/${campaignId}/briefing/chat`,
         {
           method: 'POST',
@@ -117,7 +155,22 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
           }),
         },
       )
-      setMessages([...nextMessages, { role: 'assistant', content: result.reply, briefingDraft: result.briefingDraft }])
+      setMessages([
+        ...nextMessages,
+        { role: 'assistant', content: result.reply, briefingDraft: result.briefingDraft, schedulePlan: result.schedulePlan },
+      ])
+      // A fresh plan supersedes any prior one under review.
+      if (result.schedulePlan?.length) {
+        setPlan(
+          result.schedulePlan.map(p => ({
+            topic: p.topic,
+            goal: p.goal,
+            tone: p.tone,
+            postAction: p.postAction,
+            generateAt: localDateTimeInDays(p.daysFromNow),
+          })),
+        )
+      }
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'The assistant failed to reply')
@@ -126,6 +179,58 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
       setInput(content)
     } finally {
       setPending(false)
+    }
+  }
+
+  function updateRow(i: number, patch: Partial<PlanRow>) {
+    setPlan(prev => (prev ? prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) : prev))
+  }
+  function removeRow(i: number) {
+    setPlan(prev => {
+      const next = prev ? prev.filter((_, idx) => idx !== i) : prev
+      return next && next.length ? next : null
+    })
+  }
+  function moveRow(i: number, dir: -1 | 1) {
+    setPlan(prev => {
+      if (!prev) return prev
+      const j = i + dir
+      if (j < 0 || j >= prev.length) return prev
+      const next = [...prev]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }
+
+  async function scheduleAll() {
+    if (!plan || plan.length === 0) return
+    // Channels, size, and design path default here; the AI plan only carries
+    // topic/goal/tone/date/action. Path B (GENERATE) needs no template, so it's
+    // the safe default — per-entry channel/size edits happen in the queue table.
+    const entries = plan.map(r => ({
+      topic: r.topic.trim(),
+      goal: r.goal.trim() || 'awareness',
+      tone: r.tone.trim() || 'professional',
+      channels: CHANNEL_VALUES,
+      aspectRatio: 'SQUARE' as const,
+      designMode: 'GENERATE' as const,
+      generateAt: new Date(r.generateAt).toISOString(),
+      postAction: r.postAction,
+    }))
+    setScheduling(true)
+    try {
+      const res = await apiFetch<{ count: number }>(`/api/campaigns/${campaignId}/queue/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+      })
+      await queryClient.invalidateQueries({ queryKey: ['campaigns', campaignId, 'queue'] })
+      toast.success(`Scheduled ${res.count} post${res.count === 1 ? '' : 's'} for generation.`)
+      setPlan(null)
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to schedule the plan')
+    } finally {
+      setScheduling(false)
     }
   }
 
@@ -223,6 +328,84 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
           )}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Schedule plan review (F4) */}
+        {plan && (
+          <div className="px-5 py-4 border-t border-light-border dark:border-dark-border bg-primary/[0.03] dark:bg-primary-light/[0.03] max-h-72 overflow-y-auto">
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarClock size={15} className="text-primary dark:text-primary-light" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+                Proposed schedule ({plan.length}) — review, edit, then schedule
+              </p>
+            </div>
+            <ul className="space-y-2">
+              {plan.map((row, i) => (
+                <li key={i} className="glass-input rounded-xl p-2.5 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <input
+                      value={row.topic}
+                      onChange={e => updateRow(i, { topic: e.target.value })}
+                      placeholder="Post topic"
+                      className="glass-input rounded-lg px-2.5 py-1.5 text-sm flex-1 text-light-text dark:text-dark-text focus:outline-none"
+                    />
+                    <div className="flex flex-col">
+                      <button
+                        type="button"
+                        aria-label="Move up"
+                        disabled={i === 0}
+                        onClick={() => moveRow(i, -1)}
+                        className="p-0.5 text-light-text-muted dark:text-dark-text-muted hover:text-primary disabled:opacity-30"
+                      >
+                        <ArrowUp size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Move down"
+                        disabled={i === plan.length - 1}
+                        onClick={() => moveRow(i, 1)}
+                        className="p-0.5 text-light-text-muted dark:text-dark-text-muted hover:text-primary disabled:opacity-30"
+                      >
+                        <ArrowDown size={12} />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Remove post"
+                      onClick={() => removeRow(i)}
+                      className="p-1 text-light-text-muted dark:text-dark-text-muted hover:text-red-500"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="datetime-local"
+                      value={row.generateAt}
+                      onChange={e => updateRow(i, { generateAt: e.target.value })}
+                      className="glass-input rounded-lg px-2 py-1 text-xs text-light-text dark:text-dark-text focus:outline-none"
+                    />
+                    <span className="text-[11px] text-light-text-muted dark:text-dark-text-muted">
+                      {row.goal} · {row.tone} · {row.postAction === 'HOLD' ? 'hold for review' : row.postAction.toLowerCase()}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" onClick={scheduleAll} disabled={scheduling}>
+                {scheduling ? <Loader2 size={13} className="animate-spin" /> : <CalendarClock size={13} />}
+                Schedule {plan.length} post{plan.length === 1 ? '' : 's'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setPlan(null)} disabled={scheduling}>
+                Discard
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-light-text-muted dark:text-dark-text-muted">
+              Posts generate as HOLD drafts for review by default. Channels (both feeds) and size
+              can be adjusted per entry in the queue after scheduling.
+            </p>
+          </div>
+        )}
 
         {/* Input */}
         <form onSubmit={send} className="px-5 py-4 border-t border-light-border dark:border-dark-border flex gap-2">

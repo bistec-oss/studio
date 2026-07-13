@@ -363,3 +363,72 @@ test.describe('Scheduled-generation queue — worker flow', () => {
     expect(drafts).toBe(1)
   })
 })
+
+// F4 — chat-driven auto-scheduling: the briefing chat proposes a ```schedule
+// plan; the client batch-creates ScheduledGeneration rows from it.
+test.describe('Chat-driven auto-scheduling (F4)', () => {
+  let admin: ApiClient
+  test.beforeEach(async ({ request }) => { admin = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD) })
+  test.afterEach(async () => { await admin.dispose() })
+
+  test('a scheduling request returns a plan, which batch-creates queue entries', async () => {
+    if (!MOCKED()) { test.skip(); return }
+    const camp = await createCampaign(admin, `F4 Chat ${Date.now()}`)
+
+    // Ask the assistant to schedule a scheme → MOCK_AI emits a ```schedule plan.
+    const chatRes = await admin.post(`/api/campaigns/${camp.id}/briefing/chat`, {
+      messages: [{ role: 'user', content: 'Please schedule 2 posts as per this scheme' }],
+    })
+    expect(chatRes.status()).toBe(200)
+    const { schedulePlan } = await chatRes.json()
+    expect(Array.isArray(schedulePlan)).toBe(true)
+    expect(schedulePlan.length).toBe(2)
+
+    // Build entries the way the panel does (defaults for channels/size/design).
+    const entries = schedulePlan.map((p: { topic: string; goal: string; tone: string; daysFromNow: number; postAction: string }) => ({
+      topic: p.topic, goal: p.goal, tone: p.tone,
+      channels: ['INSTAGRAM', 'LINKEDIN'], aspectRatio: 'SQUARE', designMode: 'GENERATE',
+      generateAt: new Date(Date.now() + p.daysFromNow * 86_400_000).toISOString(),
+      postAction: p.postAction,
+    }))
+    const batchRes = await admin.post(`/api/campaigns/${camp.id}/queue/batch`, { entries })
+    expect(batchRes.status()).toBe(201)
+    expect((await batchRes.json()).count).toBe(2)
+
+    // The entries appear in the queue.
+    const queue = await (await admin.get(`/api/campaigns/${camp.id}/queue`)).json()
+    expect(queue.length).toBe(2)
+    expect(queue.map((e: { topic: string }) => e.topic).sort()).toEqual(
+      ['Mock scheduled post 1', 'Mock scheduled post 2'],
+    )
+  })
+
+  test('batch rejects the whole plan when validation fails (no partial writes)', async () => {
+    if (!MOCKED()) { test.skip(); return }
+    const camp = await createCampaign(admin, `F4 Bad ${Date.now()}`)
+    // Second entry is invalid (empty topic) → 400, and nothing is written.
+    const res = await admin.post(`/api/campaigns/${camp.id}/queue/batch`, {
+      entries: [
+        holdEntry('Valid one'),
+        holdEntry('', { topic: '' }),
+      ],
+    })
+    expect(res.status()).toBe(400)
+    const queue = await (await admin.get(`/api/campaigns/${camp.id}/queue`)).json()
+    expect(queue.length).toBe(0)
+  })
+
+  test('an editor cannot batch-create auto-publish entries', async ({ request }) => {
+    if (!MOCKED()) { test.skip(); return }
+    const camp = await createCampaign(admin, `F4 RBAC ${Date.now()}`)
+    const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
+    try {
+      const res = await editor.post(`/api/campaigns/${camp.id}/queue/batch`, {
+        entries: [holdEntry('Auto pub', { postAction: 'SCHEDULE_PUBLISH', publishAt: LATER() })],
+      })
+      expect(res.status()).toBe(403)
+    } finally {
+      await editor.dispose()
+    }
+  })
+})

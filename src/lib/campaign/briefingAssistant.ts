@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { z } from 'zod'
+import { PostGenerationAction } from '@prisma/client'
 import { resolveAnthropicApiKey } from '@/providers/registry'
 import { isCliMode, modelFor } from '@/lib/agent/config'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
@@ -94,9 +96,47 @@ export function extractBriefingBlock(text: string): string | null {
   return content ? content : null
 }
 
+// ── Auto-scheduling plan (F4) ────────────────────────────────────────────────
+// When the admin asks to "generate posts as per a scheme", the model proposes a
+// posting plan inside a ```schedule fenced block. The app renders it as an
+// editable list the admin approves, then batch-creates ScheduledGeneration rows.
+// The model emits only topic/goal/tone/cadence/action per post; channels, size,
+// and design path default from the campaign at approval time.
+const SCHEDULE_FENCE = /```schedule\s*\n([\s\S]*?)```/g
+
+const schedulePlanItemSchema = z.object({
+  topic: z.string().trim().min(1),
+  goal: z.string().trim().min(1).default('awareness'),
+  tone: z.string().trim().min(1).default('professional'),
+  // Cadence as an offset from approval time — the client renders an editable
+  // date, so absolute timestamps the model can't know reliably are avoided.
+  daysFromNow: z.number().int().min(0).max(365).default(1),
+  postAction: z.nativeEnum(PostGenerationAction).default('HOLD'),
+})
+export type SchedulePlanItem = z.infer<typeof schedulePlanItemSchema>
+
+const schedulePlanSchema = z.object({ posts: z.array(schedulePlanItemSchema).min(1).max(50) })
+
+// Pull the LAST ```schedule block, parse + validate it. Returns null when there
+// is no block or the JSON/shape is invalid (a malformed plan is simply ignored
+// rather than surfaced — the assistant can be asked to try again).
+export function extractSchedulePlan(text: string): SchedulePlanItem[] | null {
+  let match: RegExpExecArray | null = null
+  for (const m of text.matchAll(SCHEDULE_FENCE)) match = m
+  const raw = match?.[1]?.trim()
+  if (!raw) return null
+  try {
+    const parsed = schedulePlanSchema.safeParse(JSON.parse(raw))
+    return parsed.success ? parsed.data.posts : null
+  } catch {
+    return null
+  }
+}
+
 export interface BriefingChatResult {
   reply: string
   briefingDraft: string | null
+  schedulePlan: SchedulePlanItem[] | null
 }
 
 export async function runBriefingChat(
@@ -106,22 +146,31 @@ export async function runBriefingChat(
   if (MOCK_AI) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
     const reply = buildMockBriefingReply(lastUser?.content ?? '')
-    return { reply, briefingDraft: extractBriefingBlock(reply) }
+    return {
+      reply,
+      briefingDraft: extractBriefingBlock(reply),
+      schedulePlan: extractSchedulePlan(reply),
+    }
   }
 
   const context = await buildCampaignContext(campaignId)
   const system = [
-    'You are a marketing strategist helping an admin of bistec-studio write a campaign briefing.',
+    'You are a marketing strategist helping an admin of bistec-studio plan a campaign.',
     'The briefing is free-text context injected into every AI post generation under this campaign, on top of the brand voice: it should cover the campaign\'s goal, audience, key messages, offers/CTAs, tone adjustments, and any do/don\'t rules.',
     'Interview the admin: ask focused questions about gaps, propose concrete wording, and refine based on their answers. Ground everything in the source documents when they are provided.',
-    'In EVERY reply after you have enough to work with, include your current best complete briefing draft inside a fenced code block that starts with ```briefing and ends with ``` — the app extracts that block so the admin can apply it to the editor. Keep the draft plain text (no markdown headers inside the block), roughly 100-300 words.',
+    'When proposing or refining the BRIEFING, include your current best complete briefing draft inside a fenced code block that starts with ```briefing and ends with ``` — the app extracts that block so the admin can apply it to the editor. Keep the draft plain text (no markdown headers inside the block), roughly 100-300 words.',
+    'When the admin asks you to PLAN or SCHEDULE a series of posts (a "scheme", e.g. "4 posts a week for the next month, one per service line"), infer a sensible count, cadence, and per-post topics from their request and the campaign context, then propose the plan inside a fenced block that starts with ```schedule and ends with ```. Inside it put ONLY minified-or-pretty JSON of the shape {"posts":[{"topic":string,"goal":string,"tone":string,"daysFromNow":integer,"postAction":"HOLD"|"SCHEDULE_PUBLISH"|"PUBLISH_NOW"}]}. daysFromNow is the whole-day offset from today for that post. Default postAction to "HOLD" unless the admin explicitly asks to auto-publish. Briefly summarise the plan in prose above the block; the app turns the block into an editable, approvable schedule.',
     context ? `\n# Campaign context\n\n${context}` : '',
   ]
     .filter(Boolean)
     .join('\n')
 
   const reply = await runBriefingModel(system, messages)
-  return { reply, briefingDraft: extractBriefingBlock(reply) }
+  return {
+    reply,
+    briefingDraft: extractBriefingBlock(reply),
+    schedulePlan: extractSchedulePlan(reply),
+  }
 }
 
 export async function enhanceBriefing(campaignId: string, content: string): Promise<string> {

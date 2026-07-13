@@ -49,6 +49,36 @@ export const queueEntrySchema = z
 
 export type QueueEntryInput = z.infer<typeof queueEntrySchema>
 
+// Batch create (F4 auto-scheduling): the AI proposes a plan the admin approves,
+// producing many entries in one call. Bounded so a runaway plan can't flood the
+// queue. Each entry validates through the same per-entry schema.
+export const queueBatchSchema = z.object({
+  entries: z.array(queueEntrySchema).min(1, 'at least one entry is required').max(50),
+})
+
+export type QueueBatchInput = z.infer<typeof queueBatchSchema>
+
+// Map a validated entry to Prisma create data. One mapper for the single-create
+// and batch-create routes so the field handling (template/publishAt nulling)
+// can never drift between them.
+export function toEntryCreateData(campaignId: string, createdById: string, entry: QueueEntryInput) {
+  return {
+    campaignId,
+    createdById,
+    topic: entry.topic,
+    description: entry.description || null,
+    goal: entry.goal,
+    tone: entry.tone,
+    channels: entry.channels,
+    aspectRatio: entry.aspectRatio,
+    designMode: entry.designMode,
+    templateId: entry.designMode === 'TEMPLATE' ? entry.templateId : null,
+    generateAt: entry.generateAt,
+    postAction: entry.postAction,
+    publishAt: entry.postAction === 'SCHEDULE_PUBLISH' ? entry.publishAt : null,
+  }
+}
+
 // Auto-publish actions are a deferred publish, so they inherit the admin-only
 // publish gate (POST /api/posts is withAdmin). HOLD entries are editor-plannable.
 export function requiresAdmin(postAction: PostGenerationAction): boolean {

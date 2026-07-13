@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withAuth, parseBody } from '@/lib/api/handler'
 import { hasRole } from '@/lib/auth'
-import { queueEntrySchema, requiresAdmin, validateTemplateSelection } from '@/lib/campaign/queue'
+import { queueEntrySchema, requiresAdmin, validateTemplateSelection, toEntryCreateData } from '@/lib/campaign/queue'
 
 type Params = { id: string }
 
@@ -48,21 +48,7 @@ export const POST = withAuth<Params>(async (req, { params }, user) => {
   if (templateError) return templateError
 
   const created = await prisma.scheduledGeneration.create({
-    data: {
-      campaignId: params.id,
-      createdById: user.userId,
-      topic: entry.topic,
-      description: entry.description || null,
-      goal: entry.goal,
-      tone: entry.tone,
-      channels: entry.channels,
-      aspectRatio: entry.aspectRatio,
-      designMode: entry.designMode,
-      templateId: entry.designMode === 'TEMPLATE' ? entry.templateId : null,
-      generateAt: entry.generateAt,
-      postAction: entry.postAction,
-      publishAt: entry.postAction === 'SCHEDULE_PUBLISH' ? entry.publishAt : null,
-    },
+    data: toEntryCreateData(params.id, user.userId, entry),
     include: ENTRY_INCLUDE,
   })
 
