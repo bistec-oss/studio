@@ -4,27 +4,27 @@
 
 /* ─── Design tokens: light (default) ─── */
 :root {
-  --background:    #f1f5f9;
-  --surface:       #ffffff;
+  --background: #f1f5f9;
+  --surface: #ffffff;
   --surface-hover: #f8fafc;
-  --border:        #cbd5e1;
-  --text:          #0f172a;
-  --text-muted:    #475569;
+  --border: #cbd5e1;
+  --text: #0f172a;
+  --text-muted: #475569;
 
-  --primary:        #0284c7;
-  --primary-light:  #7dd3fc;
-  --primary-hover:  #0369a1;
+  --primary: #0284c7;
+  --primary-light: #7dd3fc;
+  --primary-hover: #0369a1;
   --primary-active: #075985;
 }
 
 /* ─── Design tokens: dark ─── */
 .dark {
-  --background:    #020617;
-  --surface:       #0f172a;
+  --background: #020617;
+  --surface: #0f172a;
   --surface-hover: #1e293b;
-  --border:        #1e293b;
-  --text:          #f8fafc;
-  --text-muted:    #94a3b8;
+  --border: #1e293b;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
 }
 
 /* ─── Base reset ─── */
@@ -82,7 +82,10 @@
   .glass-input {
     background: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(15, 23, 42, 0.15);
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      background 0.15s ease;
   }
   .glass-input:focus {
     outline: none;
@@ -142,18 +145,61 @@
 
 /* ─── Animations ─── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* Centered-modal variant: the dialog is positioned with left/top 50% plus a
+   translate(-50%,-50%) class. A keyframe `transform` REPLACES the class
+   transform (and `fill: both` keeps the final frame applied forever), so plain
+   scaleIn wiped the centering translate — the modal's top-left corner landed at
+   the viewport center and tall dialogs bled off-screen with no way to scroll to
+   them. These keyframes carry the translate through every frame. */
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(12px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
-.animate-fade-in  { animation: fadeIn 0.3s ease both; }
-.animate-scale-in { animation: scaleIn 0.25s ease both; }
-.animate-slide-in { animation: slideInRight 0.25s ease both; }
+.animate-fade-in {
+  animation: fadeIn 0.3s ease both;
+}
+.animate-scale-in {
+  animation: scaleIn 0.25s ease both;
+}
+.animate-modal-in {
+  animation: modalIn 0.25s ease both;
+}
+.animate-slide-in {
+  animation: slideInRight 0.25s ease both;
+}
