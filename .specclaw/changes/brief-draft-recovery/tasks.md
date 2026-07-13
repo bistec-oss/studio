@@ -31,7 +31,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
   - Depends: T2
   - Notes: `withAuth` + `parseBody`; PUT unknown id → 404 (prevents post-generate resurrection); DELETE honors `?keepImages=true`; 404 (not 403) on foreign ids.
 
-- [ ] `T4` — Wizard autosave + resume
+- [x] `T4` — Wizard autosave + resume
   - Files: `src/components/brief/useBriefWizard.ts`
   - Estimate: medium
   - Depends: T3
