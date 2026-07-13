@@ -1,13 +1,27 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-07 (latest: per-user Claude OAuth tokens — see top section below)
+**Date:** 2026-07-13 (latest: six-feature batch — sizes, versioning, async gen, auto-scheduling, vision)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `marketing-post-studio-v1`
 
 ---
 
-## 2026-07-07 (latest) — Per-user Claude OAuth tokens (CLI mode)
+## 2026-07-13 (latest) — Six-feature batch (F1–F6)
+
+Built in dependency order and merged to `main`; per-feature plans live in `docs/plans/`. Full gates: tsc, lint (0 errors), **148/148 unit**, full mock **E2E 122 passed / 7 skipped**, production build. See the `CLAUDE.md` top section for the per-feature summary. Headlines:
+
+- **Post sizes** 1:1 / 4:5 / 9:16 (`STORY` enum value; `PORTRAIT` relabeled 4:5, no backfill).
+- **Free version switching** — `Draft.currentRevisionNumber` pointer; generation records a v1 revision; restore reuses the stored PNG (instant) and can move back **and** forward.
+- **Async generation** — `assemble-a/b` return `202 {draftId}` and generate in-process; the draft page shows copy/image skeletons; failure → `Draft.failureReason` + inline Retry (`POST /api/drafts/[id]/retry`); stale drafts swept to FAILED on read. Non-interactive callers (MCP/ACP, scheduler) keep the synchronous `generateDraftForBrief`.
+- **Chat auto-scheduling** — a ` ```schedule ` block in the briefing chat → editable plan → `POST /api/campaigns/[id]/queue/batch`.
+- **Vision (F5/F6)** — first real image-input path: `runVisionModel` (`src/lib/agent/vision.ts`) uses Anthropic image blocks (API) or `claude -p --allowedTools Read` on temp files (CLI). F5: brand-kit assistant extracts voice/tone/style/fonts + a **sampled** palette (`sampleImageColors`). F6: image → slot-based Path A template (`POST …/templates/from-image`). **Vision is MOCK-verified only** — live paths not yet runtime-verified.
+
+**Deploy:** `npx prisma migrate deploy` (migrations `20260713120000`, `20260713130000`, `20260713140000`); no new env vars.
+
+---
+
+## 2026-07-07 — Per-user Claude OAuth tokens (CLI mode)
 
 **Branch: `main`.** Each app user can now connect their **own Claude account**: they run `claude setup-token` on their own machine (no official third-party "Sign in with Claude" OAuth exists — the paste flow is the supported mechanism) and paste the `sk-ant-oat01-…` token at the new **`/settings`** page. In CLI mode (`DESIGN_PROVIDER=cli`) every Claude call the user triggers — copy, Path A/B design, regenerate copy/design, refine (incl. the background decision), briefing chat/enhance, post-brief enhance — then runs on **their** subscription. Gates: tsc clean, lint 0 errors (9 pre-existing warnings), **135/135 unit** (37 new), **full E2E 109 passed / 0 failed** (7 new §O cases in `settings-claude-token.test.ts`), Docker image builds.
 

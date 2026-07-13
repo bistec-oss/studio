@@ -2,7 +2,20 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-07)
+## ✅ Outstanding work — START HERE (updated 2026-07-13)
+
+**✅ Six-feature batch: sizes + versioning + async gen + auto-scheduling + vision — 2026-07-13** (plans in `docs/plans/`):
+
+Six features from a planning session, built in dependency order and merged to `main`. Full gates: tsc, lint (0 errors), **148/148 unit**, full mock **E2E 122 passed / 7 skipped**, production build.
+
+- **F3 — Post sizes 1:1 / 4:5 / 9:16.** Added `STORY` (1080×1920) to the `AspectRatio` enum; **relabeled `PORTRAIT` as "4:5"** (its pixels are already 1080×1350 = 4:5 — pure label fix, no backfill). All sizes still resolve through `src/lib/aspectRatio.ts` (now also `nearestAspectRatio()` for F6). 9:16 publishes to the same feed channels. Migration `20260713120000`.
+- **F2 — Free version switching.** New `Draft.currentRevisionNumber` pointer; generation records a **v1 "Original design"** revision; refine/regenerate append the new state and advance the pointer, so reverting moves back **and forward** to any version (fixes the old lost-forward bug). Restore reuses each revision's already-stored PNG instead of re-rendering (instant switch). Migration `20260713130000`.
+- **F1 — Async generation + skeletons.** The wizard's `assemble-a/b` now **validate synchronously, return `202 {draftId}`, and generate in-process** (fire-and-forget via `src/lib/agent/backgroundGeneration.ts`); the draft page lands immediately with copy/image skeletons that resolve independently. Failure → `Draft.failureReason` + inline error + **Retry** (`POST /api/drafts/[id]/retry`); stale `IN_PROGRESS` drafts (>15 min) are swept to `FAILED` lazily on read. `generateDraft.ts` split into `createPendingDraft` + `runGenerationForDraft` (async) vs `generateDraftForBrief` (sync — MCP/ACP + scheduler unchanged, no orphan FAILED drafts). Migration `20260713140000`. **Deploy note: existing E2E generation callers now poll (`waitForDraft`).**
+- **F4 — Chat-driven auto-scheduling.** The campaign briefing chat emits a ` ```schedule ` block; the admin reviews/edits/reorders the plan, then **batch-creates** queue entries (`POST /api/campaigns/[id]/queue/batch`, all-in-one-transaction, admin-only auto-publish gate). No migration.
+- **F5 — Brand-kit from reference images (vision).** The app's **first real image-input path**: `src/lib/agent/vision.ts` (`runVisionModel` — Anthropic image blocks in API mode / `claude -p --allowedTools Read` on temp files in CLI mode). A brand-kit assistant chat grounds on the kit's `feedToAI` reference artifacts and proposes voice/tone/style/font-guesses (` ```brandkit ` block) + a **programmatically sampled** color palette (`sampleImageColors` in `puppeteer.ts` — font guesses are vision, colors are sampled, never vision-guessed). Apply = new voice prompt + kit colors. No migration.
+- **F6 — Upload image → Path A template (vision).** "From image" turns an upload into a slot-based Path A template (sample content the fill agent replaces — **not** mustache tokens), opens it in the template editor, snaps the aspect ratio from the image (`getImageDimensions` + `nearestAspectRatio`, admin-overridable), and keeps the source as a `REFERENCE_IMAGE` artifact. `POST /api/admin/brandkits/[id]/templates/from-image`. No migration.
+
+**⚠️ Deploy:** `npx prisma migrate deploy` applies **three** new migrations (`20260713120000`, `20260713130000`, `20260713140000`); no new env vars. **F5/F6 vision is MOCK-verified only** — the live API-image and CLI-`Read` paths aren't yet runtime-verified (the CLI mechanism was proven by a spike); smoke-test with real credentials before relying on it.
 
 **✅ Per-user Claude OAuth tokens (CLI mode) — 2026-07-07** (see `docs/handoff.md` top section):
 
