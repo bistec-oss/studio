@@ -115,6 +115,25 @@ model User {
   posts         Post[]
   scheduledGenerations ScheduledGeneration[]
   claudeToken   UserClaudeToken?
+  briefDrafts   BriefDraft[]
+}
+
+// An UNFINISHED brief-wizard session (autosaved working state), NOT a Brief:
+// a Brief is only ever created at Generate time. The payload is wizard-shaped
+// (step index, image intents, template selections) and zod-validated at the
+// service layer (src/lib/brief/briefDrafts.ts), which also owns the 5-per-user
+// cap and the 7-day lazy TTL sweep. Owner-only — admins cannot read other
+// users' unfinished briefs (private working state, unlike generated drafts).
+model BriefDraft {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     String   @default("") // denormalized from payload for dashboard rows
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, updatedAt])
 }
 
 // A user's personal Claude Code OAuth token (pasted from `claude setup-token`).

@@ -12,6 +12,8 @@ type PostStatus =
   | 'generating'
   | 'generated'
   | 'cancelled'
+  // Unfinished (autosaved) brief-wizard sessions on the dashboard:
+  | 'unfinished'
 
 interface StatusChipProps {
   status: PostStatus
@@ -93,6 +95,14 @@ const statusConfig: Record<PostStatus, { label: string; classes: string }> = {
       'bg-status-draft/10 dark:bg-status-draft-dark/15',
       'text-status-draft dark:text-status-draft-dark',
       'border border-status-draft/25 dark:border-status-draft-dark/30',
+    ].join(' '),
+  },
+  unfinished: {
+    label: 'Unfinished',
+    classes: [
+      'bg-status-scheduled/10 dark:bg-status-scheduled-dark/15',
+      'text-status-scheduled dark:text-status-scheduled-dark',
+      'border border-status-scheduled/25 dark:border-status-scheduled-dark/30',
     ].join(' '),
   },
 }

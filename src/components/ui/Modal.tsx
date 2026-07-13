@@ -66,7 +66,9 @@ export function Modal({
             // body scrolls, so tall forms remain fully usable on short screens.
             'max-h-[calc(100dvh-2rem)] flex flex-col',
             'glass-panel rounded-xl p-6',
-            'animate-scale-in',
+            // animate-modal-in, NOT animate-scale-in: the keyframes must carry
+            // the centering translate or the animation wipes it (see globals.css).
+            'animate-modal-in',
             'focus:outline-none',
             className,
           )}

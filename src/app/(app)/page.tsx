@@ -7,13 +7,13 @@ import {
   FilePlus2,
   BookOpen,
   Palette,
-  Sparkles,
   Activity,
 } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
+import { getCurrentUser } from '@/lib/auth'
+import { listBriefDrafts } from '@/lib/brief/briefDrafts'
 import { GlassPanel } from '@/components/ui/GlassPanel'
-import { StatusChip } from '@/components/ui/StatusChip'
-import type { DraftStatus } from '@prisma/client'
+import { RecentDraftsCard } from '@/components/dashboard/RecentDraftsCard'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
 import { relativeTime } from '@/lib/format'
 
@@ -21,13 +21,6 @@ import { relativeTime } from '@/lib/format'
 export const dynamic = 'force-dynamic'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-const DRAFT_CHIP: Record<DraftStatus, 'draft' | 'exported' | 'published' | 'failed'> = {
-  IN_PROGRESS: 'draft',
-  EXPORTED: 'exported',
-  PUBLISHED: 'published',
-  FAILED: 'failed',
-}
 
 function channelLabel(channels: string[]): string {
   if (!channels?.length) return '—'
@@ -51,7 +44,9 @@ async function getDashboardData() {
     prisma.campaign.count({ where: { isDeleted: false } }),
     prisma.availableProvider.count({ where: { isEnabled: true } }),
     prisma.draft.findMany({
-      take: 8,
+      // 25, not 8: the Recent Drafts card shows 8 collapsed and the full list
+      // when expanded (RecentDraftsCard) — one query serves both states.
+      take: 25,
       orderBy: { createdAt: 'desc' },
       include: {
         brief: {
@@ -72,6 +67,11 @@ async function getDashboardData() {
     }),
     prisma.availableProvider.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
   ])
+
+  // The viewer's own unfinished (autosaved) briefs — owner-scoped, so resolved
+  // from the session; listBriefDrafts also runs the lazy 7-day TTL sweep.
+  const currentUser = await getCurrentUser()
+  const unfinishedBriefs = currentUser ? await listBriefDrafts(currentUser.userId) : []
 
   // Build a merged, chronological activity feed from the available signals.
   type Event = { id: string; at: Date; text: string; kind: 'draft' | 'post' | 'provider' }
@@ -98,7 +98,15 @@ async function getDashboardData() {
     .sort((a, b) => b.at.getTime() - a.at.getTime())
     .slice(0, 8)
 
-  return { draftsReady, postsPublished, activeCampaigns, aiProviders, recentDrafts, events }
+  return {
+    draftsReady,
+    postsPublished,
+    activeCampaigns,
+    aiProviders,
+    recentDrafts,
+    unfinishedBriefs,
+    events,
+  }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -175,70 +183,28 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Recent drafts */}
-        <GlassPanel className="p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2">
-            <Sparkles size={16} className="text-primary dark:text-primary-light" />
-            <h2 className="text-sm font-semibold text-light-text dark:text-dark-text">Recent Drafts</h2>
-          </div>
-
-          {data.recentDrafts.length === 0 ? (
-            <p className="py-8 text-center text-sm text-light-text-muted dark:text-dark-text-muted">
-              No drafts yet.{' '}
-              <Link href="/brief" className="text-primary hover:underline dark:text-primary-light">
-                Create your first brief
-              </Link>
-              .
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-black/5 text-left text-xs text-light-text-muted dark:border-white/10 dark:text-dark-text-muted">
-                    <th className="pb-2 pr-3 font-medium">Topic</th>
-                    <th className="pb-2 pr-3 font-medium">Campaign</th>
-                    <th className="pb-2 pr-3 font-medium">Platform</th>
-                    <th className="pb-2 pr-3 font-medium">Path</th>
-                    <th className="pb-2 pr-3 font-medium">Status</th>
-                    <th className="pb-2 font-medium">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.recentDrafts.map(d => (
-                    <tr
-                      key={d.id}
-                      className="group border-b border-black/5 last:border-0 dark:border-white/5"
-                    >
-                      <td className="py-2.5 pr-3">
-                        <Link
-                          href={`/drafts/${d.id}`}
-                          className="font-medium text-light-text hover:text-primary dark:text-dark-text dark:hover:text-primary-light"
-                        >
-                          {d.brief?.topic ?? 'Untitled'}
-                        </Link>
-                      </td>
-                      <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                        {d.brief?.campaign?.name ?? '—'}
-                      </td>
-                      <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                        {channelLabel(d.brief?.channels ?? [])}
-                      </td>
-                      <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                        {d.brief?.designMode === 'TEMPLATE' ? 'A' : 'B'}
-                      </td>
-                      <td className="py-2.5 pr-3">
-                        <StatusChip status={DRAFT_CHIP[d.status]} />
-                      </td>
-                      <td className="py-2.5 text-light-text-muted dark:text-dark-text-muted">
-                        {relativeTime(d.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </GlassPanel>
+        {/* Recent drafts — collapsed 8 / expandable to the full fetched list */}
+        <RecentDraftsCard
+          className="p-5 lg:col-span-2"
+          unfinished={data.unfinishedBriefs.map(u => ({
+            id: u.id,
+            topic: u.topic,
+            updatedAtLabel: relativeTime(u.updatedAt),
+          }))}
+          drafts={data.recentDrafts.map(d => ({
+            id: d.id,
+            status: d.status,
+            createdAtLabel: relativeTime(d.createdAt),
+            brief: d.brief
+              ? {
+                  topic: d.brief.topic,
+                  designMode: d.brief.designMode,
+                  channels: d.brief.channels,
+                  campaign: d.brief.campaign,
+                }
+              : null,
+          }))}
+        />
 
         {/* Activity feed */}
         <GlassPanel className="p-5">

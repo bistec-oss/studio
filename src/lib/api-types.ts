@@ -221,6 +221,22 @@ export interface LibraryResponse {
   pageSize: number
 }
 
+// ── Brief drafts (unfinished-brief autosave) ────────────────────────────
+
+// GET /api/brief-drafts — one row of the `drafts` array (list omits payload;
+// GET /api/brief-drafts/[id] returns it for resume). Payload shape lives in
+// src/lib/brief/briefDraftPayload.ts (client-safe zod schema).
+export interface BriefDraftSummary {
+  id: string
+  topic: string
+  updatedAt: string
+}
+
+// PUT /api/brief-drafts
+export interface SaveBriefDraftResponse {
+  id: string
+}
+
 // ── Admin: AI providers ──────────────────────────────────────────────────
 
 export type ProviderSlot = 'COPY' | 'IMAGE'

@@ -15,6 +15,12 @@ import type {
 } from '@/lib/api-types'
 import { DEFAULT_CHANNELS, TONE_OPTIONS } from './constants'
 import type { DesignMode, ResolvedKit, UploadedImage } from './types'
+import {
+  briefDraftPayloadSchema,
+  isTrivialBriefDraft,
+  type BriefDraftPayload,
+} from '@/lib/brief/briefDraftPayload'
+import type { SaveBriefDraftResponse } from '@/lib/api-types'
 
 // ─── Brief wizard state + submit flow ────────────────────────────────────────
 // Owns every piece of wizard state (step index, selections, content, images),
@@ -118,6 +124,125 @@ export function useBriefWizard(): UseBriefWizardResult {
   // Step 3 — Images
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
+
+  // ── Unfinished-brief autosave + resume ─────────────────────────────────
+  // The recoverable state is debounce-PUT to /api/brief-drafts once it's
+  // non-trivial; ?resume=<id> rehydrates a saved row. All fire-and-forget —
+  // autosave must never block or error the wizard (NFR-1).
+  const draftIdRef = useRef<string | null>(null)
+  // Set when Generate succeeds (or the server 404s the row): no further saves.
+  const autosaveStoppedRef = useRef(false)
+  const saveInFlightRef = useRef(false)
+  const saveQueuedRef = useRef(false)
+  // Latest payload, refreshed by the debounce effect below, so the trailing
+  // save after an in-flight PUT never writes a stale closure's state.
+  const latestPayloadRef = useRef<BriefDraftPayload | null>(null)
+
+  async function persistBriefDraft() {
+    if (autosaveStoppedRef.current) return
+    if (saveInFlightRef.current) {
+      saveQueuedRef.current = true
+      return
+    }
+    const payload = latestPayloadRef.current
+    if (!payload || isTrivialBriefDraft(payload)) return
+    saveInFlightRef.current = true
+    try {
+      const res = await apiFetch<SaveBriefDraftResponse>('/api/brief-drafts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: draftIdRef.current ?? undefined, payload }),
+      })
+      draftIdRef.current = res.id
+    } catch (e) {
+      // The row was deleted elsewhere (Generate in another tab / discard):
+      // stop — recreating it would resurrect a finished brief. Any other
+      // failure is transient; the next debounce retries. Silent by design.
+      if (e instanceof Error && e.message === 'Draft no longer exists') {
+        autosaveStoppedRef.current = true
+      }
+      console.warn('[briefDraft] autosave failed:', e instanceof Error ? e.message : e)
+    } finally {
+      saveInFlightRef.current = false
+      if (saveQueuedRef.current) {
+        saveQueuedRef.current = false
+        void persistBriefDraft()
+      }
+    }
+  }
+
+  // Debounced autosave watching every recoverable field.
+  useEffect(() => {
+    latestPayloadRef.current = {
+      step,
+      campaignId,
+      aspectRatio,
+      brandKitId,
+      designMode,
+      templateId,
+      referenceTemplateId,
+      topic,
+      prompt,
+      goal,
+      tone,
+      images: images.map(({ id, url, filename, intent }) => ({ id, url, filename, intent })),
+    }
+    if (autosaveStoppedRef.current) return
+    if (isTrivialBriefDraft(latestPayloadRef.current)) return
+    const timer = setTimeout(() => void persistBriefDraft(), 1500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    step,
+    campaignId,
+    aspectRatio,
+    brandKitId,
+    designMode,
+    templateId,
+    referenceTemplateId,
+    topic,
+    prompt,
+    goal,
+    tone,
+    images,
+  ])
+
+  // Resume: /brief?resume=<id> rehydrates the saved row and continues saving
+  // into it. Read from window.location (mount-only) rather than
+  // useSearchParams — no Suspense boundary needed. A missing/foreign/expired
+  // id just opens a fresh wizard; dangling template/kit/campaign ids are
+  // cleared by the existing consistency effect once data loads (FR-6/AC-8).
+  useEffect(() => {
+    const resumeId = new URLSearchParams(window.location.search).get('resume')
+    if (!resumeId) return
+    let cancelled = false
+    apiFetch<{ id: string; payload: unknown }>(`/api/brief-drafts/${resumeId}`)
+      .then((row) => {
+        if (cancelled) return
+        const parsed = briefDraftPayloadSchema.safeParse(row.payload)
+        if (!parsed.success) return
+        const p = parsed.data
+        draftIdRef.current = row.id
+        setStep(p.step)
+        setCampaignId(p.campaignId)
+        setAspectRatio(p.aspectRatio)
+        setBrandKitId(p.brandKitId)
+        setDesignMode(p.designMode)
+        setTemplateId(p.templateId)
+        setReferenceTemplateId(p.referenceTemplateId)
+        setTopic(p.topic)
+        setPrompt(p.prompt)
+        setGoal(p.goal)
+        setTone(p.tone)
+        setImages(p.images.map((img) => ({ ...img })))
+      })
+      .catch(() => {
+        /* deleted/expired/foreign id → fresh wizard */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // ── Initial loads ──────────────────────────────────────────────────────
   const { data: templates = [] } = useQuery({
@@ -311,6 +436,18 @@ export function useBriefWizard(): UseBriefWizardResult {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ briefId: brief.id }),
             })
+
+      // Brief created — the unfinished-brief row is obsolete. Stop autosave
+      // FIRST (a queued debounce must not resurrect the row), then delete it
+      // keeping its images (Brief.briefImages references them). Fire-and-forget.
+      autosaveStoppedRef.current = true
+      if (draftIdRef.current) {
+        void apiFetch(`/api/brief-drafts/${draftIdRef.current}?keepImages=true`, {
+          method: 'DELETE',
+        }).catch(() => {
+          /* already gone / transient — the TTL sweep will collect it */
+        })
+      }
 
       router.push(`/drafts/${gen.draftId}`)
     } catch (e) {
