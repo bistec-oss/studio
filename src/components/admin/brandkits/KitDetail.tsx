@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Star, Upload, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Star, Upload, ToggleLeft, ToggleRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
@@ -15,6 +15,7 @@ import { ColorEditor } from './ColorEditor'
 import { FontEditor } from './FontEditor'
 import { PromptSection } from './PromptSection'
 import { ColorSwatch, SectionHeader } from './shared'
+import { BrandKitAssistantPanel } from './BrandKitAssistantPanel'
 
 // ─── Kit Detail Panel ─────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
   const [templateHtml, setTemplateHtml] = useState('')
   const [templateRatio, setTemplateRatio] = useState<AspectRatio>('SQUARE')
   const [addingTemplate, setAddingTemplate] = useState(false)
+  const [assistantOpen, setAssistantOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const artifactRef = useRef<HTMLInputElement>(null)
 
@@ -172,6 +174,9 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
+          <Button variant="ghost" size="sm" onClick={() => setAssistantOpen(true)}>
+            <Sparkles size={14} /> Extract from references
+          </Button>
           {!kit.isDefault && (
             <Button variant="ghost" size="sm" onClick={setDefault}>
               <Star size={14} /> Set default
@@ -378,6 +383,13 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
           </ul>
         )}
       </GlassPanel>
+
+      <BrandKitAssistantPanel
+        kitId={kit.id}
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        onApplied={() => { setAssistantOpen(false); onRefresh() }}
+      />
     </div>
   )
 }

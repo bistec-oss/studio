@@ -140,3 +140,67 @@ export async function renderHtmlToPng(
   if (MOCK_PUPPETEER) return MOCK_PNG_BUFFER
   return limit(() => renderOnce(html, width, height))
 }
+
+// Sample the dominant colors of an image (F5 brand-kit extraction). The image
+// bytes are embedded as a data: URL so the canvas is same-origin (no CORS taint)
+// and the page makes no network request. We downscale to a small grid, coarsely
+// quantize, and return the most frequent colors as hex — a reliable palette
+// starting point the admin confirms, rather than a vision model's approximation.
+async function sampleOnce(dataUrl: string, count: number): Promise<string[]> {
+  const browser = await getBrowser()
+  const page = await browser.newPage()
+  try {
+    // Block every network request — the image rides in the data: URL.
+    await page.setRequestInterception(true)
+    page.on("request", (req) => {
+      const u = req.url()
+      if (u.startsWith("data:") || u === "about:blank") req.continue().catch(() => {})
+      else req.abort().catch(() => {})
+    })
+    await page.setContent("<!doctype html><html><body></body></html>", {
+      waitUntil: "domcontentloaded",
+      timeout: SET_CONTENT_TIMEOUT_MS,
+    })
+    const colors = await page.evaluate(
+      async (url: string, want: number) => {
+        const img = new Image()
+        img.src = url
+        await img.decode()
+        const S = 48
+        const canvas = document.createElement("canvas")
+        canvas.width = S
+        canvas.height = S
+        const ctx = canvas.getContext("2d")!
+        ctx.drawImage(img, 0, 0, S, S)
+        const { data } = ctx.getImageData(0, 0, S, S)
+        // Coarse-quantize each channel to 32-value buckets and count frequency.
+        const counts = new Map<string, { n: number; r: number; g: number; b: number }>()
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3]
+          if (a < 128) continue // skip mostly-transparent pixels
+          const r = data[i], g = data[i + 1], b = data[i + 2]
+          const key = `${r >> 5}-${g >> 5}-${b >> 5}`
+          const c = counts.get(key)
+          if (c) { c.n++; c.r += r; c.g += g; c.b += b }
+          else counts.set(key, { n: 1, r, g, b })
+        }
+        const toHex = (v: number) => Math.round(v).toString(16).padStart(2, "0")
+        return [...counts.values()]
+          .sort((a, b) => b.n - a.n)
+          .slice(0, want)
+          .map((c) => `#${toHex(c.r / c.n)}${toHex(c.g / c.n)}${toHex(c.b / c.n)}`)
+      },
+      dataUrl,
+      count
+    )
+    return colors
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
+export async function sampleImageColors(dataUrl: string, count = 5): Promise<string[]> {
+  // Test seam: a deterministic palette so E2E needs no real Chromium.
+  if (MOCK_PUPPETEER) return ["#0284c7", "#0f172a", "#f8fafc", "#38bdf8", "#1e293b"].slice(0, count)
+  return limit(() => sampleOnce(dataUrl, count))
+}

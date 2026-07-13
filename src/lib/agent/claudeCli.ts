@@ -36,6 +36,13 @@ export interface ClaudeCliOptions {
   // Per-call model (CLI alias or full id). Path A design passes "haiku", Path B
   // "sonnet". Overridden by CLAUDE_CLI_MODEL when that env var is set.
   model?: string
+  // Tools the headless run may use without a permission prompt (maps to
+  // --allowedTools). Empty/undefined ⇒ no tools (the default single-shot text
+  // generation). Vision extraction passes ["Read"] so the CLI can ingest an
+  // image written to a temp file (the CLI's Read tool feeds image pixels to the
+  // model — verified 2026-07-13). Do NOT widen this without reason: the headless
+  // run executes with the server's privileges.
+  allowedTools?: string[]
   // Explicit OAuth token override: bypasses the per-user ALS auth context AND
   // the retry-once-with-shared behaviour. Used only by validateClaudeToken()
   // (userToken.ts) to test a candidate token — normal call sites never set it.
@@ -154,7 +161,7 @@ function runClaudeCliOnce(
   tokenOverride: string | undefined,
 ): Promise<string> {
   const { cmd, shell } = claudeCommand()
-  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model } = opts
+  const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model, allowedTools } = opts
 
   // CLI-mode auth, in order of preference:
   //   1. tokenOverride — the acting user's personal token (from the ALS auth
@@ -184,7 +191,11 @@ function runClaudeCliOnce(
   // context with dozens of unused tool definitions, and raising token cost — none
   // of which a single-shot HTML/copy generation needs.
   const modelArgs = claudeModelArgs(model)
-  const args = ["-p", "--strict-mcp-config", ...modelArgs]
+  // --allowedTools lets specific built-in tools run without an interactive
+  // permission prompt (which would hang a headless run). Only passed when a
+  // caller opts in (e.g. vision extraction needs "Read"); omitted ⇒ no tools.
+  const toolArgs = allowedTools && allowedTools.length ? ["--allowedTools", ...allowedTools] : []
+  const args = ["-p", "--strict-mcp-config", ...modelArgs, ...toolArgs]
   const resolvedModel = modelArgs.length ? modelArgs[1] : "(account default)"
   const startedAt = Date.now()
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`

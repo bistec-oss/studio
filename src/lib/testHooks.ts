@@ -118,6 +118,44 @@ export function buildMockBriefingEnhance(content: string): string {
 }
 
 /**
+ * Deterministic brand-kit extraction reply (MOCK_AI, F5). Carries a ```brandkit
+ * JSON block (voice/tone/style/fonts) so the extraction + apply path can be
+ * asserted end-to-end without a live vision call. Colors are injected separately
+ * from the (also-mocked) color sampler.
+ */
+export function buildMockBrandKitReply(lastUserMessage: string): string {
+  const suggestion = {
+    voice: `Mock brand voice extracted from references. [${lastUserMessage}]`,
+    tone: 'confident, modern',
+    style: 'Clean, high-contrast, generous whitespace.',
+    fonts: ['Inter', 'Playfair Display'],
+  }
+  return [
+    'Mock brand-kit assistant reply for E2E tests.',
+    '',
+    '```brandkit',
+    JSON.stringify(suggestion, null, 2),
+    '```',
+  ].join('\n')
+}
+
+/** Deterministic image→template HTML (MOCK_AI, F6). Slot-based Path A template. */
+export function buildMockTemplateHtml(width = 1080, height = 1080): string {
+  return `<!DOCTYPE html>
+<html><head><style>
+body { margin:0; width:${width}px; height:${height}px; background:#0284c7; color:#fff; font-family:Inter,sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; }
+.logo { width:120px; height:120px; }
+h1 { font-size:64px; margin:0; }
+p { font-size:32px; margin:0; }
+</style></head>
+<body data-mock-template="true">
+  <img class="logo" src="{{logoUrl}}" alt="logo"/>
+  <h1>{{headline}}</h1>
+  <p>{{body}}</p>
+</body></html>`
+}
+
+/**
  * Deterministic Claude-token save-time validation (MOCK_AI). The real path
  * spawns a `claude -p` ping with the candidate token, which the E2E env can't
  * do (claude-html mode, no CLI). A token containing "invalid" fails; anything
