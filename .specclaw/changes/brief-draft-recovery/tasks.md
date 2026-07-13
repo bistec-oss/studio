@@ -17,7 +17,7 @@ Three waves: (1) data + service layer with unit tests, (2) API + wizard + dashbo
   - Estimate: small
   - Notes: additive; `@@index([userId, updatedAt])`; run `migrate dev` against local DB, `generate`.
 
-- [ ] `T2` — Lifecycle service + unit tests
+- [x] `T2` — Lifecycle service + unit tests
   - Files: `src/lib/brief/briefDrafts.ts`, `tests/unit/briefDrafts.test.ts`, `src/lib/api-types.ts`
   - Estimate: medium
   - Depends: T1
