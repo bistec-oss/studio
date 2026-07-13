@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Star, Upload, ToggleLeft, ToggleRight, Sparkles } from 'lucide-react'
+import { Plus, Pencil, Trash2, Star, Upload, ToggleLeft, ToggleRight, Sparkles, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
@@ -40,8 +40,10 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
   const [templateRatio, setTemplateRatio] = useState<AspectRatio>('SQUARE')
   const [addingTemplate, setAddingTemplate] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [templateFromImageBusy, setTemplateFromImageBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const artifactRef = useRef<HTMLInputElement>(null)
+  const templateImageRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setName(kit.name)
@@ -130,6 +132,32 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
       setTemplateName(''); setTemplateHtml(''); setTemplateRatio('SQUARE'); setAddingTemplate(false)
       onRefresh()
     } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
+  }
+
+  async function handleTemplateFromImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (templateImageRef.current) templateImageRef.current.value = ''
+    if (!file) return
+    setTemplateFromImageBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const result = await apiFetch<{ html: string; aspectRatio: AspectRatio }>(
+        `/api/admin/brandkits/${kit.id}/templates/from-image`,
+        { method: 'POST', body: fd },
+      )
+      // Drop the generated HTML into the editor for review, then the admin saves
+      // via the normal "Save template" flow.
+      setTemplateHtml(result.html)
+      setTemplateRatio(result.aspectRatio)
+      setTemplateName(file.name.replace(/\.[^.]+$/, ''))
+      setAddingTemplate(true)
+      toast.success('Template generated from image — review and save.')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to generate a template from the image')
+    } finally {
+      setTemplateFromImageBusy(false)
+    }
   }
 
   async function deleteTemplate(tid: string) {
@@ -259,9 +287,28 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
         <SectionHeader
           title="HTML Templates"
           action={
-            <Button variant="ghost" size="sm" onClick={() => setAddingTemplate(v => !v)}>
-              <Plus size={13} /> Add
-            </Button>
+            <div className="flex gap-2">
+              <input
+                ref={templateImageRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleTemplateFromImage}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => templateImageRef.current?.click()}
+                disabled={templateFromImageBusy}
+                title="Upload an image; the AI turns it into an editable template"
+              >
+                {templateFromImageBusy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                From image
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setAddingTemplate(v => !v)}>
+                <Plus size={13} /> Add
+              </Button>
+            </div>
           }
         />
         {addingTemplate && (

@@ -139,19 +139,24 @@ export function buildMockBrandKitReply(lastUserMessage: string): string {
   ].join('\n')
 }
 
-/** Deterministic image→template HTML (MOCK_AI, F6). Slot-based Path A template. */
+/**
+ * Deterministic image→template HTML (MOCK_AI, F6). A self-contained Path A
+ * template with SAMPLE content in each slot (headline / body / photo) that the
+ * fill agent replaces at generation time — Path A templates use sample text,
+ * not mustache tokens (see prompts/pathA.ts).
+ */
 export function buildMockTemplateHtml(width = 1080, height = 1080): string {
   return `<!DOCTYPE html>
 <html><head><style>
-body { margin:0; width:${width}px; height:${height}px; background:#0284c7; color:#fff; font-family:Inter,sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; }
-.logo { width:120px; height:120px; }
+body { margin:0; width:${width}px; height:${height}px; background:#0284c7; color:#fff; font-family:Inter,sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; padding:80px; box-sizing:border-box; text-align:center; }
+.photo { width:280px; height:280px; border-radius:24px; background:rgba(255,255,255,0.15); }
 h1 { font-size:64px; margin:0; }
-p { font-size:32px; margin:0; }
+p { font-size:32px; margin:0; opacity:0.9; }
 </style></head>
 <body data-mock-template="true">
-  <img class="logo" src="{{logoUrl}}" alt="logo"/>
-  <h1>{{headline}}</h1>
-  <p>{{body}}</p>
+  <div class="photo"></div>
+  <h1>Your headline here</h1>
+  <p>Supporting body copy goes here.</p>
 </body></html>`
 }
 

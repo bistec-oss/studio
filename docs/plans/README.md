@@ -12,7 +12,7 @@ Six features scoped in the 2026-07-13 planning conversation. All decisions are l
 | 3     | **F1 — Async generation + skeleton loader**       | [feature-1-async-generation.md](feature-1-async-generation.md)                 | ✅ Built + behaviorally verified 2026-07-13 (tsc/lint/137 unit/build green; full E2E 113 pass incl. new async+retry suite; migration applied to test DB) |
 | 4     | **F4 — Chat-driven auto-scheduling**              | [feature-4-chat-auto-scheduling.md](feature-4-chat-auto-scheduling.md)         | ✅ Built + behaviorally verified 2026-07-13 (tsc/lint/141 unit/build green; full E2E 116 pass incl. 3 new F4 cases; no migration)                        |
 | 5     | **F5 — Conversational brand-kit from references** | [feature-5-brandkit-from-references.md](feature-5-brandkit-from-references.md) | ✅ Built 2026-07-13 (tsc/lint/146 unit/build green; full E2E 119 pass incl. 3 F5 cases; mock-verified — live vision not yet run)                         |
-| 6     | **F6 — Upload image → Path A template**           | [feature-6-image-to-template.md](feature-6-image-to-template.md)               | ☐ Not started                                                                                                                                            |
+| 6     | **F6 — Upload image → Path A template**           | [feature-6-image-to-template.md](feature-6-image-to-template.md)               | ✅ Built 2026-07-13 (tsc/lint/148 unit/build green; full E2E 122 pass incl. 3 F6 cases; mock-verified — live vision not yet run)                         |
 
 Numbering (F1–F6) is the order features were raised; the **Order** column is the
 recommended build sequence (low-risk foundations first, vision features last).

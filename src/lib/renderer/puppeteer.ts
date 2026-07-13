@@ -204,3 +204,36 @@ export async function sampleImageColors(dataUrl: string, count = 5): Promise<str
   if (MOCK_PUPPETEER) return ["#0284c7", "#0f172a", "#f8fafc", "#38bdf8", "#1e293b"].slice(0, count)
   return limit(() => sampleOnce(dataUrl, count))
 }
+
+// Natural pixel dimensions of an image (F6: infer a template's aspect ratio from
+// an uploaded image). Loaded from a data: URL so no network request is made.
+async function dimensionsOnce(dataUrl: string): Promise<{ width: number; height: number }> {
+  const browser = await getBrowser()
+  const page = await browser.newPage()
+  try {
+    await page.setRequestInterception(true)
+    page.on("request", (req) => {
+      const u = req.url()
+      if (u.startsWith("data:") || u === "about:blank") req.continue().catch(() => {})
+      else req.abort().catch(() => {})
+    })
+    await page.setContent("<!doctype html><html><body></body></html>", {
+      waitUntil: "domcontentloaded",
+      timeout: SET_CONTENT_TIMEOUT_MS,
+    })
+    return await page.evaluate(async (url: string) => {
+      const img = new Image()
+      img.src = url
+      await img.decode()
+      return { width: img.naturalWidth, height: img.naturalHeight }
+    }, dataUrl)
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
+export async function getImageDimensions(dataUrl: string): Promise<{ width: number; height: number }> {
+  // Test seam: a deterministic square so E2E needs no real Chromium.
+  if (MOCK_PUPPETEER) return { width: 1080, height: 1080 }
+  return limit(() => dimensionsOnce(dataUrl))
+}

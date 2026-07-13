@@ -58,3 +58,22 @@ export function dimensionsLabel(ratio: AspectRatio | null | undefined): string {
   const { width, height } = dimensionsFor(ratio)
   return `${width}×${height}`
 }
+
+// Snap an arbitrary image's dimensions to the nearest supported post size
+// (F6: infer a template's ratio from the uploaded image, admin can override).
+// Compares by width/height ratio so absolute pixel size doesn't matter.
+export function nearestAspectRatio(width: number, height: number): AspectRatio {
+  if (!width || !height) return 'SQUARE'
+  const target = width / height
+  let best: AspectRatio = 'SQUARE'
+  let bestDelta = Infinity
+  for (const ratio of ASPECT_VALUES) {
+    const { width: w, height: h } = ASPECT_DIMENSIONS[ratio]
+    const delta = Math.abs(target - w / h)
+    if (delta < bestDelta) {
+      bestDelta = delta
+      best = ratio
+    }
+  }
+  return best
+}
