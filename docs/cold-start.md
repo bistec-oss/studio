@@ -170,7 +170,11 @@ npm run dev   # http://localhost:3000
 1. Log in at `/` with the admin credentials above (username `adminBTG`).
 2. Open `/admin/brandkits` → confirm the **"Bistec"** kit shows colors + fonts.
 3. Open `/admin/users` → confirm the super-admin user management page renders.
-4. (If AI keys set) Create a brief and generate a design end-to-end.
+4. **Brief draft recovery:** start a brief (`/brief`), type a topic + prompt, wait ~2s
+   (autosave debounce), navigate away → the dashboard's **Recent Drafts** card shows an
+   **Unfinished** row with Resume/Discard; Resume reopens the wizard exactly where you left it.
+5. (If AI keys set) Create a brief and generate a design end-to-end — completing
+   Generate clears the unfinished row from step 4.
 
 ---
 

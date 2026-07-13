@@ -1,13 +1,26 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-13 (latest: six-feature batch — sizes, versioning, async gen, auto-scheduling, vision)
+**Date:** 2026-07-13 (latest: brief draft autosave/recovery + modal fix + expandable Recent Drafts)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
-**Specclaw change:** `marketing-post-studio-v1`
+**Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
 
 ---
 
-## 2026-07-13 (latest) — Six-feature batch (F1–F6)
+## 2026-07-13 (latest) — Brief draft autosave & recovery + two dashboard/UI fixes
+
+**Merged to `main`** (specclaw change `brief-draft-recovery`; spec/design/tasks under `.specclaw/changes/brief-draft-recovery/`). Gates: tsc, lint 0 errors (7 pre-existing warnings), **156/156 unit**, full mock **E2E 132 passed / 7 skipped** (new §P suite), production build.
+
+1. **Brief draft recovery** — the wizard's working state (every field, step index, uploaded-image refs) autosaves to a new `BriefDraft` table (migration `20260713124851`) via a 1.5s-debounced `PUT /api/brief-drafts` once non-trivial (topic OR prompt OR an image); unfinished briefs appear as leading rows in the dashboard Recent Drafts card with Resume (`/brief?resume=<id>`, full rehydration incl. step) and confirm-guarded Discard. Lifecycle lives ONLY in `src/lib/brief/briefDrafts.ts`: 5/user cap (oldest evicted), 7-day lazy TTL sweep on read (F1's stale-draft precedent — no worker), MinIO image cleanup locked to the owner's `briefs/<userId>/` prefix. Generate-success deletes the row with `?keepImages=true` (the created Brief references those images); a PUT with an unknown id 404s so a late debounce can't resurrect a generated brief. **Owner-only, no admin override** (foreign ids 404 — deliberate, unlike generated drafts). Client-safe zod schema/helpers in `briefDraftPayload.ts` (64 KB payload cap, decode-then-recheck traversal guard on image URLs).
+2. **Modal-centering bug (the "publish dialog bleeds off-screen" report)** — root cause: `scaleIn`'s keyframe `transform` + `fill: both` permanently overrode the `-translate-x/y-1/2` centering classes on `Modal`, parking the dialog's top-left corner at the viewport center (fixed-position ⇒ unreachable by scrolling). Fix: `modalIn` keyframes that carry `translate(-50%,-50%)` through every frame (`globals.css`), used by `Modal.tsx`. Rule of thumb: never animate `transform` on a transform-centered element without including the base transform in the keyframes. (`ImageLightbox` is flex-centered — never affected.)
+3. **Expandable Recent Drafts card** — extracted to `src/components/dashboard/RecentDraftsCard.tsx` (client): 8 rows collapsed (unchanged look), Expand grows the card in place with internal scroll over the latest 25 (one server query, no new API). Unfinished-brief rows share the collapsed budget and sort first; time labels are pre-formatted server-side to avoid `Date.now()` hydration mismatches.
+4. **Specclaw config cleanup** — model routing now `claude` for all phases (the old `openai/gpt-5.1-codex` coding entry is unusable inside Claude Code and was ignored; all implementation ran on Claude), and `build.test/lint/build_command` now execute the real gates on finalize.
+
+> **⚠️ Deploy:** `npx prisma migrate deploy` (adds `20260713124851_brief_draft`). No new env vars; no Docker image change.
+
+---
+
+## 2026-07-13 — Six-feature batch (F1–F6)
 
 Built in dependency order and merged to `main`; per-feature plans live in `docs/plans/`. Full gates: tsc, lint (0 errors), **148/148 unit**, full mock **E2E 122 passed / 7 skipped**, production build. See the `CLAUDE.md` top section for the per-feature summary. Headlines:
 
