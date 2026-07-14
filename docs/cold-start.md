@@ -100,8 +100,9 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > 500s until `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are non-default. Dev mode (`npm run dev`) is
 > exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
-> **For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
-> Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing.
+
+**For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
+Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing.
 
 ---
 
