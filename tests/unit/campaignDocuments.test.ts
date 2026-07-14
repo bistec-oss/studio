@@ -7,6 +7,7 @@ import {
   parseDocumentText,
   buildDocsContext,
   isAllowedDocument,
+  isAllowedDocImage,
   MAX_DOC_TEXT_CHARS,
   MAX_DOCS_CONTEXT_CHARS,
 } from '@/lib/campaign/documents'
@@ -73,9 +74,35 @@ describe('isAllowedDocument', () => {
   })
 })
 
+describe('isAllowedDocImage', () => {
+  it('accepts png/jpg by MIME', () => {
+    expect(isAllowedDocImage('image/png', 'pic.png')).toBe(true)
+    expect(isAllowedDocImage('image/jpeg', 'pic.jpg')).toBe(true)
+  })
+
+  it('accepts by extension when the browser sends no useful MIME', () => {
+    expect(isAllowedDocImage('application/octet-stream', 'pic.jpeg')).toBe(true)
+    expect(isAllowedDocImage('', 'pic.png')).toBe(true)
+  })
+
+  it('rejects non-raster and script-bearing types', () => {
+    expect(isAllowedDocImage('image/svg+xml', 'pic.svg')).toBe(false)
+    expect(isAllowedDocImage('application/pdf', 'a.pdf')).toBe(false)
+    expect(isAllowedDocImage('image/webp', 'pic.webp')).toBe(false)
+  })
+})
+
 describe('buildDocsContext', () => {
   it('returns empty for no documents', () => {
     expect(buildDocsContext([])).toEqual({ text: '', truncated: false })
+  })
+
+  it('skips image "documents" (empty parsedText) instead of emitting empty sections', () => {
+    const ctx = buildDocsContext([
+      { name: 'pic.png', parsedText: '', truncated: false },
+      { name: 'notes.md', parsedText: 'Notes body', truncated: false },
+    ])
+    expect(ctx.text).toBe('### notes.md\n\nNotes body')
   })
 
   it('joins documents under ### name headers', () => {

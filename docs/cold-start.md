@@ -94,8 +94,14 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
 **Minimum to boot and test the UI/DB:** `DATABASE_URL`, `BETTER_AUTH_SECRET`, `TOKEN_ENCRYPTION_KEY`, the MinIO block, and the `POSTGRES_*` vars.
-**For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
-Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing.
+
+> **⚠️ Production-mode servers refuse `minioadmin`.** The env gate (`src/lib/env.ts`) rejects the
+> default MinIO credentials at runtime in `NODE_ENV=production` — every route (login included)
+> 500s until `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are non-default. Dev mode (`npm run dev`) is
+> exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
+> the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
+> **For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
+> Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing.
 
 ---
 

@@ -83,6 +83,7 @@ enum ArtifactType {
   FONT
   COLOR
   REFERENCE_IMAGE
+  REFERENCE_DOC
   EXAMPLE_POST
   OTHER
 }
@@ -457,6 +458,10 @@ model BrandKitArtifact {
   name       String
   url        String
   feedToAI   Boolean      @default(false)
+  // REFERENCE_DOC only: text extracted at upload time (PDF/DOCX/TXT/MD), fed
+  // to the brand-kit assistant as grounding — mirrors CampaignDocument.
+  parsedText String?      @db.Text
+  truncated  Boolean      @default(false)
   createdAt  DateTime     @default(now())
 
   @@index([brandKitId])

@@ -91,9 +91,12 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
     const file = e.target.files?.[0]
     if (!file) return
     try {
+      // Images become REFERENCE_IMAGE (vision + color sampling); PDFs/DOCX/TXT/MD
+      // become REFERENCE_DOC (text-parsed voice/color grounding).
+      const isImage = file.type.startsWith('image/')
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('type', 'REFERENCE_IMAGE')
+      fd.append('type', isImage ? 'REFERENCE_IMAGE' : 'REFERENCE_DOC')
       fd.append('name', file.name)
       fd.append('feedToAI', 'false')
       await apiFetch(`/api/admin/brandkits/${kit.id}/artifacts`, { method: 'POST', body: fd })
@@ -394,7 +397,13 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
           title="Artifacts"
           action={
             <>
-              <input ref={artifactRef} type="file" accept="image/*" className="hidden" onChange={handleArtifactUpload} />
+              <input
+                ref={artifactRef}
+                type="file"
+                accept="image/*,.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                className="hidden"
+                onChange={handleArtifactUpload}
+              />
               <Button variant="ghost" size="sm" onClick={() => artifactRef.current?.click()}>
                 <Upload size={13} /> Upload
               </Button>

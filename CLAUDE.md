@@ -2,7 +2,16 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-13)
+## ✅ Outstanding work — START HERE (updated 2026-07-14)
+
+**✅ Sidebar sign-out + brand-kit reference docs + campaign-voice images — 2026-07-14** (see `docs/handoff.md` top section):
+
+- **Sign out button** at the bottom of the sidebar (`AppShell.tsx`) — the app's first sign-out; `authClient.signOut()` + hard redirect to `/login`.
+- **Brand-kit reference documents:** kit Artifacts upload accepts PDF/DOCX/TXT/MD → new `REFERENCE_DOC` artifact type with `parsedText`/`truncated` (migration `20260714051500`), parsed once at upload (shared `parseDocumentText`). The brand-kit assistant grounds on feedToAI docs and now works docs-only (no image required); its ```brandkit block gained optional `colors` — **hex values stated explicitly in a document only** (validated), ranked ahead of the sampled palette. Never pixel-guessed.
+- **Campaign voice accepts PNG/JPG:** stored unparsed in the private docs bucket and fed to the briefing chat via `runVisionModel` + presigned URLs (`collectCampaignDocImageUrls`). SVG still rejected.
+- **MIME hardening:** the brandkit artifacts route (previously size-only for any file) now enforces raster-image / document allow-lists per artifact type.
+- Gates: tsc, lint (0 errors, 7 pre-existing warnings), **161/161 unit**, full mock **E2E 135 passed / 4 skipped / 0 failed**, production build. **⚠️ Deploy:** `npx prisma migrate deploy` (1 new migration `20260714051500`); no new env vars.
+- **Ops (this machine):** MinIO credentials rotated off `minioadmin` (the prod env gate rejects the default — symptom was 500s on every route incl. login). They live in `.env` AND `.env.test`; keep both in sync or storage E2E cases fail on MinIO auth. New vision surfaces are MOCK-verified only.
 
 **✅ Brief draft autosave/recovery + modal-centering fix + expandable Recent Drafts — 2026-07-13** (specclaw change `brief-draft-recovery`; spec/design/tasks in `.specclaw/changes/brief-draft-recovery/`):
 

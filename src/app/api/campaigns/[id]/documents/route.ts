@@ -5,6 +5,7 @@ import { BUCKET_DOCS, uploadObject, validateUpload } from '@/lib/storage/minio'
 import {
   MAX_DOCS_PER_CAMPAIGN,
   isAllowedDocument,
+  isAllowedDocImage,
   parseDocumentText,
 } from '@/lib/campaign/documents'
 
@@ -43,9 +44,10 @@ export const POST = withAdmin<Params>(async (req, { params }, user) => {
 
   const sizeError = validateUpload(file)
   if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 })
-  if (!isAllowedDocument(file.type, file.name)) {
+  const isImage = isAllowedDocImage(file.type, file.name)
+  if (!isImage && !isAllowedDocument(file.type, file.name)) {
     return NextResponse.json(
-      { error: 'Unsupported document type — use PDF, DOCX, TXT, or Markdown' },
+      { error: 'Unsupported file type — use PDF, DOCX, TXT, Markdown, PNG, or JPG' },
       { status: 400 }
     )
   }
@@ -60,32 +62,40 @@ export const POST = withAdmin<Params>(async (req, { params }, user) => {
 
   const buffer = Buffer.from(await file.arrayBuffer())
 
-  let parsed
-  try {
-    parsed = await parseDocumentText(buffer, file.type, file.name)
-  } catch (err) {
-    console.error(`[documents] failed to parse ${file.name}:`, err)
-    return NextResponse.json(
-      { error: 'Could not extract text from this file — is it a valid document?' },
-      { status: 400 }
-    )
-  }
-  if (!parsed.text) {
-    return NextResponse.json(
-      { error: 'No text could be extracted from this file' },
-      { status: 400 }
-    )
+  // Images skip text extraction — they are fed to the vision model instead
+  // (collectCampaignDocImageUrls) and store empty parsedText.
+  let parsed = { text: '', truncated: false }
+  if (!isImage) {
+    try {
+      parsed = await parseDocumentText(buffer, file.type, file.name)
+    } catch (err) {
+      console.error(`[documents] failed to parse ${file.name}:`, err)
+      return NextResponse.json(
+        { error: 'Could not extract text from this file — is it a valid document?' },
+        { status: 400 }
+      )
+    }
+    if (!parsed.text) {
+      return NextResponse.json(
+        { error: 'No text could be extracted from this file' },
+        { status: 400 }
+      )
+    }
   }
 
   const safeName = file.name.replace(/[^\w.\-]+/g, '_')
   const objectKey = `${params.id}/${Date.now()}-${safeName}`
-  await uploadObject(buffer, BUCKET_DOCS, objectKey, file.type || 'application/octet-stream')
+  // Normalize image contentType from the extension when the browser omits it —
+  // collectCampaignDocImageUrls selects image docs by this stored value.
+  const contentType =
+    isImage && !file.type ? (/\.png$/i.test(file.name) ? 'image/png' : 'image/jpeg') : file.type || 'application/octet-stream'
+  await uploadObject(buffer, BUCKET_DOCS, objectKey, contentType)
 
   const doc = await prisma.campaignDocument.create({
     data: {
       campaignId: params.id,
       name: file.name,
-      contentType: file.type || 'application/octet-stream',
+      contentType,
       sizeBytes: file.size,
       objectKey,
       parsedText: parsed.text,

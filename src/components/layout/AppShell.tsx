@@ -4,12 +4,13 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Menu, X } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Menu, X, LogOut } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { ClaudeTokenPrompt } from '@/components/settings/ClaudeTokenPrompt'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import { authClient } from '@/lib/auth-client'
 
 interface NavItem {
   label: string
@@ -55,9 +56,20 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
   // Hide admin-only entries from non-admins (server-side enforcement lives in
   // the /admin layout — this is just honest navigation).
   const { isAdmin, isSuperAdmin } = useCurrentUser()
+  const [signingOut, setSigningOut] = useState(false)
   const items = NAV_ITEMS.filter(
     item => (!item.adminOnly || isAdmin) && (!item.superAdminOnly || isSuperAdmin)
   )
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    try {
+      await authClient.signOut()
+    } finally {
+      // Full reload clears all client-side caches (React Query etc.).
+      window.location.href = '/login'
+    }
+  }
 
   return (
     <aside className="glass-panel flex flex-col h-full w-64 p-4 gap-1 rounded-none">
@@ -78,6 +90,16 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <NavLink key={item.href} item={item} onClick={onClose} />
         ))}
       </nav>
+
+      {/* Sign out — pinned to the bottom of the panel */}
+      <button
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="mt-auto flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-light-text dark:hover:text-dark-text border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <LogOut size={18} />
+        {signingOut ? 'Signing out…' : 'Sign out'}
+      </button>
 
       {/* Bottom glow blob */}
       <div className="glow-blob w-48 h-48 -bottom-12 -left-8 opacity-60" />

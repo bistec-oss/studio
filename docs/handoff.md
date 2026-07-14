@@ -1,13 +1,32 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-13 (latest: brief draft autosave/recovery + modal fix + expandable Recent Drafts)
+**Date:** 2026-07-14 (latest: sidebar sign-out + brand-kit reference docs + campaign-voice images)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
 
 ---
 
-## 2026-07-13 (latest) — Brief draft autosave & recovery + two dashboard/UI fixes
+## 2026-07-14 (latest) — Sign-out button + reference-doc/image grounding cross-pollination
+
+**Merged to `main`.** Gates: tsc, lint 0 errors (7 pre-existing warnings), **161/161 unit** (5 new), full mock **E2E 135 passed / 4 skipped / 0 failed** (the 3 §J ACP-auth cases ran this time — `BISTEC_API_KEYS` is set in `.env.test`), production build.
+
+1. **Sidebar sign-out (the app's FIRST sign-out).** `AppShell.tsx` pins a Sign out button to the bottom of the side panel (desktop + mobile drawer): `authClient.signOut()` then a hard `window.location.href = '/login'` (full reload clears React Query caches). Until now `authClient` was only ever used for sign-in.
+2. **Brand-kit reference documents (PDF/DOCX/TXT/MD).** The kit Artifacts upload accepts documents: new `REFERENCE_DOC` `ArtifactType` + `parsedText`/`truncated` on `BrandKitArtifact` (migration `20260714051500`). Text is extracted ONCE at upload via the shared `parseDocumentText` (pdf-parse/mammoth — same caps as campaign docs). The brand-kit assistant grounds on feedToAI docs (`referenceDocsContext` → a "Reference documents" section) and works **docs-only** (no image required anymore — text call via the exported `runBriefingModel`). The ```brandkit block gained an optional `colors` field: **hex values a DOCUMENT states explicitly only** (zod-validated `#hex`, invalid → whole block rejected); doc-declared colors rank ahead of the image-sampled palette in the merged suggestion (`mergeColors`, cap 6). Pixel-guessing colors from images remains forbidden.
+3. **Campaign voice accepts PNG/JPG (vision grounding).** `/api/campaigns/[id]/documents` accepts `image/png`/`image/jpeg` (`isAllowedDocImage`; SVG still rejected — XSS vector). Images skip text parsing (empty `parsedText`; `buildDocsContext` now filters empty-text rows) and are fed to the briefing chat through `runVisionModel` with **presigned URLs** from the private docs bucket (`collectCampaignDocImageUrls`, cap 6). Text-only campaigns keep the plain chat call. Enhance flows stay text-only.
+4. **Server-side MIME hardening (artifacts route).** Previously size-only for ANY file: image artifact types (LOGO/REFERENCE_IMAGE/EXAMPLE_POST) now enforce `RASTER_IMAGE_TYPES`; REFERENCE_DOC enforces the document allow-list; FONT/COLOR/OTHER stay size-only (font MIME reporting is inconsistent).
+
+> **⚠️ Deploy:** `npx prisma migrate deploy` (adds `20260714051500_brandkit_reference_doc`). No new env vars; no Docker image change.
+
+**Same-day ops notes:**
+
+- **MinIO credentials rotated on this machine.** The prod env gate (`src/lib/env.ts`) refuses `minioadmin` at runtime — starting the standalone prod server surfaced this as 500s on EVERY route (better-auth included), which the login form reported as "invalid credentials". Non-default `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` now live in `.env` **and `.env.test`** (compose derives the container's root creds from the same vars). **Keep the two files in sync** — a stale `.env.test` after a rotation fails ~47 storage-touching E2E cases on MinIO auth.
+- **Prod runs via the standalone server** (`output: 'standalone'`): `npm start` warns and serves nothing useful — copy `.next/static` + `public/` into `.next/standalone/` and run `node --env-file=.env .next/standalone/server.js`.
+- **New vision surfaces are MOCK-verified only** (campaign-image chat grounding, docs-only brand-kit chat) — plumbing is F5's verified path, but no live-credit run yet. Upload/validation paths WERE runtime-verified against the dev server (doc→201+parsedText, exe-as-image→400, png→201, svg→400).
+
+---
+
+## 2026-07-13 — Brief draft autosave & recovery + two dashboard/UI fixes
 
 **Merged to `main`** (specclaw change `brief-draft-recovery`; spec/design/tasks under `.specclaw/changes/brief-draft-recovery/`). Gates: tsc, lint 0 errors (7 pre-existing warnings), **156/156 unit**, full mock **E2E 132 passed / 7 skipped** (new §P suite), production build.
 

@@ -67,7 +67,8 @@ interface BriefingAssistantPanelProps {
   onApply: (text: string) => void
 }
 
-const ACCEPT = '.pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown'
+const ACCEPT =
+  '.pdf,.docx,.txt,.md,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,image/png,image/jpeg'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -241,7 +242,7 @@ export function BriefingAssistantPanel({ campaignId, open, onClose, onApply }: B
         <div className="px-5 py-4 border-b border-light-border dark:border-dark-border space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-              Source documents ({docs.length}/5)
+              Source documents &amp; images ({docs.length}/5)
             </p>
             <Button
               variant="ghost"

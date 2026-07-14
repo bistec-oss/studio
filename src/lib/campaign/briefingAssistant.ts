@@ -5,7 +5,8 @@ import { resolveAnthropicApiKey } from '@/providers/registry'
 import { isCliMode, modelFor } from '@/lib/agent/config'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
-import { collectCampaignDocsContext } from '@/lib/campaign/documents'
+import { collectCampaignDocsContext, collectCampaignDocImageUrls } from '@/lib/campaign/documents'
+import { runVisionModel } from '@/lib/agent/vision'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { MOCK_AI, buildMockBriefingReply, buildMockBriefingEnhance } from '@/lib/testHooks'
 
@@ -24,7 +25,8 @@ export interface ChatMessage {
 const MAX_TOKENS = 2048
 const CLI_TIMEOUT_MS = 120_000
 
-async function runBriefingModel(system: string, messages: ChatMessage[]): Promise<string> {
+// Exported for reuse by the brand-kit assistant (same mode-agnostic text call).
+export async function runBriefingModel(system: string, messages: ChatMessage[]): Promise<string> {
   if (isCliMode()) {
     // One prompt per turn: the CLI is stateless, so the whole transcript rides
     // along. Doc context is capped (documents.ts) to keep this affordable.
@@ -153,19 +155,42 @@ export async function runBriefingChat(
     }
   }
 
-  const context = await buildCampaignContext(campaignId)
+  const [context, imageUrls] = await Promise.all([
+    buildCampaignContext(campaignId),
+    collectCampaignDocImageUrls(campaignId),
+  ])
   const system = [
     'You are a marketing strategist helping an admin of bistec-studio plan a campaign.',
     'The briefing is free-text context injected into every AI post generation under this campaign, on top of the brand voice: it should cover the campaign\'s goal, audience, key messages, offers/CTAs, tone adjustments, and any do/don\'t rules.',
     'Interview the admin: ask focused questions about gaps, propose concrete wording, and refine based on their answers. Ground everything in the source documents when they are provided.',
     'When proposing or refining the BRIEFING, include your current best complete briefing draft inside a fenced code block that starts with ```briefing and ends with ``` — the app extracts that block so the admin can apply it to the editor. Keep the draft plain text (no markdown headers inside the block), roughly 100-300 words.',
     'When the admin asks you to PLAN or SCHEDULE a series of posts (a "scheme", e.g. "4 posts a week for the next month, one per service line"), infer a sensible count, cadence, and per-post topics from their request and the campaign context, then propose the plan inside a fenced block that starts with ```schedule and ends with ```. Inside it put ONLY minified-or-pretty JSON of the shape {"posts":[{"topic":string,"goal":string,"tone":string,"daysFromNow":integer,"postAction":"HOLD"|"SCHEDULE_PUBLISH"|"PUBLISH_NOW"}]}. daysFromNow is the whole-day offset from today for that post. Default postAction to "HOLD" unless the admin explicitly asks to auto-publish. Briefly summarise the plan in prose above the block; the app turns the block into an editable, approvable schedule.',
+    imageUrls.length > 0
+      ? 'Reference images uploaded by the marketing team are attached — treat their content (products, layouts, moods, text) as campaign source material alongside the documents.'
+      : '',
     context ? `\n# Campaign context\n\n${context}` : '',
   ]
     .filter(Boolean)
     .join('\n')
 
-  const reply = await runBriefingModel(system, messages)
+  // Uploaded PNG/JPG reference images ground the chat through the vision model;
+  // text-only campaigns keep the plain chat call.
+  let reply: string
+  if (imageUrls.length > 0) {
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user')
+    const transcript = messages
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n')
+    const userMessage = [
+      'Conversation so far:',
+      transcript,
+      '',
+      `Write the Assistant's next reply to the latest user message: ${lastUser?.content ?? ''}`,
+    ].join('\n')
+    reply = await runVisionModel({ system, userMessage, imageUrls, label: 'briefing' })
+  } else {
+    reply = await runBriefingModel(system, messages)
+  }
   return {
     reply,
     briefingDraft: extractBriefingBlock(reply),

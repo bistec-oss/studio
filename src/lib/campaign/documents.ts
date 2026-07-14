@@ -21,10 +21,19 @@ const TEXT_TYPES = ["text/plain", "text/markdown"]
 
 export const DOC_MIME_TYPES = [...PDF_TYPES, ...DOCX_TYPES, ...TEXT_TYPES]
 
+// Reference images accepted alongside documents (fed to the vision model, not
+// text-parsed). PNG/JPG only — matches what Anthropic vision accepts natively.
+export const DOC_IMAGE_MIME_TYPES = ["image/png", "image/jpeg"]
+
 // Browsers often report .md files as empty/octet-stream — accept by extension.
 export function isAllowedDocument(contentType: string, filename: string): boolean {
   if (DOC_MIME_TYPES.includes(contentType)) return true
   return /\.(md|markdown|txt)$/i.test(filename)
+}
+
+export function isAllowedDocImage(contentType: string, filename: string): boolean {
+  if (DOC_IMAGE_MIME_TYPES.includes(contentType)) return true
+  return /\.(png|jpe?g)$/i.test(filename)
 }
 
 export interface ParsedDocument {
@@ -70,6 +79,9 @@ export interface DocsContext {
 export function buildDocsContext(
   docs: Array<{ name: string; parsedText: string; truncated: boolean }>
 ): DocsContext {
+  // Image "documents" store no parsed text — they ride along as vision input
+  // instead of prompt text, so they are skipped here.
+  docs = docs.filter((d) => d.parsedText.trim().length > 0)
   if (docs.length === 0) return { text: "", truncated: false }
 
   let truncated = docs.some((d) => d.truncated)
@@ -100,4 +112,20 @@ export async function collectCampaignDocsContext(campaignId: string): Promise<Do
     select: { name: true, parsedText: true, truncated: true },
   })
   return buildDocsContext(docs)
+}
+
+// Presigned URLs for a campaign's uploaded reference IMAGES (the docs bucket is
+// private — the vision model fetches these server-side). Capped to keep the
+// vision payload sane.
+export const MAX_DOC_IMAGES_CONTEXT = 6
+
+export async function collectCampaignDocImageUrls(campaignId: string): Promise<string[]> {
+  const { BUCKET_DOCS, getPresignedUrl } = await import("@/lib/storage/minio")
+  const images = await prisma.campaignDocument.findMany({
+    where: { campaignId, contentType: { in: DOC_IMAGE_MIME_TYPES } },
+    orderBy: { createdAt: "asc" },
+    take: MAX_DOC_IMAGES_CONTEXT,
+    select: { objectKey: true },
+  })
+  return Promise.all(images.map((d) => getPresignedUrl(BUCKET_DOCS, d.objectKey)))
 }

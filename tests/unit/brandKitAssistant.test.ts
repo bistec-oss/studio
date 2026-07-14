@@ -20,7 +20,14 @@ describe('extractBrandKitBlock', () => {
 
   it('applies defaults for omitted optional fields', () => {
     const block = extractBrandKitBlock('```brandkit\n{"voice":"Just a voice."}\n```')
-    expect(block).toMatchObject({ voice: 'Just a voice.', tone: '', style: '', fonts: [] })
+    expect(block).toMatchObject({ voice: 'Just a voice.', tone: '', style: '', fonts: [], colors: [] })
+  })
+
+  it('parses document-declared hex colors and rejects non-hex values', () => {
+    const good = extractBrandKitBlock('```brandkit\n{"voice":"v","colors":["#1A2B3C","#fff"]}\n```')
+    expect(good!.colors).toEqual(['#1A2B3C', '#fff'])
+    // A non-hex color fails validation → the whole block is rejected.
+    expect(extractBrandKitBlock('```brandkit\n{"voice":"v","colors":["cornflower blue"]}\n```')).toBeNull()
   })
 
   it('returns null when missing, malformed, or missing the required voice', () => {
