@@ -177,7 +177,7 @@ export default async function DashboardPage() {
 
       {/* Quick actions */}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <QuickAction href="/brief" label="New Brief" icon={<FilePlus2 size={18} />} />
+        <QuickAction href="/brief" label="Create Post" icon={<FilePlus2 size={18} />} />
         <QuickAction href="/library" label="View Library" icon={<BookOpen size={18} />} />
         <QuickAction href="/admin/brandkits" label="Manage Brand Kits" icon={<Palette size={18} />} />
       </div>
