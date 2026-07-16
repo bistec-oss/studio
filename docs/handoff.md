@@ -1,9 +1,24 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-14 (latest: sidebar sign-out + brand-kit reference docs + campaign-voice images)
+**Date:** 2026-07-16 (latest: scheduler worker runtime-verified + social publishing setup guide)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
+
+---
+
+## 2026-07-16 (latest) — Scheduler worker runtime-verified live + social publishing setup guide
+
+**Docs-only commit** (no code changes, no migrations). Session was live ops testing on this machine, then documentation.
+
+1. **Scheduled generation is runtime-verified end-to-end in CLI mode** (first live run of the generation loop since it shipped 2026-07-07 — it was previously mock-verified only). A real `ScheduledGeneration` (Path B, `postAction: HOLD`) went PENDING → claimed RUNNING → **COMPLETED in ~135s**: copy (haiku, 13.7s) → background decision (haiku, 17.9s) → gpt-image background (62.8s, real PNG to the IMAGES bucket) → design (sonnet, 28.2s) → Puppeteer render → `Draft.status=EXPORTED` with a real export key. The publish loop was NOT live-verified (no social credentials yet) — its claim/retry machinery is E2E-covered (§K).
+   - **Local worker run command** (nothing in `package.json` for this): `npx tsx --env-file=.env src/scheduler/worker.ts`. Worker survives DB outages (68 caught `P1001` tick errors during a Docker restart, no fatal, clean self-recovery).
+2. **New guide: [`docs/social-publishing-setup.md`](social-publishing-setup.md)** — LinkedIn + Instagram account/app/token setup, credential wiring (`/admin/settings` Social Channels vs env fallback), the full posting sequence (publish dialog inline-vs-scheduled split, campaign-queue `postAction` flow, retry/backoff tables), and troubleshooting. `docs/cold-start.md` §2 now points to it.
+3. **Instagram image-fetch path validated via Cloudflare quick tunnel.** Key finding baked into the guide: presigned EXPORTS URLs are **host-bound to `MINIO_ENDPOINT`** (the signing client, `minio.ts`), so for Meta's servers to fetch an export, `MINIO_ENDPOINT` itself must be the tunnel URL — `MINIO_PUBLIC_ENDPOINT` alone is not enough. Keep `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` during tunnel testing so embedded background-image URLs don't rot when the ephemeral tunnel dies. **Proven with a real external fetch:** export presigned against a `trycloudflare.com` host → HTTP 200, 2.3 MB, `image/png`. LinkedIn needs no tunnel (the app uploads image bytes itself).
+   - **Ops (this machine):** `cloudflared` 2026.7.2 installed via winget (`C:\Program Files (x86)\cloudflared\`). `.env` was reverted to `localhost:9000` after testing; the worker is stopped. Quick-tunnel URLs die with their terminal and change on every restart.
+4. **Cleanup:** the test `ScheduledGeneration` + draft + revision + runner-created brief were deleted after verification (two orphaned MinIO objects from the test run remain — harmless).
+
+**Next step for real publishing:** obtain channel credentials (LinkedIn Community Management API token + org ID; Meta long-lived token + IG business account id — guide §2/§3), wire them in `/admin/settings`, then drive one real post per channel through the worker.
 
 ---
 

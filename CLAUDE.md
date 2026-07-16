@@ -2,7 +2,13 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-14)
+## ✅ Outstanding work — START HERE (updated 2026-07-16)
+
+**✅ Scheduler worker runtime-verified live + social publishing setup guide — 2026-07-16** (docs-only; see `docs/handoff.md` top section):
+
+- **Scheduled generation runtime-verified end-to-end in CLI mode** (previously mock-only): real `ScheduledGeneration` → claimed → copy/background/design → Puppeteer render → `EXPORTED` draft in ~135s. Publish loop still not live-verified (no social credentials yet). Local worker run: `npx tsx --env-file=.env src/scheduler/worker.ts` (no package.json script). Worker self-recovers from DB outages (per-tick catch).
+- **New [`docs/social-publishing-setup.md`](docs/social-publishing-setup.md)** — LinkedIn + Instagram account/token setup, credential wiring (`/admin/settings` → Social Channels beats env), full posting sequence + retry tables, troubleshooting. `docs/cold-start.md` §2 points to it.
+- **Instagram image path via Cloudflare tunnel, validated:** presigned EXPORTS URLs are host-bound to `MINIO_ENDPOINT` (the signing client) — the tunnel URL must go there, NOT just `MINIO_PUBLIC_ENDPOINT`; keep `MINIO_PUBLIC_ENDPOINT=http://localhost:9000` so embedded asset URLs survive the ephemeral tunnel. Proven: external fetch of a tunnel-signed export → 200 `image/png`. LinkedIn needs no tunnel. **Ops (this machine):** `cloudflared` installed; `.env` reverted to localhost after testing; worker stopped.
 
 **✅ Sidebar sign-out + brand-kit reference docs + campaign-voice images — 2026-07-14** (see `docs/handoff.md` top section):
 
@@ -84,7 +90,7 @@ Six features from a planning session, built in dependency order and merged to `m
 - **CLI-mode OAuth token:** set `CLAUDE_CODE_OAUTH_TOKEN` in `.env` (`claude setup-token`, ~1 yr) — headless `claude -p` spawns authenticate without the interactive login. API-key migration later = set `ANTHROPIC_API_KEY` + `DESIGN_PROVIDER=claude-html`, no code change.
 - **Brief wizard Topic field:** short required Topic → `Brief.topic` (library card name); the big prompt textarea → `Brief.description`. No schema/API change.
 - **Admin library delete:** `DELETE /api/drafts/[id]` (admin, transactional: posts → revisions → draft → orphaned brief) + trash button on `PostCard`.
-- **⚠️ To activate:** fill `CLAUDE_CODE_OAUTH_TOKEN=` and `OPENAI_API_KEY=` in `.env`. Background generation not yet runtime-verified with real keys (unit + mock-E2E green: 55/55 unit, 80/0/4 E2E).
+- **⚠️ To activate:** fill `CLAUDE_CODE_OAUTH_TOKEN=` and `OPENAI_API_KEY=` in `.env`. ~~Background generation not yet runtime-verified with real keys~~ **Superseded 2026-07-16:** runtime-verified live — a scheduled generation produced a real gpt-image background (62.8s) into the IMAGES bucket end-to-end (unit + mock-E2E were already green: 55/55 unit, 80/0/4 E2E).
 
 **✅ Improvement review fully remediated — 2026-07-02/03.** A four-reviewer whole-system design/code review found **77 findings** ([`docs/improvement-review-2026-07-02.md`](docs/improvement-review-2026-07-02.md)); **all 77 are remediated** across four phased commits on `main` (`689131cc`, `74725f28`, `b6fe63dd`, `8a1b2fae`). Structural changes to know about:
 

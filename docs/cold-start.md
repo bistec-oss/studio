@@ -102,7 +102,7 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
 
 **For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
-Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing.
+Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing — when you do, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence).
 
 ---
 
