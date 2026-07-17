@@ -20,7 +20,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1, 'name is required'),
   colors: z.array(z.string()).nullish(),
   fonts: z.array(z.object({ name: z.string(), url: z.string() })).nullish(),
-  logoUrl: z.string().nullish(),
+  logoUrl: z.string().regex(/^https?:\/\//, 'logoUrl must be an http(s) URL').nullish(),
   isDefault: z.boolean().nullish(),
 })
 
