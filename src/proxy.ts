@@ -20,7 +20,12 @@ export function proxy(req: NextRequest) {
   // Authoritative auth (session validity + role) is enforced per-route via
   // getCurrentUser()/requireRole(); the cookie check just short-circuits
   // obviously-unauthenticated navigation to the login page.
-  const session = req.cookies.get("better-auth.session_token")
+  // better-auth prefixes the cookie with "__Secure-" whenever it issues secure
+  // cookies (any https deployment, i.e. every production/Coolify deploy) — only
+  // the unprefixed name appears over plain http (local dev), so check both.
+  const session =
+    req.cookies.get("better-auth.session_token") ??
+    req.cookies.get("__Secure-better-auth.session_token")
   if (!session) {
     return NextResponse.redirect(new URL("/login", req.url))
   }
