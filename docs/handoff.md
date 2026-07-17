@@ -1,13 +1,43 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-17 (latest: cross-machine post transfer scripts + pending import on the other machine)
+**Date:** 2026-07-17 (latest: async draft actions 202+poll + brand-kit logo URL hygiene)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
-**Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
+**Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
 
 ---
 
-## 2026-07-17 (latest) — Cross-machine post transfer scripts + ⚠️ PENDING IMPORT on the second machine
+## 2026-07-17 (latest) — Async draft actions (202+poll) + brand-kit logo URL hygiene
+
+**Specclaw change `async-draft-actions`** (spec/design/tasks in `.specclaw/changes/async-draft-actions/`). Two coupled improvements from one incident: a regenerate-design against the Hearts Academy kit timed out at 300s (CLI mode) because its **136,050-char base64 `logoUrl`** entered the design prompt **twice** — via `buildBrandKitSystemContext` AND the `feedToAI` artifact URL list in `pathB.ts` — producing a 277k-char prompt. Part B stops base64 ever reaching prompts again; Part A converts the three synchronous draft actions to the F1 async pattern so long-running actions survive tab switches and can't interleave.
+
+### Part A — async draft actions (regenerate-design / regenerate-copy / refine)
+
+- **Contract:** each route keeps ALL validation synchronous (auth/ownership 404/403, `NOT_PATH_B`, `instruction is required`, `NO_BRAND_KIT`, kit resolution), then **atomically claims** the new `Draft.pendingAction` (`REGENERATE_COPY | REGENERATE_DESIGN | REFINE` — conditional `updateMany` where `pendingAction IS NULL`, no read-then-write race) and returns **202 `{ ok: true }`**, running the model work in-process fire-and-forget (mirrors `startBackgroundGeneration`, per-user Claude auth resolved up front). Lifecycle lives in **`src/lib/drafts/draftActions.ts`** (claim / start / release). A second action while one is in flight → **409**; `Draft.status` is never touched (an EXPORTED draft stays EXPORTED — the old regenerate-copy IN_PROGRESS flip is gone, and regenerate-copy now 409s on non-EXPORTED/PUBLISHED drafts).
+- **Poll surface:** `GET /api/drafts/[id]` returns `pendingAction`, `pendingActionError`, and `conflict` (`{ conflictId, explanation }` derived from `pendingConflict` — never `pendingHtml`). Failure writes the message to `pendingActionError` and clears `pendingAction`, leaving previous content intact; success clears both. **15-min stale sweep** (same `recoverIfStuck` site + bound as F1) recovers server-restart orphans with an interruption message. `POST …/revisions/[rev]/restore` → **409** while an action is pending. **Override stays synchronous** (commits stored HTML, no model call — unchanged `{ reply, revisionId, exportUrl }` response).
+- **Client UX:** the draft page poll (4s) now also runs while `pendingAction` is set. Regenerate-copy disables the copy area with current text visible; regenerate-design/refine keep the image with a translucent overlay + spinner (NOT the generation skeleton). Undo snapshots (`previousCopyText`, `previousRevisionNumber`) are **captured client-side before firing** (the 202 body can't carry them); `CopyEditor`/`RefinementPanel` take an `onActionStarted` callback so the page can snapshot + start polling immediately; `RefinementPanel` resolves its pending chat message from polled props (applied via a revision-baseline ref / conflict card / inline error). Failure re-enables the buttons — no server-side retry route; the user re-triggers.
+- **⚠️ Breaking (in-repo only):** the three action POSTs no longer return the old sync payloads (`{ copyText, previousCopyText }` / `{ revisionId, exportUrl, … }`) — every caller lives in this repo and was updated in the same change. Scheduler/MCP/ACP never call these routes (untouched, still synchronous internally).
+
+### Part B — brand-kit logo URL hygiene
+
+- **Prompt guards (defense in depth):** `buildBrandKitSystemContext` renders `Logo URL: none (embedded logo omitted)` for a `data:` logoUrl; `pathB.ts` filters `data:` URLs out of the reference-artifact list. **`PROMPT_VERSION` → `2026-07-17.1`.**
+- **Write-surface validation:** `POST/PATCH /api/admin/brandkits(/[id])` reject a non-`http(s)://` `logoUrl` with 400 (clearing with `null` still allowed); MCP `create_brand_kit` throws the same check as a tool error.
+- **Seed fix:** `scripts/seed-hearts-talk.mjs` uploads its logo assets to the brand-kits bucket (stable public URL) instead of embedding data-URIs (the presigned-URL rationale died with H10).
+- **New `scripts/fix-data-uri-logos.mjs`:** finds every `BrandKit.logoUrl` / `BrandKitArtifact.url` holding a `data:` URI, uploads the decoded bytes to the brand-kits bucket, rewrites the row. Idempotent, `--dry-run` supported, exits non-zero if any row was unparsable/skipped.
+- **Data fix APPLIED on this machine** (not a commit): Hearts Academy kit `logoUrl` → `http://localhost:9000/brand-kits/cmqroh4po00008xc8tcntem58/hearts-academy-logo-transparent.png` (background made transparent via edge-connected removal — the white knot inside the heart mark preserved); the mislabeled 136k data-URI "BISTEC Global" LOGO artifact was replaced by **"BISTEC Hearts Academy"** (`feedToAI: true`, same URL). `fix-data-uri-logos.mjs` confirms **0 data-URIs remain locally**.
+
+### Tests + gates
+
+- **New §Q E2E suite** (`tests/e2e/async-actions.test.ts`, 9 cases, AC-1..AC-7) + `waitForAction` helper in `tests/helpers/api.ts`; `agui-refinement.test.ts` rewritten to the async contract; TC-BK-09 logo-validation cases added.
+- **TC-REG-H7a rewritten** (`tests/e2e/regression.test.ts`): the old case fired 10 PARALLEL refines expecting 10 sequential revisions — under single-flight, 9 of those now 409 **by design**. The H7 guarantee it guards (unique, contiguous revision numbers, no 500s) is preserved via 10 SEQUENTIAL refines (each 202 → `waitForAction`) asserting contiguous 2..11, plus a parallel-fire phase asserting **exactly one 202, nine 409s**, exactly one revision appended, numbering still contiguous. Catalog entry updated in `docs/e2e-test-plan.md`.
+- Also fixed at finalize: 3 pre-existing lint errors in `scripts/export-posts.mjs` (unused destructured rest-siblings from the 2026-07-17 transfer-scripts commit → `_`-prefixed), and `.env.test` had lost `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (re-added, mirroring `.github/workflows/e2e.yml`, so the 3 §J ACP-auth cases run locally again).
+- **Gates:** tsc clean; lint **0 errors** (7 pre-existing warnings); **174/174 unit**; full mock **E2E 145 passed / 4 skipped / 0 failed** (baseline 135/4 + §Q 9 + TC-BK-09; the 4 skips are the intentional TC-GEN-05 + TC-REG-H11a/b/c); production build green (`.next` deleted afterward — stale-`.next` footgun).
+
+**⚠️ Deploy:** `npx prisma migrate deploy` (1 new migration `20260717085058_draft_pending_action` — nullable columns only, no backfill); no new env vars. **Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real.
+
+---
+
+## 2026-07-17 — Cross-machine post transfer scripts + ✅ import completed on machine 2
 
 **Scripts-only commit** (no app code changes, no migrations, no new env vars). Context: the two dev machines have independent Postgres/MinIO instances; Damian wants the library posts made on machine 1 (`DamianDeCruzBISTECCa`) merged **on top of** the other machine's existing data — not a clone/overwrite.
 
@@ -18,7 +48,11 @@
 
 **Verified 2026-07-17 on machine 1:** real export (6 drafts / 6 briefs / 16 revisions / 0 posts / 31 objects, 60 MB, none missing) → dry-run vs same DB = all "already present" (idempotency) → **real import into `bistec_studio_test`** = all rows created with intact revision chains + `currentRevisionNumber` pointers, kit re-linked by name to that DB's own kit id, one campaign link correctly dropped → MinIO upload path smoke-tested via a throwaway bucket (created + uploaded + cleaned up).
 
-### ⚠️ TODO on the OTHER machine (this is the pending work — execute on sight if the bundle folder is present)
+### ✅ DONE — import executed on machine 2, 2026-07-17
+
+Ran the same day on machine 2 (bundle landed in `Downloads\post-export`, not the recommended Documents spot). Sequence: Docker up → dry-run (clean plan, no missing owners — `adminbtg` exists locally, so no `--owner` flag) → real import → second dry-run showed everything "already present" (idempotency confirmed). Results matched the expected counts exactly: **6 briefs / 6 drafts / 16 revisions / 0 posts created, 31 objects uploaded**. The predicted link drops occurred: 1 campaign + 1 brand-kit link dropped by name-match (the "AI : a new Era" brief falls back to kit precedence). DB spot-check: all 6 drafts EXPORTED with an `exportUrl`, revision chains intact, `currentRevisionNumber` pointers valid — the two zero-revision drafts (`Data Engineering Promotion`, `AI : a new Era`) are legacy pre-F2 rows where a null pointer means "latest revision" by design. Bundle folder can be deleted. The original TODO steps are kept below for reference.
+
+### Original TODO (executed above)
 
 The export bundle lives on machine 1 at `C:\Users\DamianDeCruzBISTECCa\Documents\post-export`; Damian is copying it to the other machine (recommended landing spot: `Documents\post-export`, i.e. **outside the repo**). Then, in the project directory on the other machine:
 

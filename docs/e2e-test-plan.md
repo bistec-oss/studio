@@ -311,7 +311,7 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 
 These are the highest-value additions — they guard the H7/H9/H10/H11/H12 fixes specifically and need targeted setups.
 
-- **TC-REG-H7a — Concurrent refine, no duplicate revision numbers.** P: one EXPORTED draft. S: fire **N=10 parallel** POST `/refine` (mock agent, instant). E: all succeed; revisions have **distinct** sequential numbers 1..N (the `@@unique` + `$transaction` retry holds; no 500s).
+- **TC-REG-H7a — Refine revision atomicity (rewritten for the §Q async single-flight contract).** P: one EXPORTED draft. S: (1) fire **N=10 sequential** POST `/refine` (each 202 → `waitForAction`); (2) fire **N=10 parallel** POST `/refine`. E: sequential runs append **distinct, contiguous** revisions 2..11 with no 500s; under parallel fire **exactly one** request gets 202 and the rest 409 (the atomic `pendingAction` claim), landing exactly one more revision, numbering still contiguous. Same H7 guarantee — contention now never reaches the revision transaction.
 - **TC-REG-H7b — Concurrent prompt version save.** S: fire 5 parallel POST `/prompts`. E: distinct versions, at most one 409, no 500. **Guards H7.**
 - **TC-REG-H7c — No PENDING orphan on crash-shaped failure.** Covered by TC-PUB-03; additionally assert DB has zero `PENDING` posts after the suite.
 - **TC-REG-H9 — Index presence + query plan.** S: `SELECT indexname FROM pg_indexes WHERE tablename='Post'`; optionally `EXPLAIN` the scheduler's due-query. E: `(status,scheduledAt)` and `(status,nextRetryAt)` indexes exist and the due-query uses an index (not Seq Scan) on a seeded large table. **Guards H9.**
