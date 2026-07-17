@@ -10,7 +10,9 @@ import { MOCK_AI, MOCK_PUPPETEER, buildMockBrandKitReply } from '@/lib/testHooks
 // briefing assistant (chat + grounding + a fenced "apply" convention), but the
 // grounding is the kit's uploaded REFERENCE_IMAGE / EXAMPLE_POST artifacts fed
 // to a vision model, plus REFERENCE_DOC artifacts (brand guidelines etc.) whose
-// parsed text rides along in the prompt. The model proposes voice/tone/style/
+// parsed text rides along in the prompt — unioned with the kit's assistant
+// source documents (BrandKitDocument, doc images first; see
+// collectBrandKitGrounding). Those documents never enter generation prompts. The model proposes voice/tone/style/
 // fonts inside a ```brandkit block; the COLOR palette is sampled
 // programmatically from the images — the model may additionally report colors
 // ONLY when a document states them explicitly (hex codes in a brand guideline),
@@ -71,15 +73,46 @@ async function referenceImageUrls(kitId: string): Promise<string[]> {
   return artifacts.map((a) => a.url)
 }
 
-// Parsed text of the kit's feedToAI reference DOCUMENTS (brand guidelines,
-// voice docs), assembled under the same caps as campaign docs.
-async function referenceDocsContext(kitId: string): Promise<{ text: string; truncated: boolean }> {
+// Parsed text rows of the kit's feedToAI reference DOCUMENT artifacts (brand
+// guidelines, voice docs).
+async function referenceDocRows(kitId: string): Promise<Array<{ name: string; parsedText: string; truncated: boolean }>> {
   const docs = await prisma.brandKitArtifact.findMany({
     where: { brandKitId: kitId, feedToAI: true, type: 'REFERENCE_DOC' },
     orderBy: { createdAt: 'asc' },
     select: { name: true, parsedText: true, truncated: true },
   })
-  return buildDocsContext(docs.map((d) => ({ ...d, parsedText: d.parsedText ?? '' })))
+  return docs.map((d) => ({ ...d, parsedText: d.parsedText ?? '' }))
+}
+
+export interface BrandKitGrounding {
+  // Union of uploaded document images (presigned, FIRST) and feedToAI artifact
+  // images — deduped, capped at 6. Vision input AND palette-sampling source.
+  imageUrls: string[]
+  // Uploaded document texts (first) + REFERENCE_DOC artifact texts, assembled
+  // under the shared buildDocsContext caps.
+  docs: { text: string; truncated: boolean }
+}
+
+// Everything the chat grounds on: the kit's assistant source DOCUMENTS
+// (BrandKitDocument — never generation-visible) unioned with its feedToAI
+// artifacts. Document images come first so they win the cap.
+export async function collectBrandKitGrounding(kitId: string): Promise<BrandKitGrounding> {
+  const { collectBrandKitDocTexts, collectBrandKitDocImageUrls } = await import('@/lib/brandkit/documents')
+  const [artifactUrls, docImageUrls, artifactDocRows, kitDocRows] = await Promise.all([
+    referenceImageUrls(kitId),
+    collectBrandKitDocImageUrls(kitId),
+    referenceDocRows(kitId),
+    collectBrandKitDocTexts(kitId),
+  ])
+  const seen = new Set<string>()
+  const imageUrls: string[] = []
+  for (const url of [...docImageUrls, ...artifactUrls]) {
+    if (seen.has(url)) continue
+    seen.add(url)
+    imageUrls.push(url)
+    if (imageUrls.length >= 6) break
+  }
+  return { imageUrls, docs: buildDocsContext([...kitDocRows, ...artifactDocRows]) }
 }
 
 // Sample a merged palette across all reference images (dedup near-duplicates,
@@ -133,7 +166,7 @@ function mergeColors(docColors: string[], sampled: string[]): string[] {
 }
 
 export async function runBrandKitChat(kitId: string, messages: ChatMessage[]): Promise<BrandKitChatResult> {
-  const [urls, docs] = await Promise.all([referenceImageUrls(kitId), referenceDocsContext(kitId)])
+  const { imageUrls: urls, docs } = await collectBrandKitGrounding(kitId)
 
   if (MOCK_AI) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
@@ -146,8 +179,9 @@ export async function runBrandKitChat(kitId: string, messages: ChatMessage[]): P
   if (urls.length === 0 && !docs.text) {
     return {
       reply:
-        'Upload at least one reference (an image of a past post, a mock-up, your logo, or a brand ' +
-        'guideline document) and mark it "feed to AI", then ask me to extract the brand style.',
+        'Add at least one reference (an image of a past post, a mock-up, your logo, or a brand ' +
+        'guideline document) — either upload it here in the assistant, or add it in the Artifacts ' +
+        'section marked "feed to AI" — then ask me to extract the brand style.',
       suggestion: null,
     }
   }

@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Send, Sparkles, Check } from 'lucide-react'
+import { Check, FileText, Loader2, Paperclip, Send, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Modal'
 import { apiFetch } from '@/lib/apiFetch'
@@ -29,6 +29,26 @@ interface ChatMessage {
   suggestion?: BrandKitSuggestion | null
 }
 
+// Assistant source documents & images (BrandKitDocument) — chat grounding only,
+// never fed to generation. Mirrors the campaign BriefingAssistantPanel block.
+interface BrandKitDocumentMeta {
+  id: string
+  name: string
+  contentType: string
+  sizeBytes: number
+  truncated: boolean
+  createdAt: string
+}
+
+const ACCEPT =
+  '.pdf,.docx,.txt,.md,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,image/png,image/jpeg'
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 interface BrandKitAssistantPanelProps {
   kitId: string
   open: boolean
@@ -38,9 +58,12 @@ interface BrandKitAssistantPanelProps {
 
 export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: BrandKitAssistantPanelProps) {
   const endRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
+  const [docs, setDocs] = useState<BrandKitDocumentMeta[]>([])
+  const [uploading, setUploading] = useState(false)
   // The suggestion under review (editable), and which fields to apply.
   const [voice, setVoice] = useState('')
   const [colors, setColors] = useState<string[]>([])
@@ -48,6 +71,54 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
   const [style, setStyle] = useState('')
   const [hasSuggestion, setHasSuggestion] = useState(false)
   const [applying, setApplying] = useState(false)
+
+  // Load the kit's source documents when the drawer opens.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    apiFetch<BrandKitDocumentMeta[]>(`/api/admin/brandkits/${kitId}/documents`)
+      .then(list => {
+        if (!cancelled) setDocs(list)
+      })
+      .catch(() => {
+        /* the block simply stays empty; uploads will surface real errors */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, kitId])
+
+  async function uploadFile(file: File) {
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const doc = await apiFetch<BrandKitDocumentMeta>(`/api/admin/brandkits/${kitId}/documents`, {
+        method: 'POST',
+        body: fd,
+      })
+      setDocs(prev => [...prev, doc])
+      toast.success(
+        doc.truncated
+          ? `${file.name} uploaded — the text was long and was truncated for the AI context.`
+          : `${file.name} uploaded`,
+      )
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  async function deleteDoc(doc: BrandKitDocumentMeta) {
+    try {
+      await apiFetch(`/api/admin/brandkits/${kitId}/documents/${doc.id}`, { method: 'DELETE' })
+      setDocs(prev => prev.filter(d => d.id !== doc.id))
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Delete failed')
+    }
+  }
 
   function loadSuggestion(s: BrandKitSuggestion) {
     setVoice(s.voice)
@@ -118,14 +189,68 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
   return (
     <Drawer open={open} onClose={onClose} title="Extract brand from references">
       <div className="flex flex-col h-full">
+        {/* Documents */}
+        <div className="px-5 py-4 border-b border-light-border dark:border-dark-border space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+              Source documents &amp; images ({docs.length}/5)
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={uploading || docs.length >= 5}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+              {uploading ? 'Uploading…' : 'Add document'}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT}
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) void uploadFile(file)
+              }}
+            />
+          </div>
+          {docs.length === 0 ? (
+            <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
+              Hand in brand guidelines, past posts, or your logo (PDF, DOCX, TXT, MD, PNG, JPG —
+              max 10MB each). They ground this chat only — never the post generator.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {docs.map(doc => (
+                <li key={doc.id} className="flex items-center gap-2 text-sm text-light-text dark:text-dark-text">
+                  <FileText size={14} className="text-light-text-muted dark:text-dark-text-muted flex-shrink-0" />
+                  <span className="truncate flex-1" title={doc.name}>{doc.name}</span>
+                  <span className="text-xs text-light-text-muted dark:text-dark-text-muted whitespace-nowrap">
+                    {formatSize(doc.sizeBytes)}
+                    {doc.truncated && ' · truncated'}
+                  </span>
+                  <button
+                    aria-label={`Delete ${doc.name}`}
+                    onClick={() => deleteDoc(doc)}
+                    className="p-1 rounded text-light-text-muted dark:text-dark-text-muted hover:text-red-500 transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Chat */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {messages.length === 0 && (
             <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-              Upload reference images (past posts, mock-ups, your logo) in the Artifacts section
-              and mark them <span className="font-medium">feed to AI</span>, then ask me to
-              extract the brand voice and style. I&apos;ll propose a voice, palette, and font
-              guesses you can review and apply.
+              Add references above (brand guidelines, past posts, your logo) — or upload
+              images in the Artifacts section marked <span className="font-medium">feed to AI</span> —
+              then ask me to extract the brand voice and style. I&apos;ll propose a voice,
+              palette, and font guesses you can review and apply.
             </p>
           )}
           {messages.map((m, i) => (

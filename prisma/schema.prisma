@@ -431,11 +431,31 @@ model BrandKit {
   prompts   BrandKitPrompt[]
   artifacts BrandKitArtifact[]
   templates BrandKitTemplate[]
+  documents BrandKitDocument[]
   projects  Project[]           @relation("ProjectBrandKit")
   campaigns Campaign[]          @relation("CampaignBrandKit")
   briefs    Brief[]             @relation("BriefBrandKit")
 
   @@index([isDefault, isDeleted])
+}
+
+// Source documents/images grounding the brand-kit assistant chat — mirrors
+// CampaignDocument. Deliberately NOT artifacts: they must never enter
+// generation prompts (Path B reads only feedToAI artifacts).
+model BrandKitDocument {
+  id          String   @id @default(cuid())
+  brandKitId  String
+  brandKit    BrandKit @relation(fields: [brandKitId], references: [id])
+  name        String
+  contentType String
+  sizeBytes   Int
+  objectKey   String
+  parsedText  String   @db.Text
+  truncated   Boolean  @default(false)
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([brandKitId])
 }
 
 model BrandKitTemplate {
