@@ -1,6 +1,6 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-17 (latest: async draft actions 202+poll + brand-kit logo URL hygiene)
+**Date:** 2026-07-17 (latest: async draft actions + logo hygiene + brand-kit chat documents, all live-verified)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
@@ -33,7 +33,31 @@
 - Also fixed at finalize: 3 pre-existing lint errors in `scripts/export-posts.mjs` (unused destructured rest-siblings from the 2026-07-17 transfer-scripts commit → `_`-prefixed), and `.env.test` had lost `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (re-added, mirroring `.github/workflows/e2e.yml`, so the 3 §J ACP-auth cases run locally again).
 - **Gates:** tsc clean; lint **0 errors** (7 pre-existing warnings); **174/174 unit**; full mock **E2E 145 passed / 4 skipped / 0 failed** (baseline 135/4 + §Q 9 + TC-BK-09; the 4 skips are the intentional TC-GEN-05 + TC-REG-H11a/b/c); production build green (`.next` deleted afterward — stale-`.next` footgun).
 
-**⚠️ Deploy:** `npx prisma migrate deploy` (1 new migration `20260717085058_draft_pending_action` — nullable columns only, no backfill); no new env vars. **Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real.
+### Same-day addition — brand-kit assistant source documents (campaign-style)
+
+The brand-kit assistant chat previously had NO upload affordance (its empty state pointed at the separate Artifacts section). It now works like the campaign briefing chat:
+
+- **New `BrandKitDocument` model** (migration `20260717114732_brandkit_documents`, field-for-field mirror of `CampaignDocument`) + admin routes `GET/POST /api/admin/brandkits/[id]/documents` and `DELETE …/[docId]`: 5-doc/kit cap, images (PNG/JPG — SVG rejected) + PDF/DOCX/TXT/MD, same size/MIME validation, text parsed once at upload, stored in the **private docs bucket** under `brandkits/<kitId>/…`, manual delete only (persist until trashed — deliberately the campaign lifecycle, per user decision, NOT the brief-draft auto-discard one).
+- **Documents are NOT artifacts** — they never appear in the Artifacts panel and never enter generation prompts (`pathB` still reads only `feedToAI` artifacts). Extraction references stay out of designs; only what the admin Applies (voice/colors) persists on the kit.
+- **Grounding** (`collectBrandKitGrounding` in `src/lib/brandkit/assistant.ts`): documents ∪ feedToAI artifacts every message — document images FIRST under the 6-image cap (deduped), one image list feeds both `runVisionModel` and `samplePalette`; doc texts join REFERENCE_DOC artifact texts under the shared 50k context cap. The canned "no references" reply fires only when both are empty.
+- **UI:** `BrandKitAssistantPanel` gains the "Source documents & images (N/5)" block (Paperclip add / Trash2 delete), mirroring `BriefingAssistantPanel`.
+- Gates at commit: tsc clean, eslint 0 errors, **180/180 unit** (6 new); targeted E2E rerun of `brandkit-assistant` + `brand-kit` suites: **14/14** against a fresh test DB with the new migration.
+
+### Same-day data work — Hearts Academy kit rebrand (this machine, not commits)
+
+- **Voice prompt v2** (v1 preserved inactive): derived from the "Launching Bistec Studio" launch-post style — voice/platform/design-style rules plus a **BRANDING/LOGOS section**: every post carries BOTH logos, default lockup = white rounded bar at top, BISTEC Global LEFT / Hearts Academy RIGHT, colour variants on light surfaces, reversed-white BISTEC on dark.
+- **Three feedToAI LOGO artifacts with self-describing filenames** (the pathB prompt passes bare URLs, so the filename is the model's only clue): `hearts-academy-logo-transparent.png` (also `kit.logoUrl`), `bistec-global-logo-colour.png`, `bistec-global-logo-reversed-white.png` (copied under the Hearts kit's own bucket prefix).
+- Kit colors/fonts left unchanged (already match: navy/cyan/green palette, Poppins + JetBrains Mono).
+
+### ✅ Live verification (same day — real dev server, CLI-mode Claude, no mocks)
+
+- **Brief-draft autosave/recovery (F-brief-draft-recovery), full lifecycle in a real browser:** typed a brief mid-wizard → 1.5s-debounced autosave created the `BriefDraft` row → dashboard showed the leading "Unfinished" row → **Resume rehydrated everything** (step position, IRP campaign, Hearts Academy kit via campaign default, SQUARE, Path B, topic, prompt) → Discard (confirm dialog) deleted the row. One test-tooling caveat worth remembering: DevTools-protocol `fill` sets a textarea's DOM value WITHOUT firing React `onChange`, so autosave (correctly) didn't capture it — real keystrokes flushed the full value; app behavior is correct.
+- **Async regenerate-copy, live:** UI click → 202 → observed `pendingAction=REGENERATE_COPY` via the poll → cleared in ~6s (haiku) → new copy (visibly in the new Hearts Academy voice) landed via the 4s poll → **Undo** appeared (client-side pre-fire snapshot) and restored the previous copy.
+- **Async refine, live:** proven by real usage — six refine revisions (v2–v6 + adjustments) ran through the 202+poll pipeline on the branch prod build the same afternoon, including instructions exercising the dual-logo lockup.
+- **Brand-kit documents, live:** upload (201) → list → **real assistant chat call quoted a marker string from the uploaded doc** (grounding confirmed; the reply also described the logo artifacts — union working) → delete (200) → list empty.
+- **Logo-hygiene effect, live:** background-decision prompt 5,103 chars and design prompt 5,818 chars on the Hearts kit (vs 141k/277k during the incident); regenerate-design completed in 41s vs the 300s timeout.
+
+**⚠️ Deploy:** `npx prisma migrate deploy` (**2 new migrations**: `20260717085058_draft_pending_action`, `20260717114732_brandkit_documents` — nullable columns / new table, no backfill); no new env vars. **Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real. (The Hearts Academy voice-prompt/logo-artifact rebrand above is also machine-local data — recreate via the admin UI there if wanted.)
 
 ---
 
