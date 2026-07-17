@@ -2,7 +2,12 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-16)
+## ✅ Outstanding work — START HERE (updated 2026-07-17)
+
+**⚠️ Cross-machine post transfer — IMPORT PENDING on the second machine — 2026-07-17** (see `docs/handoff.md` top section for the exact steps):
+
+- New script pair `scripts/export-posts.mjs` / `scripts/import-posts.mjs`: selective merge of library posts (Brief → Draft → revisions + terminal Post rows + all referenced MinIO objects) between the two dev machines. Idempotent import; owners remapped by username (`--owner` fallback), campaigns/kits re-linked by name or dropped to null. Verified end-to-end on machine 1 (real export 6 drafts / 31 objects / 60 MB; real import into the test DB; MinIO upload path smoke-tested).
+- **If you are the OTHER machine and `Documents\post-export` exists locally:** run the import per the handoff TODO (dry-run first). No migrations, no new env vars.
 
 **✅ Scheduler worker runtime-verified live + social publishing setup guide — 2026-07-16** (docs-only; see `docs/handoff.md` top section):
 

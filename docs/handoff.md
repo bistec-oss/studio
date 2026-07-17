@@ -1,13 +1,40 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-16 (latest: scheduler worker runtime-verified + social publishing setup guide)
+**Date:** 2026-07-17 (latest: cross-machine post transfer scripts + pending import on the other machine)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
 
 ---
 
-## 2026-07-16 (latest) — Scheduler worker runtime-verified live + social publishing setup guide
+## 2026-07-17 (latest) — Cross-machine post transfer scripts + ⚠️ PENDING IMPORT on the second machine
+
+**Scripts-only commit** (no app code changes, no migrations, no new env vars). Context: the two dev machines have independent Postgres/MinIO instances; Damian wants the library posts made on machine 1 (`DamianDeCruzBISTECCa`) merged **on top of** the other machine's existing data — not a clone/overwrite.
+
+**New tooling — a selective post-merge pair:**
+
+- **`scripts/export-posts.mjs`** — exports library posts (Brief → Draft → DraftRevision[] + Post[]) plus **every MinIO object they reference** (export PNGs, AI backgrounds, brief-upload images, brand assets embedded in stored HTML — found by scanning all rows for MinIO URLs/keys) into a portable folder: `manifest.json` + `objects/<bucket>/<key>`. Flags: `--out`, `--draft <id>` (repeatable), `--user <username>`. Users/kits/campaigns are NOT exported — the manifest carries remap hints (owner username, campaign/kit/template _names_).
+- **`scripts/import-posts.mjs`** — merges a bundle into the local env. Cuid ids can't collide, existing rows/objects are skipped (**idempotent — safe to re-run**), nothing existing is touched. Remapping: owner by username (else `--owner <username>` fallback — aborts and lists missing users without it), campaign + brand kit matched **by name** (no match → link dropped to null; kit precedence fallback applies), reference template by name within the matched kit. Only **terminal** Post rows (PUBLISHED/FAILED/CANCELLED) import — PENDING/SCHEDULED/PUBLISHING are skipped so the target's publish scheduler can't act on imported work. Rewrites stored asset URLs if the target's `MINIO_PUBLIC_ENDPOINT` differs (no-op when both are `localhost:9000`). Creates missing buckets with the correct public-read policy (mirrors `minio.ts`). `--dry-run` previews everything with zero writes.
+
+**Verified 2026-07-17 on machine 1:** real export (6 drafts / 6 briefs / 16 revisions / 0 posts / 31 objects, 60 MB, none missing) → dry-run vs same DB = all "already present" (idempotency) → **real import into `bistec_studio_test`** = all rows created with intact revision chains + `currentRevisionNumber` pointers, kit re-linked by name to that DB's own kit id, one campaign link correctly dropped → MinIO upload path smoke-tested via a throwaway bucket (created + uploaded + cleaned up).
+
+### ⚠️ TODO on the OTHER machine (this is the pending work — execute on sight if the bundle folder is present)
+
+The export bundle lives on machine 1 at `C:\Users\DamianDeCruzBISTECCa\Documents\post-export`; Damian is copying it to the other machine (recommended landing spot: `Documents\post-export`, i.e. **outside the repo**). Then, in the project directory on the other machine:
+
+1. `git pull` (brings in the two scripts — done if you're reading this).
+2. Preflight per `docs/cold-start.md` §0 (Docker up, `.env` present, `npm install` current — the import needs `DATABASE_URL` + the MinIO vars and a generated Prisma client; **no migrations required** for this).
+3. Dry-run and review the plan (watch for owner/campaign/kit names that don't resolve):
+   `node --env-file=.env scripts/import-posts.mjs "$env:USERPROFILE\Documents\post-export" --dry-run`
+4. Real import — `--owner` is the fallback for briefs whose original owner username (`adminbtg` for all 6) doesn't exist locally:
+   `node --env-file=.env scripts/import-posts.mjs "$env:USERPROFILE\Documents\post-export" --owner <localUsername>`
+5. Verify: open the library — the 6 imported posts should render, version-switch, and refine normally. Expected counts: 6 briefs / 6 drafts / 16 revisions / 0 posts created (0 posts is correct — nothing was ever published on machine 1).
+
+Notes for the importing session: re-running the import is safe (skips existing); a "brand-kit link dropped" warning is fine (the brief falls back to the normal kit-precedence chain); the bundle folder can be deleted after a successful import.
+
+---
+
+## 2026-07-16 — Scheduler worker runtime-verified live + social publishing setup guide
 
 **Docs-only commit** (no code changes, no migrations). Session was live ops testing on this machine, then documentation.
 
