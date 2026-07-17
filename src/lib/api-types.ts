@@ -186,6 +186,49 @@ export interface ProviderInfo {
   isDefault: boolean
 }
 
+// ── Drafts ───────────────────────────────────────────────────────────────
+
+// In-flight async draft action — mirrors the Prisma DraftAction enum.
+export type DraftAction = 'REGENERATE_COPY' | 'REGENERATE_DESIGN' | 'REFINE'
+
+// GET /api/drafts/[id] — full detail consumed by the draft review page.
+// `pendingAction`/`pendingActionError`/`conflict` drive the async-action poll;
+// `conflict` is derived from the stored pendingConflict and NEVER includes the
+// server-side pendingHtml.
+export interface DraftDetail {
+  id: string
+  briefId: string
+  copyText: string
+  imageUrl: string | null
+  htmlContent: string | null
+  exportUrl: string | null
+  status: 'IN_PROGRESS' | 'EXPORTED' | 'PUBLISHED' | 'FAILED'
+  failureReason: string | null
+  pendingAction: DraftAction | null
+  pendingActionError: string | null
+  conflict: { conflictId: string; explanation: string } | null
+  createdAt: string
+  revisionCount: number
+  currentRevisionNumber: number | null
+  brandKitName: string | null
+  brief: {
+    id: string
+    topic: string
+    goal: string
+    tone: string
+    channels: Channel[]
+    aspectRatio: AspectRatio
+    designMode: DesignMode
+  }
+  posts: Array<{
+    id: string
+    channel: string
+    status: string
+    scheduledAt: string | null
+    publishedAt: string | null
+  }>
+}
+
 // ── Library (drafts + posts) ────────────────────────────────────────────
 
 // PostRecord as embedded in a library draft tile.

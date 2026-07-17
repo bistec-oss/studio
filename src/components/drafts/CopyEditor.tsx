@@ -1,19 +1,22 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Loader2, Check, Sparkles, Undo2 } from 'lucide-react'
+import { Loader2, Check, Sparkles, Undo2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { apiFetch } from '@/lib/apiFetch'
 import { channelLabel, channelCopyLimit } from '@/lib/channels'
 import { useUndoableAction } from '@/lib/hooks/useUndoableAction'
+import type { DraftAction } from '@/lib/api-types'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface CopyEditorDraft {
   id: string
   copyText: string
+  pendingAction: DraftAction | null
+  pendingActionError: string | null
   brief: {
     channels: string[]
   }
@@ -22,6 +25,9 @@ export interface CopyEditorDraft {
 export interface CopyEditorProps {
   draft: CopyEditorDraft
   onSaved: (copyText: string) => void
+  /** Called right after an async action is accepted (202) so the parent can
+   *  refetch the draft and start polling `pendingAction`. */
+  onActionStarted: () => void
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,11 +45,15 @@ function copyLimitFor(channels: string[]): { channel: string; limit: number } {
 
 // ─── Copy editor ────────────────────────────────────────────────────────────
 
-export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
+export function CopyEditor({ draft, onSaved, onActionStarted }: CopyEditorProps) {
   const [value, setValue] = useState(draft.copyText)
   const [saved, setSaved] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
+  // True only while the regenerate POST itself is in flight (202 arrives fast);
+  // the background run is tracked via the polled `draft.pendingAction`.
+  const [firing, setFiring] = useState(false)
+  // Background-failure message surfaced inline next to the Regenerate button.
+  const [regenError, setRegenError] = useState<string | null>(null)
   // Holds the copy that was live before the last regenerate, enabling one-click Undo.
   const undoAction = useUndoableAction<string>(async (previousCopy) => {
     await apiFetch(`/api/drafts/${draft.id}`, {
@@ -60,6 +70,26 @@ export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
     setValue(draft.copyText)
     setSaved(true)
   }, [draft.copyText])
+
+  // A regenerate is running in the background; the new copy arrives via the
+  // parent's poll (the effect above syncs it into the textarea).
+  const copyActionPending = draft.pendingAction === 'REGENERATE_COPY'
+  // Any in-flight action (incl. design/refine) blocks firing a new one — the
+  // server would 409 anyway.
+  const anyActionPending = draft.pendingAction !== null
+
+  // Detect the REGENERATE_COPY → null transition: on background failure show
+  // the error inline and drop the (now pointless) undo snapshot.
+  const prevActionRef = useRef<DraftAction | null>(draft.pendingAction)
+  const undoClear = undoAction.clear
+  useEffect(() => {
+    const prev = prevActionRef.current
+    prevActionRef.current = draft.pendingAction
+    if (prev === 'REGENERATE_COPY' && draft.pendingAction === null && draft.pendingActionError) {
+      setRegenError(draft.pendingActionError)
+      undoClear()
+    }
+  }, [draft.pendingAction, draft.pendingActionError, undoClear])
 
   const { channel, limit } = copyLimitFor(draft.brief.channels)
   const over = value.length > limit
@@ -86,23 +116,23 @@ export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
   }
 
   async function regenerate() {
-    setRegenerating(true)
+    setFiring(true)
+    setRegenError(null)
+    // The action runs in the background (202, no payload) — capture the Undo
+    // target BEFORE firing; the regenerated copy arrives via the parent's poll.
+    undoAction.capture(draft.copyText)
     try {
-      const data = await apiFetch<{ copyText: string; previousCopyText: string }>(
-        `/api/drafts/${draft.id}/regenerate-copy`,
-        { method: 'POST' }
-      )
-      undoAction.capture(data.previousCopyText)
-      setValue(data.copyText)
-      setSaved(true)
-      onSaved(data.copyText)
+      await apiFetch(`/api/drafts/${draft.id}/regenerate-copy`, { method: 'POST' })
+      // Refetch immediately so the parent picks up pendingAction and polls.
+      onActionStarted()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to regenerate copy')
     } finally {
-      setRegenerating(false)
+      setFiring(false)
     }
   }
 
+  const regenerating = firing || copyActionPending
   const busy = regenerating || undoAction.undoing
 
   return (
@@ -113,7 +143,11 @@ export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
         </h3>
         <div className="flex items-center gap-2">
           <span className="text-xs flex items-center gap-1.5">
-            {saving ? (
+            {copyActionPending ? (
+              <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" /> Regenerating…
+              </span>
+            ) : saving ? (
               <span className="text-light-text-muted dark:text-dark-text-muted flex items-center gap-1">
                 <Loader2 size={12} className="animate-spin" /> Saving…
               </span>
@@ -126,15 +160,27 @@ export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
             )}
           </span>
           {undoAction.snapshot !== null && (
-            <Button variant="ghost" size="sm" onClick={undoAction.undo} disabled={busy} title="Restore the previous copy">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={undoAction.undo}
+              disabled={busy || anyActionPending}
+              title="Restore the previous copy"
+            >
               {undoAction.undoing ? <Loader2 size={12} className="animate-spin" /> : <Undo2 size={12} />} Undo
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={regenerate} disabled={busy}>
+          <Button variant="secondary" size="sm" onClick={regenerate} disabled={busy || anyActionPending}>
             {regenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Regenerate
           </Button>
         </div>
       </div>
+      {regenError && (
+        <p className="mb-2 text-xs text-red-500 flex items-start gap-1.5">
+          <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+          <span className="line-clamp-3">{regenError}</span>
+        </p>
+      )}
       <textarea
         value={value}
         onChange={(e) => {
@@ -144,7 +190,9 @@ export function CopyEditor({ draft, onSaved }: CopyEditorProps) {
         onBlur={save}
         disabled={busy}
         rows={8}
-        className="glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-y leading-relaxed disabled:opacity-60"
+        className={`glass-input rounded-xl px-3 py-2.5 text-sm w-full text-light-text dark:text-dark-text resize-y leading-relaxed disabled:opacity-60 ${
+          copyActionPending ? 'animate-pulse' : ''
+        }`}
         placeholder="Post copy…"
       />
       <div className="flex justify-end mt-1.5">

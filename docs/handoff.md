@@ -1,13 +1,67 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-17 (latest: cross-machine post transfer scripts + pending import on the other machine)
+**Date:** 2026-07-17 (latest: async draft actions + logo hygiene + brand-kit chat documents, all live-verified)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
-**Specclaw change:** `brief-draft-recovery` (previous: `marketing-post-studio-v1`)
+**Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
 
 ---
 
-## 2026-07-17 (latest) — Cross-machine post transfer scripts + ⚠️ PENDING IMPORT on the second machine
+## 2026-07-17 (latest) — Async draft actions (202+poll) + brand-kit logo URL hygiene
+
+**Specclaw change `async-draft-actions`** (spec/design/tasks in `.specclaw/changes/async-draft-actions/`). Two coupled improvements from one incident: a regenerate-design against the Hearts Academy kit timed out at 300s (CLI mode) because its **136,050-char base64 `logoUrl`** entered the design prompt **twice** — via `buildBrandKitSystemContext` AND the `feedToAI` artifact URL list in `pathB.ts` — producing a 277k-char prompt. Part B stops base64 ever reaching prompts again; Part A converts the three synchronous draft actions to the F1 async pattern so long-running actions survive tab switches and can't interleave.
+
+### Part A — async draft actions (regenerate-design / regenerate-copy / refine)
+
+- **Contract:** each route keeps ALL validation synchronous (auth/ownership 404/403, `NOT_PATH_B`, `instruction is required`, `NO_BRAND_KIT`, kit resolution), then **atomically claims** the new `Draft.pendingAction` (`REGENERATE_COPY | REGENERATE_DESIGN | REFINE` — conditional `updateMany` where `pendingAction IS NULL`, no read-then-write race) and returns **202 `{ ok: true }`**, running the model work in-process fire-and-forget (mirrors `startBackgroundGeneration`, per-user Claude auth resolved up front). Lifecycle lives in **`src/lib/drafts/draftActions.ts`** (claim / start / release). A second action while one is in flight → **409**; `Draft.status` is never touched (an EXPORTED draft stays EXPORTED — the old regenerate-copy IN_PROGRESS flip is gone, and regenerate-copy now 409s on non-EXPORTED/PUBLISHED drafts).
+- **Poll surface:** `GET /api/drafts/[id]` returns `pendingAction`, `pendingActionError`, and `conflict` (`{ conflictId, explanation }` derived from `pendingConflict` — never `pendingHtml`). Failure writes the message to `pendingActionError` and clears `pendingAction`, leaving previous content intact; success clears both. **15-min stale sweep** (same `recoverIfStuck` site + bound as F1) recovers server-restart orphans with an interruption message. `POST …/revisions/[rev]/restore` → **409** while an action is pending. **Override stays synchronous** (commits stored HTML, no model call — unchanged `{ reply, revisionId, exportUrl }` response).
+- **Client UX:** the draft page poll (4s) now also runs while `pendingAction` is set. Regenerate-copy disables the copy area with current text visible; regenerate-design/refine keep the image with a translucent overlay + spinner (NOT the generation skeleton). Undo snapshots (`previousCopyText`, `previousRevisionNumber`) are **captured client-side before firing** (the 202 body can't carry them); `CopyEditor`/`RefinementPanel` take an `onActionStarted` callback so the page can snapshot + start polling immediately; `RefinementPanel` resolves its pending chat message from polled props (applied via a revision-baseline ref / conflict card / inline error). Failure re-enables the buttons — no server-side retry route; the user re-triggers.
+- **⚠️ Breaking (in-repo only):** the three action POSTs no longer return the old sync payloads (`{ copyText, previousCopyText }` / `{ revisionId, exportUrl, … }`) — every caller lives in this repo and was updated in the same change. Scheduler/MCP/ACP never call these routes (untouched, still synchronous internally).
+
+### Part B — brand-kit logo URL hygiene
+
+- **Prompt guards (defense in depth):** `buildBrandKitSystemContext` renders `Logo URL: none (embedded logo omitted)` for a `data:` logoUrl; `pathB.ts` filters `data:` URLs out of the reference-artifact list. **`PROMPT_VERSION` → `2026-07-17.1`.**
+- **Write-surface validation:** `POST/PATCH /api/admin/brandkits(/[id])` reject a non-`http(s)://` `logoUrl` with 400 (clearing with `null` still allowed); MCP `create_brand_kit` throws the same check as a tool error.
+- **Seed fix:** `scripts/seed-hearts-talk.mjs` uploads its logo assets to the brand-kits bucket (stable public URL) instead of embedding data-URIs (the presigned-URL rationale died with H10).
+- **New `scripts/fix-data-uri-logos.mjs`:** finds every `BrandKit.logoUrl` / `BrandKitArtifact.url` holding a `data:` URI, uploads the decoded bytes to the brand-kits bucket, rewrites the row. Idempotent, `--dry-run` supported, exits non-zero if any row was unparsable/skipped.
+- **Data fix APPLIED on this machine** (not a commit): Hearts Academy kit `logoUrl` → `http://localhost:9000/brand-kits/cmqroh4po00008xc8tcntem58/hearts-academy-logo-transparent.png` (background made transparent via edge-connected removal — the white knot inside the heart mark preserved); the mislabeled 136k data-URI "BISTEC Global" LOGO artifact was replaced by **"BISTEC Hearts Academy"** (`feedToAI: true`, same URL). `fix-data-uri-logos.mjs` confirms **0 data-URIs remain locally**.
+
+### Tests + gates
+
+- **New §Q E2E suite** (`tests/e2e/async-actions.test.ts`, 9 cases, AC-1..AC-7) + `waitForAction` helper in `tests/helpers/api.ts`; `agui-refinement.test.ts` rewritten to the async contract; TC-BK-09 logo-validation cases added.
+- **TC-REG-H7a rewritten** (`tests/e2e/regression.test.ts`): the old case fired 10 PARALLEL refines expecting 10 sequential revisions — under single-flight, 9 of those now 409 **by design**. The H7 guarantee it guards (unique, contiguous revision numbers, no 500s) is preserved via 10 SEQUENTIAL refines (each 202 → `waitForAction`) asserting contiguous 2..11, plus a parallel-fire phase asserting **exactly one 202, nine 409s**, exactly one revision appended, numbering still contiguous. Catalog entry updated in `docs/e2e-test-plan.md`.
+- Also fixed at finalize: 3 pre-existing lint errors in `scripts/export-posts.mjs` (unused destructured rest-siblings from the 2026-07-17 transfer-scripts commit → `_`-prefixed), and `.env.test` had lost `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (re-added, mirroring `.github/workflows/e2e.yml`, so the 3 §J ACP-auth cases run locally again).
+- **Gates:** tsc clean; lint **0 errors** (7 pre-existing warnings); **174/174 unit**; full mock **E2E 145 passed / 4 skipped / 0 failed** (baseline 135/4 + §Q 9 + TC-BK-09; the 4 skips are the intentional TC-GEN-05 + TC-REG-H11a/b/c); production build green (`.next` deleted afterward — stale-`.next` footgun).
+
+### Same-day addition — brand-kit assistant source documents (campaign-style)
+
+The brand-kit assistant chat previously had NO upload affordance (its empty state pointed at the separate Artifacts section). It now works like the campaign briefing chat:
+
+- **New `BrandKitDocument` model** (migration `20260717114732_brandkit_documents`, field-for-field mirror of `CampaignDocument`) + admin routes `GET/POST /api/admin/brandkits/[id]/documents` and `DELETE …/[docId]`: 5-doc/kit cap, images (PNG/JPG — SVG rejected) + PDF/DOCX/TXT/MD, same size/MIME validation, text parsed once at upload, stored in the **private docs bucket** under `brandkits/<kitId>/…`, manual delete only (persist until trashed — deliberately the campaign lifecycle, per user decision, NOT the brief-draft auto-discard one).
+- **Documents are NOT artifacts** — they never appear in the Artifacts panel and never enter generation prompts (`pathB` still reads only `feedToAI` artifacts). Extraction references stay out of designs; only what the admin Applies (voice/colors) persists on the kit.
+- **Grounding** (`collectBrandKitGrounding` in `src/lib/brandkit/assistant.ts`): documents ∪ feedToAI artifacts every message — document images FIRST under the 6-image cap (deduped), one image list feeds both `runVisionModel` and `samplePalette`; doc texts join REFERENCE_DOC artifact texts under the shared 50k context cap. The canned "no references" reply fires only when both are empty.
+- **UI:** `BrandKitAssistantPanel` gains the "Source documents & images (N/5)" block (Paperclip add / Trash2 delete), mirroring `BriefingAssistantPanel`.
+- Gates at commit: tsc clean, eslint 0 errors, **180/180 unit** (6 new); targeted E2E rerun of `brandkit-assistant` + `brand-kit` suites: **14/14** against a fresh test DB with the new migration.
+
+### Same-day data work — Hearts Academy kit rebrand (this machine, not commits)
+
+- **Voice prompt v2** (v1 preserved inactive): derived from the "Launching Bistec Studio" launch-post style — voice/platform/design-style rules plus a **BRANDING/LOGOS section**: every post carries BOTH logos, default lockup = white rounded bar at top, BISTEC Global LEFT / Hearts Academy RIGHT, colour variants on light surfaces, reversed-white BISTEC on dark.
+- **Three feedToAI LOGO artifacts with self-describing filenames** (the pathB prompt passes bare URLs, so the filename is the model's only clue): `hearts-academy-logo-transparent.png` (also `kit.logoUrl`), `bistec-global-logo-colour.png`, `bistec-global-logo-reversed-white.png` (copied under the Hearts kit's own bucket prefix).
+- Kit colors/fonts left unchanged (already match: navy/cyan/green palette, Poppins + JetBrains Mono).
+
+### ✅ Live verification (same day — real dev server, CLI-mode Claude, no mocks)
+
+- **Brief-draft autosave/recovery (F-brief-draft-recovery), full lifecycle in a real browser:** typed a brief mid-wizard → 1.5s-debounced autosave created the `BriefDraft` row → dashboard showed the leading "Unfinished" row → **Resume rehydrated everything** (step position, IRP campaign, Hearts Academy kit via campaign default, SQUARE, Path B, topic, prompt) → Discard (confirm dialog) deleted the row. One test-tooling caveat worth remembering: DevTools-protocol `fill` sets a textarea's DOM value WITHOUT firing React `onChange`, so autosave (correctly) didn't capture it — real keystrokes flushed the full value; app behavior is correct.
+- **Async regenerate-copy, live:** UI click → 202 → observed `pendingAction=REGENERATE_COPY` via the poll → cleared in ~6s (haiku) → new copy (visibly in the new Hearts Academy voice) landed via the 4s poll → **Undo** appeared (client-side pre-fire snapshot) and restored the previous copy.
+- **Async refine, live:** proven by real usage — six refine revisions (v2–v6 + adjustments) ran through the 202+poll pipeline on the branch prod build the same afternoon, including instructions exercising the dual-logo lockup.
+- **Brand-kit documents, live:** upload (201) → list → **real assistant chat call quoted a marker string from the uploaded doc** (grounding confirmed; the reply also described the logo artifacts — union working) → delete (200) → list empty.
+- **Logo-hygiene effect, live:** background-decision prompt 5,103 chars and design prompt 5,818 chars on the Hearts kit (vs 141k/277k during the incident); regenerate-design completed in 41s vs the 300s timeout.
+
+**⚠️ Deploy:** `npx prisma migrate deploy` (**2 new migrations**: `20260717085058_draft_pending_action`, `20260717114732_brandkit_documents` — nullable columns / new table, no backfill); no new env vars. **Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real. (The Hearts Academy voice-prompt/logo-artifact rebrand above is also machine-local data — recreate via the admin UI there if wanted.)
+
+---
+
+## 2026-07-17 — Cross-machine post transfer scripts + ✅ import completed on machine 2
 
 **Scripts-only commit** (no app code changes, no migrations, no new env vars). Context: the two dev machines have independent Postgres/MinIO instances; Damian wants the library posts made on machine 1 (`DamianDeCruzBISTECCa`) merged **on top of** the other machine's existing data — not a clone/overwrite.
 
@@ -18,7 +72,11 @@
 
 **Verified 2026-07-17 on machine 1:** real export (6 drafts / 6 briefs / 16 revisions / 0 posts / 31 objects, 60 MB, none missing) → dry-run vs same DB = all "already present" (idempotency) → **real import into `bistec_studio_test`** = all rows created with intact revision chains + `currentRevisionNumber` pointers, kit re-linked by name to that DB's own kit id, one campaign link correctly dropped → MinIO upload path smoke-tested via a throwaway bucket (created + uploaded + cleaned up).
 
-### ⚠️ TODO on the OTHER machine (this is the pending work — execute on sight if the bundle folder is present)
+### ✅ DONE — import executed on machine 2, 2026-07-17
+
+Ran the same day on machine 2 (bundle landed in `Downloads\post-export`, not the recommended Documents spot). Sequence: Docker up → dry-run (clean plan, no missing owners — `adminbtg` exists locally, so no `--owner` flag) → real import → second dry-run showed everything "already present" (idempotency confirmed). Results matched the expected counts exactly: **6 briefs / 6 drafts / 16 revisions / 0 posts created, 31 objects uploaded**. The predicted link drops occurred: 1 campaign + 1 brand-kit link dropped by name-match (the "AI : a new Era" brief falls back to kit precedence). DB spot-check: all 6 drafts EXPORTED with an `exportUrl`, revision chains intact, `currentRevisionNumber` pointers valid — the two zero-revision drafts (`Data Engineering Promotion`, `AI : a new Era`) are legacy pre-F2 rows where a null pointer means "latest revision" by design. Bundle folder can be deleted. The original TODO steps are kept below for reference.
+
+### Original TODO (executed above)
 
 The export bundle lives on machine 1 at `C:\Users\DamianDeCruzBISTECCa\Documents\post-export`; Damian is copying it to the other machine (recommended landing spot: `Documents\post-export`, i.e. **outside the repo**). Then, in the project directory on the other machine:
 
@@ -402,7 +460,7 @@ MOCK_SOCIAL=true
 - **Brief wizard reordered** to `Campaign → Platform & Design → Content → Images → Review`: the kit defaults from the campaign/project assignment (campaign/project tier only — a bare system default leaves it empty so the user picks), and the template + style-reference pickers filter to the selected kit on both paths.
 - **Deploy:** run `npx prisma migrate deploy` to apply the new migration, then restart the dev server (regenerated Prisma client).
 
-**Draft regeneration (copy + design) — 2026-06-24 (on `main`):** The draft page now offers independent **Regenerate** + one-click **Undo** for both copy and design.
+**Draft regeneration (copy + design) — 2026-06-24 (on `main`):** The draft page now offers independent **Regenerate** + one-click **Undo** for both copy and design. **⚠️ Superseded 2026-07-17 (`async-draft-actions`):** both routes (and refine) are now async — 202 `{ok:true}` + `pendingAction` poll, no sync payloads, no `EXPORTED→IN_PROGRESS` flip, undo snapshots captured client-side. The description below is historical.
 
 - `POST /api/drafts/[id]/regenerate-copy` (new) — re-runs the resolved copy provider against the brief, persists the new copy, and returns `{ copyText, previousCopyText }` for an immediate Undo. Design is untouched; an `EXPORTED` draft flips to `IN_PROGRESS` (a copy change invalidates the prior export, mirroring the PATCH route). Works for both paths.
 - `POST /api/drafts/[id]/regenerate-design` (new) — **Path B only** (returns `400 NOT_PATH_B` for a TEMPLATE draft). Runs the new design first (draft untouched on failure), then snapshots the _current_ design as a `DraftRevision` (`instruction: "Design before regenerate"`) before pointing the draft at the new one — atomic, with the standard P2002 revision-number retry. Returns `{ exportUrl (signed), previousRevisionNumber }`; the snapshot is the Undo target and also shows in revision history.

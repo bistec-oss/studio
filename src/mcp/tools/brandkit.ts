@@ -6,6 +6,11 @@ export async function createBrandKit(args: {
   fonts?: Array<{ name: string; url: string }>
   logoUrl?: string
 }) {
+  // data: URIs in logoUrl blow up AI prompt sizes (136k-char incident 2026-07-17);
+  // only http(s) URLs (or no logo) are storable.
+  if (args.logoUrl !== undefined && !/^https?:\/\//.test(args.logoUrl)) {
+    throw new Error('logoUrl must be an http(s) URL')
+  }
   const kit = await prisma.brandKit.create({
     data: {
       name: args.name,

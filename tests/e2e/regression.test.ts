@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, waitForAction, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -40,22 +40,30 @@ test.describe('§K — H7 atomicity', () => {
   })
   test.afterEach(async () => { await api.dispose() })
 
-  // TC-REG-H7a — Concurrent refines yield distinct, contiguous revision numbers.
-  test('10 concurrent refines produce distinct sequential revision numbers', async () => {
+  // TC-REG-H7a — Refine revision atomicity under the async single-flight contract.
+  // Rewritten for async-draft-actions: refine now atomically claims
+  // Draft.pendingAction and returns 202 {ok:true}; a concurrent refine 409s
+  // instead of interleaving. The H7 guarantee this case guards is UNCHANGED —
+  // revision numbers stay unique and contiguous with no 500s — but the
+  // mechanism moved from "@@unique + $transaction retry under contention" to
+  // "single-flight claim, so contention never reaches the transaction".
+  // Two phases: (1) 10 SEQUENTIAL refines (each 202 → waitForAction) append
+  // contiguous revisions 2..11; (2) 10 PARALLEL refines admit exactly ONE 202
+  // (the rest 409) and land exactly one more revision.
+  test('10 refines produce distinct sequential revision numbers (single-flight)', async () => {
     if (!MOCKED()) { test.skip(); return }
     const draftId = await createExportedDraft(api, `H7a-${Date.now()}`)
 
     // Generation records an initial v1 "Original design" revision (F2), so the
-    // baseline is 1; N concurrent refines must append N distinct, contiguous ones.
+    // baseline is 1; N sequential refines must append N distinct, contiguous ones.
     const baseline = ((await (await api.get(`/api/drafts/${draftId}/revisions`)).json()) as unknown[]).length
     const N = 10
-    const results = await Promise.all(
-      Array.from({ length: N }, (_, i) =>
-        api.post(`/api/drafts/${draftId}/refine`, { instruction: `concurrent edit ${i}` }),
-      ),
-    )
-    // No 500s — the @@unique + $transaction retry holds under contention.
-    for (const r of results) expect(r.status()).toBeLessThan(500)
+    for (let i = 0; i < N; i++) {
+      const res = await api.post(`/api/drafts/${draftId}/refine`, { instruction: `sequential edit ${i}` })
+      expect(res.status()).toBe(202)
+      const done = await waitForAction(api, draftId)
+      expect(done.pendingActionError).toBeNull()
+    }
 
     const revisions = await (await api.get(`/api/drafts/${draftId}/revisions`)).json()
     const numbers = revisions.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
@@ -63,6 +71,25 @@ test.describe('§K — H7 atomicity', () => {
     expect(numbers.length).toBe(total)
     expect(new Set(numbers).size).toBe(total) // all distinct
     numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1)) // contiguous 1..total
+
+    // Parallel fire: the atomic pendingAction claim admits exactly one runner;
+    // the losers 409 (never 500) and no partial revisions are written.
+    const results = await Promise.all(
+      Array.from({ length: N }, (_, i) =>
+        api.post(`/api/drafts/${draftId}/refine`, { instruction: `parallel edit ${i}` }),
+      ),
+    )
+    const statuses = results.map((r) => r.status())
+    expect(statuses.filter((s) => s === 202).length).toBe(1)
+    expect(statuses.filter((s) => s === 409).length).toBe(N - 1)
+
+    const settled = await waitForAction(api, draftId)
+    expect(settled.pendingActionError).toBeNull()
+    const after = await (await api.get(`/api/drafts/${draftId}/revisions`)).json()
+    const afterNumbers = after.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
+    expect(afterNumbers.length).toBe(total + 1) // exactly one winner appended
+    expect(new Set(afterNumbers).size).toBe(total + 1)
+    afterNumbers.forEach((n: number, i: number) => expect(n).toBe(i + 1)) // still contiguous
   })
 
   // TC-REG-H7b — Concurrent prompt version saves: distinct versions, ≤1 conflict, no 500.

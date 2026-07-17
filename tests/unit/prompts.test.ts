@@ -42,6 +42,34 @@ describe('buildPathBSystemPrompt', () => {
     expect(prompt).toContain('1080×1350')
   })
 
+  it('filters data: URIs out of the brand reference image list', () => {
+    const prompt = buildPathBSystemPrompt({
+      kit,
+      mode: 'cli',
+      width: 1080,
+      height: 1080,
+      artifactUrls: [
+        'https://cdn.example.com/ref-1.png',
+        `data:image/png;base64,${'A'.repeat(1000)}`,
+        'https://cdn.example.com/ref-2.png',
+      ],
+    })
+    expect(prompt).toContain('Brand reference images: https://cdn.example.com/ref-1.png, https://cdn.example.com/ref-2.png')
+    expect(prompt).not.toContain('data:')
+  })
+
+  it('omits the reference-image line entirely when only data: URIs remain', () => {
+    const prompt = buildPathBSystemPrompt({
+      kit,
+      mode: 'cli',
+      width: 1080,
+      height: 1080,
+      artifactUrls: ['data:image/png;base64,AAAA'],
+    })
+    expect(prompt).not.toContain('Brand reference images')
+    expect(prompt).not.toContain('data:')
+  })
+
   it('includes the style-reference template line only when provided', () => {
     const withRef = buildPathBSystemPrompt({
       kit,

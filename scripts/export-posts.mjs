@@ -136,7 +136,7 @@ async function main() {
 
   const rows = {
     briefs: [...briefs.values()],
-    drafts: drafts.map(({ brief, revisions, posts, ...d }) => d),
+    drafts: drafts.map(({ brief: _brief, revisions: _revisions, posts: _posts, ...d }) => d),
     revisions: drafts.flatMap((d) => d.revisions),
     posts: drafts.flatMap((d) => d.posts),
   }

@@ -23,7 +23,7 @@ const patchSchema = z.object({
   name: z.string().trim().optional(),
   colors: z.array(z.string()).optional(),
   fonts: z.array(z.object({ name: z.string(), url: z.string() })).optional(),
-  logoUrl: z.string().nullable().optional(),
+  logoUrl: z.string().regex(/^https?:\/\//, 'logoUrl must be an http(s) URL').nullable().optional(),
   isDefault: z.boolean().optional(),
 })
 

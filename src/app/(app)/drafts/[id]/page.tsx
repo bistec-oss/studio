@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -25,43 +25,11 @@ import { RefinementPanel } from '@/components/drafts/RefinementPanel'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { useUndoableAction } from '@/lib/hooks/useUndoableAction'
-import type { AspectRatio } from '@prisma/client'
+import type { DraftAction, DraftDetail } from '@/lib/api-types'
 import { aspectClassFor } from '@/lib/aspectRatio'
 import { formatDateTime } from '@/lib/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-
-interface DraftPost {
-  id: string
-  channel: string
-  status: string
-  scheduledAt: string | null
-  publishedAt: string | null
-}
-
-interface DraftDetail {
-  id: string
-  briefId: string
-  copyText: string
-  htmlContent: string | null
-  exportUrl: string | null
-  status: 'IN_PROGRESS' | 'EXPORTED' | 'PUBLISHED' | 'FAILED'
-  failureReason: string | null
-  createdAt: string
-  revisionCount: number
-  currentRevisionNumber: number | null
-  brandKitName: string | null
-  brief: {
-    id: string
-    topic: string
-    goal: string
-    tone: string
-    channels: string[]
-    aspectRatio: AspectRatio
-    designMode: string
-  }
-  posts: DraftPost[]
-}
 
 interface Revision {
   id: string
@@ -125,13 +93,25 @@ export default function DraftDetailPage() {
     fetchRevisions()
   }, [fetchDraft, fetchRevisions])
 
-  // Poll while a draft is still generating so the preview updates without a
+  // Poll while a draft is still generating — or while an async action
+  // (regenerate/refine) is running — so the preview updates without a
   // manual refresh.
   useEffect(() => {
-    if (draft?.status !== 'IN_PROGRESS') return
+    if (draft?.status !== 'IN_PROGRESS' && draft?.pendingAction == null) return
     const timer = setInterval(fetchDraft, 4000)
     return () => clearInterval(timer)
-  }, [draft?.status, fetchDraft])
+  }, [draft?.status, draft?.pendingAction, fetchDraft])
+
+  // When a background action completes (pendingAction non-null → null) it may
+  // have created a new revision — refresh the revision list.
+  const prevPendingActionRef = useRef<DraftAction | null>(null)
+  useEffect(() => {
+    const prev = prevPendingActionRef.current
+    prevPendingActionRef.current = draft?.pendingAction ?? null
+    if (prev != null && draft?.pendingAction == null) {
+      fetchRevisions()
+    }
+  }, [draft?.pendingAction, fetchRevisions])
 
   function refreshAfterChange() {
     fetchDraft()
@@ -180,19 +160,20 @@ export default function DraftDetailPage() {
   }
 
   async function handleRegenerateDesign() {
+    if (!draft) return
     setRegenDesign(true)
+    // The action runs in the background (202, no payload) — capture the Undo
+    // target (the revision we're on right now) BEFORE firing. Legacy drafts
+    // without a revision pointer have nothing to undo to.
+    if (draft.currentRevisionNumber != null) {
+      designUndo.capture(draft.currentRevisionNumber)
+    } else {
+      designUndo.clear()
+    }
     try {
-      const data = await apiFetch<{ exportUrl: string | null; previousRevisionNumber: number | null }>(
-        `/api/drafts/${draftId}/regenerate-design`,
-        { method: 'POST' }
-      )
-      // The prior design is snapshotted as a revision — offer it as a one-click Undo.
-      if (data.previousRevisionNumber === null) {
-        designUndo.clear()
-      } else {
-        designUndo.capture(data.previousRevisionNumber)
-      }
-      refreshAfterChange()
+      await apiFetch(`/api/drafts/${draftId}/regenerate-design`, { method: 'POST' })
+      // Refetch immediately to pick up pendingAction; the poll takes over.
+      await fetchDraft()
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Failed to regenerate design')
     } finally {
@@ -202,6 +183,10 @@ export default function DraftDetailPage() {
 
   const isPathB = draft?.brief.designMode === 'GENERATE'
   const isGenerating = draft?.status === 'IN_PROGRESS'
+  // An async action (regenerate/refine) is running in the background.
+  const actionPending = draft?.pendingAction != null
+  const designActionPending =
+    draft?.pendingAction === 'REGENERATE_DESIGN' || draft?.pendingAction === 'REFINE'
   const isFailed = draft?.status === 'FAILED'
   // Copy resolves independently of the image: show it the moment it's written,
   // even while the design is still rendering.
@@ -271,10 +256,20 @@ export default function DraftDetailPage() {
               </p>
             </GlassPanel>
           ) : (
-            <CopyEditor draft={draft} onSaved={() => fetchDraft()} />
+            <CopyEditor draft={draft} onSaved={() => fetchDraft()} onActionStarted={fetchDraft} />
           )}
           {/* Refinement only makes sense once there's a rendered design to refine. */}
-          {ready && <RefinementPanel draftId={draftId} onRefined={refreshAfterChange} />}
+          {ready && (
+            <RefinementPanel
+              draftId={draftId}
+              pendingAction={draft.pendingAction}
+              pendingActionError={draft.pendingActionError}
+              conflict={draft.conflict}
+              currentRevisionNumber={draft.currentRevisionNumber}
+              onActionStarted={fetchDraft}
+              onRefined={refreshAfterChange}
+            />
+          )}
         </div>
 
         {/* Right column */}
@@ -335,7 +330,31 @@ export default function DraftDetailPage() {
                   </span>
                 </div>
               )}
+              {/* In-progress overlay for background design actions — the current
+                  image stays visible underneath (NOT the generation skeleton). */}
+              {designActionPending && (
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/45 backdrop-blur-sm"
+                  aria-label={draft.pendingAction === 'REFINE' ? 'Refining design' : 'Regenerating design'}
+                  role="status"
+                >
+                  <Loader2 size={28} className="animate-spin text-white/90" />
+                  <span className="text-xs font-medium text-white/90">
+                    {draft.pendingAction === 'REFINE' ? 'Refining design…' : 'Regenerating design…'}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* A background action failed — surface the error inline; the
+                buttons below are re-enabled so the user can simply re-trigger
+                (which clears this message). */}
+            {draft.pendingActionError && !actionPending && (
+              <p className="mt-3 text-xs text-red-500 flex items-start gap-1.5">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                <span className="line-clamp-3">{draft.pendingActionError}</span>
+              </p>
+            )}
 
             {/* Export / publish bar */}
             <div className="flex gap-2 mt-3">
@@ -344,7 +363,7 @@ export default function DraftDetailPage() {
                 size="sm"
                 className="flex-1"
                 onClick={handleExport}
-                disabled={exporting || !draft.htmlContent}
+                disabled={exporting || !draft.htmlContent || actionPending}
               >
                 {exporting ? (
                   <Loader2 size={13} className="animate-spin" />
@@ -358,7 +377,7 @@ export default function DraftDetailPage() {
                   variant="primary"
                   size="sm"
                   className="flex-1"
-                  disabled={!draft.exportUrl}
+                  disabled={!draft.exportUrl || actionPending}
                   onClick={() => setShowPublish(true)}
                 >
                   Publish
@@ -375,10 +394,14 @@ export default function DraftDetailPage() {
                   size="sm"
                   className="flex-1"
                   onClick={handleRegenerateDesign}
-                  disabled={regenDesign || designUndo.undoing || !draft.htmlContent}
+                  disabled={regenDesign || designUndo.undoing || !draft.htmlContent || actionPending}
                   title="Generate a brand-new design from the same brief"
                 >
-                  {regenDesign ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                  {regenDesign || draft.pendingAction === 'REGENERATE_DESIGN' ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={13} />
+                  )}
                   Regenerate design
                 </Button>
                 {designUndo.snapshot !== null && (
@@ -386,7 +409,7 @@ export default function DraftDetailPage() {
                     variant="ghost"
                     size="sm"
                     onClick={designUndo.undo}
-                    disabled={regenDesign || designUndo.undoing}
+                    disabled={regenDesign || designUndo.undoing || actionPending}
                     title="Go back to the previous design"
                   >
                     {designUndo.undoing ? <Loader2 size={13} className="animate-spin" /> : <Undo2 size={13} />}
@@ -443,7 +466,7 @@ export default function DraftDetailPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => handleRestore(r.revisionNumber)}
-                        disabled={restoringRev !== null}
+                        disabled={restoringRev !== null || actionPending}
                         className="flex-shrink-0"
                         title={`Switch to v${r.revisionNumber}`}
                       >
