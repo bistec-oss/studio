@@ -22,6 +22,19 @@ export const POST = withAuth<Params>(async (_req, { params }, user) => {
   const forbidden = forbiddenIfNotOwner(user, ownerId)
   if (forbidden) return forbidden
 
+  // A running async action (regenerate/refine) will move the revision pointer
+  // itself — restoring concurrently would race it.
+  const draftState = await prisma.draft.findUnique({
+    where: { id: params.id },
+    select: { pendingAction: true },
+  })
+  if (draftState?.pendingAction) {
+    return NextResponse.json(
+      { error: 'Another action is already running on this draft' },
+      { status: 409 },
+    )
+  }
+
   const revision = await prisma.draftRevision.findFirst({
     where: { draftId: params.id, revisionNumber },
   })

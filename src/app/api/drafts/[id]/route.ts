@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
@@ -17,27 +18,60 @@ const STUCK_GENERATION_MS = 15 * 60_000
 
 const STUCK_REASON = 'Generation was interrupted. Please retry.'
 
-// Returns the EFFECTIVE status/reason after a possible sweep, so the response
-// reflects the recovery immediately (no extra round-trip).
+const STUCK_ACTION_REASON = 'The action was interrupted. Please try again.'
+
+// Returns the EFFECTIVE status/reason (and pending-action fields) after a
+// possible sweep, so the response reflects the recovery immediately (no extra
+// round-trip). Two independent lazy sweeps share the 15-min bound: a draft
+// stranded IN_PROGRESS by an interrupted generation → FAILED, and a stale
+// in-flight async action (regenerate/refine) → cleared with an interruption
+// message. The action sweep never touches draft content or status.
 async function recoverIfStuck(
   id: string,
   status: string,
   failureReason: string | null,
+  pendingAction: DraftAction | null,
+  pendingActionError: string | null,
   updatedAt: Date,
-): Promise<{ status: string; failureReason: string | null }> {
-  if (status !== 'IN_PROGRESS' || Date.now() - updatedAt.getTime() < STUCK_GENERATION_MS) {
-    return { status, failureReason }
+): Promise<{
+  status: string
+  failureReason: string | null
+  pendingAction: DraftAction | null
+  pendingActionError: string | null
+}> {
+  const stale = Date.now() - updatedAt.getTime() >= STUCK_GENERATION_MS
+  const effective = { status, failureReason, pendingAction, pendingActionError }
+
+  if (status === 'IN_PROGRESS' && stale) {
+    await prisma.draft
+      .updateMany({
+        // Guard on status so we never clobber a run that finished between read and write.
+        where: { id, status: 'IN_PROGRESS' },
+        data: { status: 'FAILED', failureReason: STUCK_REASON },
+      })
+      .catch(() => {
+        /* best-effort recovery */
+      })
+    effective.status = 'FAILED'
+    effective.failureReason = STUCK_REASON
   }
-  await prisma.draft
-    .updateMany({
-      // Guard on status so we never clobber a run that finished between read and write.
-      where: { id, status: 'IN_PROGRESS' },
-      data: { status: 'FAILED', failureReason: STUCK_REASON },
-    })
-    .catch(() => {
-      /* best-effort recovery */
-    })
-  return { status: 'FAILED', failureReason: STUCK_REASON }
+
+  if (pendingAction !== null && stale) {
+    await prisma.draft
+      .updateMany({
+        // Guard on the observed action so we never clobber one that finished
+        // (or a new one that started) between read and write.
+        where: { id, pendingAction },
+        data: { pendingAction: null, pendingActionError: STUCK_ACTION_REASON },
+      })
+      .catch(() => {
+        /* best-effort recovery */
+      })
+    effective.pendingAction = null
+    effective.pendingActionError = STUCK_ACTION_REASON
+  }
+
+  return effective
 }
 
 async function loadDraft(id: string) {
@@ -60,9 +94,25 @@ async function loadDraft(id: string) {
   })
   if (!draft) return null
 
-  // Sweep a draft stranded IN_PROGRESS by an interrupted run → FAILED, so the
-  // effective status/reason below reflect the recovery.
-  const effective = await recoverIfStuck(draft.id, draft.status, draft.failureReason, draft.updatedAt)
+  // Sweep a draft stranded IN_PROGRESS by an interrupted run → FAILED (and a
+  // stale in-flight action → cleared), so the effective fields below reflect
+  // the recovery.
+  const effective = await recoverIfStuck(
+    draft.id,
+    draft.status,
+    draft.failureReason,
+    draft.pendingAction,
+    draft.pendingActionError,
+    draft.updatedAt,
+  )
+
+  // Surface a refine brand-kit conflict to the poll WITHOUT the stored
+  // pendingHtml — it can be huge and is server-side only (the Override path
+  // reads it from the DB).
+  const pendingConflict = draft.pendingConflict as unknown as {
+    conflictId: string
+    explanation: string
+  } | null
 
   const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
@@ -78,6 +128,11 @@ async function loadDraft(id: string) {
     exportUrl: await resolveExportUrl(draft.exportUrl),
     status: effective.status,
     failureReason: effective.failureReason,
+    pendingAction: effective.pendingAction,
+    pendingActionError: effective.pendingActionError,
+    conflict: pendingConflict
+      ? { conflictId: pendingConflict.conflictId, explanation: pendingConflict.explanation }
+      : null,
     createdAt: draft.createdAt,
     revisionCount: draft._count.revisions,
     currentRevisionNumber: draft.currentRevisionNumber,
