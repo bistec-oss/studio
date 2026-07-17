@@ -255,11 +255,13 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 
 ### E. AGUI refinement
 
-- **TC-AGUI-01 — Refine creates a revision.** P: an EXPORTED draft. S: POST refine `{instruction:'make the background darker'}`. E: `{reply,revisionId,exportUrl(signed)}`; `GET …/revisions` shows the new row with signed `exportUrl`.
-- **TC-AGUI-02 — Revision numbers are sequential.** S: three sequential refines. E: revisionNumber 1,2,3; no gap/dup.
-- **TC-AGUI-03 — Conflict card path.** P: mock agent returns a `{conflict:true,...}` JSON. S: refine. E: `{conflict:true,conflictId}`; draft.`pendingConflict` set; **no** new revision yet.
-- **TC-AGUI-04 — Override applies pending HTML.** S: refine with `{overrideConflictId}`. E: revision created, `pendingConflict` cleared.
-- **TC-AGUI-05 — Restore a revision.** S: POST `…/revisions/1/restore`. E: `{exportUrl}` signed; `Draft.htmlContent` = that snapshot.
+> ⚠️ Contract updated 2026-07-17 (`async-draft-actions`): refine is async — POST returns **202 `{ok:true}`**; results arrive via the draft GET poll (`waitForAction` helper). Only the Override path stays synchronous.
+
+- **TC-AGUI-01 — Refine creates a revision.** P: an EXPORTED draft. S: POST refine `{instruction:'make the background darker'}` → 202 → `waitForAction`. E: new revision row (found by instruction) with signed `exportUrl`; `currentRevisionNumber` advanced; `pendingActionError` null.
+- **TC-AGUI-02 — Revision numbers are sequential.** S: three sequential refines (each 202 → `waitForAction`). E: revisionNumber 1,2,3; no gap/dup.
+- **TC-AGUI-03 — Conflict card path.** P: mock agent returns a `{conflict:true,...}` JSON. S: refine → 202 → `waitForAction`. E: draft GET `conflict.{conflictId,explanation}` populated (never `pendingHtml`); `pendingConflict` set server-side; **no** new revision yet.
+- **TC-AGUI-04 — Override applies pending HTML.** S: refine with `{overrideConflictId}` — **still synchronous**. E: 200 `{reply,revisionId,exportUrl}`; revision created, `pendingConflict` cleared.
+- **TC-AGUI-05 — Restore a revision.** S: POST `…/revisions/1/restore`. E: `{exportUrl}` signed; `Draft.htmlContent` = that snapshot. (409 while a `pendingAction` is in flight — §Q.)
 - **TC-AGUI-06 — Refine ownership.** P: editor B, draft owned by A. E: 403. **Guards H2.**
 
 ### F. Export
@@ -364,9 +366,9 @@ npm run test:e2e:mock
 npx playwright show-report
 ```
 
-Last green run: **80 passed / 0 failed / 4 intentional skips** (~5 min) on 2026-06-30 (after the size-picker changes; 77 before). (The original skeleton run was 19/19 on 2026-06-23.)
+Last green run: **145 passed / 0 failed / 4 intentional skips** (~1.7 min) on 2026-07-17 (`async-draft-actions` finalize; earlier baselines: 135/4 on 2026-07-14, 80/4 on 2026-06-30, skeleton 19/19 on 2026-06-23).
 
-CI gate: **`.github/workflows/e2e.yml`** runs the whole suite (§A–§L, including §K) with mocks on every PR and push to `main`. To enforce it, mark the `e2e` check **required** in the `main` branch-protection settings.
+CI gate: **`.github/workflows/e2e.yml`** runs the whole suite (§A–§Q, including §K) with mocks on every PR and push to `main`. To enforce it, mark the `e2e` check **required** in the `main` branch-protection settings.
 
 ---
 
