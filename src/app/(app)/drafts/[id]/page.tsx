@@ -256,10 +256,20 @@ export default function DraftDetailPage() {
               </p>
             </GlassPanel>
           ) : (
-            <CopyEditor draft={draft} onSaved={() => fetchDraft()} />
+            <CopyEditor draft={draft} onSaved={() => fetchDraft()} onActionStarted={fetchDraft} />
           )}
           {/* Refinement only makes sense once there's a rendered design to refine. */}
-          {ready && <RefinementPanel draftId={draftId} onRefined={refreshAfterChange} />}
+          {ready && (
+            <RefinementPanel
+              draftId={draftId}
+              pendingAction={draft.pendingAction}
+              pendingActionError={draft.pendingActionError}
+              conflict={draft.conflict}
+              currentRevisionNumber={draft.currentRevisionNumber}
+              onActionStarted={fetchDraft}
+              onRefined={refreshAfterChange}
+            />
+          )}
         </div>
 
         {/* Right column */}

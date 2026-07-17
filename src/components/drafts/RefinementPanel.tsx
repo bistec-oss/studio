@@ -5,6 +5,7 @@ import { Send, Loader2, AlertTriangle, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { apiFetch } from '@/lib/apiFetch'
+import type { DraftAction } from '@/lib/api-types'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -21,11 +22,19 @@ interface ConflictState {
   instruction: string
 }
 
-// POST /api/drafts/[id]/refine — either a brand-conflict card, or the
-// committed revision.
-type RefineResponse =
-  | { conflict: true; explanation: string; conflictId: string }
-  | { reply: string; revisionId: string; exportUrl: string | null }
+// POST /api/drafts/[id]/refine — a plain refine is async now (202 {ok:true};
+// the result arrives via the parent's draft poll). An Override commits
+// already-stored HTML and stays SYNCHRONOUS, returning the committed revision.
+type OverrideResponse = { reply: string; revisionId: string; exportUrl: string | null }
+
+// Captured when an async refine is fired; the resolution effect compares the
+// polled props against it once pendingAction transitions REFINE → null.
+interface PendingResolution {
+  msgId: string
+  instruction: string
+  baselineRevision: number | null
+  conflictIdAtSend: string | null
+}
 
 const SUGGESTIONS = [
   'Make the background darker',
@@ -35,21 +44,71 @@ const SUGGESTIONS = [
 
 export interface RefinementPanelProps {
   draftId: string
+  /** Polled draft state driving the async-refine lifecycle. */
+  pendingAction: DraftAction | null
+  pendingActionError: string | null
+  conflict: { conflictId: string; explanation: string } | null
+  currentRevisionNumber: number | null
+  /** Called right after an async action is accepted (202) so the parent can
+   *  refetch the draft and start polling `pendingAction`. */
+  onActionStarted: () => void
   onRefined: () => void
 }
 
 // ─── Refinement panel ─────────────────────────────────────────────────────────
 
-export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
+export function RefinementPanel({
+  draftId,
+  pendingAction,
+  pendingActionError,
+  conflict,
+  currentRevisionNumber,
+  onActionStarted,
+  onRefined,
+}: RefinementPanelProps) {
   const [messages, setMessages] = useState<RefineMessage[]>([])
   const [input, setInput] = useState('')
+  // True only while a POST is in flight; the background refine itself is
+  // tracked via the polled `pendingAction` prop.
   const [running, setRunning] = useState(false)
-  const [conflict, setConflict] = useState<ConflictState | null>(null)
+  const [conflictCard, setConflictCard] = useState<ConflictState | null>(null)
+  const resolutionRef = useRef<PendingResolution | null>(null)
+  const prevActionRef = useRef<DraftAction | null>(pendingAction)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages])
+
+  // Resolve the pending chat message when the polled pendingAction transitions
+  // REFINE → null: a NEW conflict (different id than at send) → conflict card;
+  // an action error → error; a moved revision pointer → applied.
+  useEffect(() => {
+    const prev = prevActionRef.current
+    prevActionRef.current = pendingAction
+    const res = resolutionRef.current
+    if (!res || prev !== 'REFINE' || pendingAction !== null) return
+    resolutionRef.current = null
+    const setStatus = (status: RefineMessage['status'], detail?: string) =>
+      setMessages((msgs) => msgs.map((m) => (m.id === res.msgId ? { ...m, status, detail } : m)))
+    if (conflict && conflict.conflictId !== res.conflictIdAtSend) {
+      setStatus('conflict', conflict.explanation)
+      setConflictCard({
+        conflictId: conflict.conflictId,
+        explanation: conflict.explanation,
+        instruction: res.instruction,
+      })
+    } else if (pendingActionError) {
+      setStatus('error', pendingActionError)
+    } else if (currentRevisionNumber !== res.baselineRevision) {
+      setStatus('applied')
+      onRefined()
+    } else {
+      // Completed with no error, no new conflict and no new revision —
+      // shouldn't happen, but never leave the message spinning forever.
+      setStatus('error', 'The refinement finished without producing a new revision.')
+    }
+  }, [pendingAction, pendingActionError, conflict, currentRevisionNumber, onRefined])
 
   async function send(instruction: string, overrideConflictId?: string) {
     if (!instruction.trim() && !overrideConflictId) return
@@ -57,27 +116,38 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
     setMessages((prev) => [...prev, { id: msgId, instruction, status: 'pending' }])
     setInput('')
     setRunning(true)
-    setConflict(null)
+    setConflictCard(null)
     try {
-      const data = await apiFetch<RefineResponse>(`/api/drafts/${draftId}/refine`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction, overrideConflictId }),
-      })
-      if ('conflict' in data && data.conflict) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId ? { ...m, status: 'conflict', detail: data.explanation } : m
-          )
-        )
-        setConflict({ conflictId: data.conflictId, explanation: data.explanation, instruction })
-      } else {
+      if (overrideConflictId) {
+        // Override commits stored HTML synchronously — unchanged contract.
+        await apiFetch<OverrideResponse>(`/api/drafts/${draftId}/refine`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction, overrideConflictId }),
+        })
         setMessages((prev) =>
           prev.map((m) => (m.id === msgId ? { ...m, status: 'applied' } : m))
         )
         onRefined()
+      } else {
+        // Async refine: capture the resolution baseline before firing.
+        resolutionRef.current = {
+          msgId,
+          instruction,
+          baselineRevision: currentRevisionNumber,
+          conflictIdAtSend: conflict?.conflictId ?? null,
+        }
+        await apiFetch(`/api/drafts/${draftId}/refine`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction }),
+        })
+        // Refetch immediately so the parent picks up pendingAction and polls;
+        // the message stays 'pending' until the resolution effect fires.
+        onActionStarted()
       }
     } catch (e: unknown) {
+      resolutionRef.current = null
       const detail = e instanceof Error ? e.message : 'Error'
       setMessages((prev) =>
         prev.map((m) => (m.id === msgId ? { ...m, status: 'error', detail } : m))
@@ -86,6 +156,11 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
       setRunning(false)
     }
   }
+
+  // Block sending while ANY background action is running (the server would 409
+  // anyway) or while a refine is still awaiting resolution from the poll.
+  const awaitingResolution = messages.some((m) => m.status === 'pending')
+  const busy = running || pendingAction !== null || awaitingResolution
 
   return (
     <GlassPanel className="p-4 flex flex-col">
@@ -128,7 +203,7 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
         ))}
       </div>
 
-      {conflict && (
+      {conflictCard && (
         <div className="mb-3 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-3 animate-fade-in">
           <div className="flex items-start gap-2">
             <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
@@ -136,16 +211,16 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
               <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
                 This change conflicts with the brand kit
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400/90 mt-1">{conflict.explanation}</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400/90 mt-1">{conflictCard.explanation}</p>
               <div className="flex gap-2 mt-3">
                 <Button
                   size="sm"
-                  onClick={() => send(conflict.instruction, conflict.conflictId)}
-                  disabled={running}
+                  onClick={() => send(conflictCard.instruction, conflictCard.conflictId)}
+                  disabled={busy}
                 >
                   Override
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => setConflict(null)} disabled={running}>
+                <Button variant="ghost" size="sm" onClick={() => setConflictCard(null)} disabled={busy}>
                   Cancel
                 </Button>
               </div>
@@ -159,7 +234,7 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
           <button
             key={s}
             onClick={() => setInput(s)}
-            disabled={running}
+            disabled={busy}
             className="text-xs px-2.5 py-1 rounded-lg bg-primary/5 dark:bg-primary-light/5 text-primary dark:text-primary-light hover:bg-primary/10 dark:hover:bg-primary-light/10 transition-colors disabled:opacity-50"
           >
             {s}
@@ -171,18 +246,22 @@ export function RefinementPanel({ draftId, onRefined }: RefinementPanelProps) {
         className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!running) send(input)
+          if (!busy) send(input)
         }}
       >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          disabled={running}
+          disabled={busy}
           placeholder="e.g. Make the logo larger…"
           className="glass-input rounded-xl px-3 py-2 text-sm flex-1 text-light-text dark:text-dark-text"
         />
-        <Button type="submit" size="sm" disabled={running || !input.trim()}>
-          {running ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        <Button type="submit" size="sm" disabled={busy || !input.trim()}>
+          {running || pendingAction === 'REFINE' ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Send size={14} />
+          )}
         </Button>
       </form>
     </GlassPanel>
