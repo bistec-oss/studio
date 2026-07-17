@@ -5,20 +5,18 @@ import { forbiddenIfNotOwner } from '@/lib/auth'
 import { withAuth } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
-import { resolveExportUrl } from '@/lib/storage/minio'
 import { runPathBDesign } from '@/lib/agent/pathB'
-import { AgentToolLimitError } from '@/lib/agent/types'
-import { withUserClaudeAuth } from '@/lib/agent/userToken'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
-
-export const maxDuration = 300
+import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 
 // Regenerates the freeform (Path B) design for a draft: produces a brand-new
-// design variant from the same brief + existing copy. Before overwriting, the
-// CURRENT design is snapshotted as a DraftRevision so the user can return to it
-// (the response includes its revisionNumber for an immediate "Undo", and it also
-// appears in the revision history). Path B only — Path A is a template fill.
+// design variant from the same brief + existing copy. Validation runs
+// synchronously, then the model work runs in-process fire-and-forget (the F1
+// pattern — see draftActions.ts) and the route returns 202; the draft page
+// polls pendingAction/pendingActionError to completion. Before overwriting,
+// the CURRENT design is snapshotted as a DraftRevision so the user can return
+// to it via the revision history. Path B only — Path A is a template fill.
 export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
@@ -45,13 +43,18 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
 
   const campaignBriefing = await getActiveCampaignBriefing(draft.brief.campaignId)
 
-  try {
+  const claimed = await claimDraftAction(draft.id, 'REGENERATE_DESIGN')
+  if (!claimed) {
+    return NextResponse.json({ error: 'Another action is already running on this draft' }, { status: 409 })
+  }
+
+  // CLI mode bills the acting user's personal Claude token when connected
+  // (shared server token otherwise) — startDraftAction resolves it before the
+  // request unwinds and pins it onto the background run. A throw below is
+  // recorded on Draft.pendingActionError; the draft itself is left untouched.
+  await startDraftAction(draft.id, user.userId, async () => {
     // Run the new design first — if it fails, the draft is left untouched.
-    // CLI mode bills the acting user's personal Claude token when connected
-    // (shared server token otherwise) — see src/lib/agent/userToken.ts.
-    const result = await withUserClaudeAuth(user.userId, () =>
-      runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
-    )
+    const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
 
     // The Undo target is whatever revision is currently live. The design history
     // is an append-only log, so the live state is already the current revision —
@@ -103,16 +106,7 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
       })
       return revisionNumber
     })
+  })
 
-    return NextResponse.json({
-      exportUrl: await resolveExportUrl(result.exportUrl),
-      previousRevisionNumber,
-    })
-  } catch (err) {
-    if (err instanceof AgentToolLimitError) {
-      return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
-    }
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
-  }
+  return NextResponse.json({ ok: true }, { status: 202 })
 })

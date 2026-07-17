@@ -10,17 +10,13 @@ import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
-import { AgentToolLimitError } from '@/lib/agent/types'
 import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pathForDesignMode, pipelineMode } from '@/lib/agent/config'
 import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/prompts/refine'
 import { generateBackgroundForRefine } from '@/lib/agent/background'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
-import { resolveClaudeAuthForUser } from '@/lib/agent/userToken'
-import { runWithClaudeAuth } from '@/lib/agent/claudeAuth'
-
-export const maxDuration = 120
+import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 
 interface PendingConflict {
   conflictId: string
@@ -60,6 +56,12 @@ function parseConflict(htmlContent: string): ConflictMarker | null {
 // 'instruction is required' (asserted by tests).
 const refineSchema = z.object({}).passthrough()
 
+// Refines a draft's design from a natural-language instruction. Validation and
+// the Override path (commits already-stored HTML, no model call) run
+// synchronously; the model path runs in-process fire-and-forget (the F1
+// pattern — see draftActions.ts) and the route returns 202. The draft page
+// polls pendingAction/pendingActionError — and, for an API-mode brand-kit
+// conflict, the conflict surfaced from pendingConflict — to completion.
 export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   const body = await parseBody(req, refineSchema)
   if (body.response) return body.response
@@ -82,7 +84,8 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   // Output canvas for this draft's brief (1080×1080 square or 1080×1350 portrait).
   const { width, height } = dimensionsFor(draft.brief.aspectRatio)
 
-  // ── Override path: apply the previously withheld HTML without re-running compliance.
+  // ── Override path: apply the previously withheld HTML without re-running
+  // compliance. Stays synchronous — it commits stored HTML without a model call.
   if (overrideConflictId) {
     const pending = draft.pendingConflict as unknown as PendingConflict | null
     if (!pending || pending.conflictId !== overrideConflictId) {
@@ -112,52 +115,48 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   // Refine uses the same model as the originating path: Path A → haiku, Path B → sonnet.
   const path = pathForDesignMode(draft.brief.designMode)
 
-  // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise). Resolved ONCE here and applied to both
-  // model-calling spans below (background decision + the refine agent call)
-  // so they can't observe different tokens. No-op (null) outside CLI mode.
-  const claudeAuth = await resolveClaudeAuthForUser(user.userId)
-
-  // Background pre-step: generates a new background ONLY when the instruction
-  // asks for one (e.g. "change the background to a city skyline"); null
-  // otherwise, and on any failure. See agent/background.ts.
-  const backgroundImageUrl = await runWithClaudeAuth(claudeAuth, () =>
-    generateBackgroundForRefine(draft.brief, kit, instruction)
-  )
-
-  const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
-  const userMessage = buildRefineUserMessage({
-    slimHtml,
-    hasHtml: !!draft.htmlContent,
-    instruction,
-    width,
-    height,
-  })
-
-  // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic API,
-  // no API key). Conflict-card detection is an API-mode feature; CLI mode applies
-  // the edit directly.
-  if (isCliMode()) {
-    try {
-      const result = await runWithClaudeAuth(claudeAuth, () =>
-        runDesignAgentCli({
-          systemPrompt,
-          userMessage,
-          briefId: draft.brief.id,
-          inlineAssets,
-          width,
-          height,
-          model: modelFor(path, 'cli'),
-        })
-      )
-      return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
-    }
+  const claimed = await claimDraftAction(draft.id, 'REFINE')
+  if (!claimed) {
+    return NextResponse.json({ error: 'Another action is already running on this draft' }, { status: 409 })
   }
 
-  try {
+  // CLI mode bills the acting user's personal Claude token when connected
+  // (shared server token otherwise) — startDraftAction resolves it before the
+  // request unwinds and runs the whole closure inside that auth context, so the
+  // background decision and the refine agent call can't observe different
+  // tokens. A throw below is recorded on Draft.pendingActionError.
+  await startDraftAction(draft.id, user.userId, async () => {
+    // Background pre-step: generates a new background ONLY when the instruction
+    // asks for one (e.g. "change the background to a city skyline"); null
+    // otherwise, and on any failure. See agent/background.ts.
+    const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction)
+
+    const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
+    const userMessage = buildRefineUserMessage({
+      slimHtml,
+      hasHtml: !!draft.htmlContent,
+      instruction,
+      width,
+      height,
+    })
+
+    // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic API,
+    // no API key). Conflict-card detection is an API-mode feature; CLI mode applies
+    // the edit directly.
+    if (isCliMode()) {
+      const result = await runDesignAgentCli({
+        systemPrompt,
+        userMessage,
+        briefId: draft.brief.id,
+        inlineAssets,
+        width,
+        height,
+        model: modelFor(path, 'cli'),
+      })
+      await commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
+      return
+    }
+
     const result = await runDesignAgent({
       systemPrompt,
       userMessage,
@@ -184,17 +183,16 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
           },
         },
       })
-      return NextResponse.json({ conflict: true, explanation: conflict.explanation, conflictId })
+      // The conflict is a clean completion of the action — startDraftAction
+      // releases the claim; the client learns of the conflict from the draft
+      // GET's pendingConflict-derived field, not from this route's response.
+      return
     }
 
-    return commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
-  } catch (err) {
-    if (err instanceof AgentToolLimitError) {
-      return NextResponse.json({ code: 'AGENT_LIMIT', message: err.message }, { status: 422 })
-    }
-    const message = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ code: 'AGENT_ERROR', message }, { status: 422 })
-  }
+    await commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
+  })
+
+  return NextResponse.json({ ok: true }, { status: 202 })
 })
 
 async function commitRevision(
