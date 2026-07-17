@@ -202,6 +202,36 @@ test.describe('Brand kit management', () => {
     expect(svgRes.status()).toBe(400)
   })
 
+  // TC-BK-09 — logoUrl must be an http(s) URL: data: URIs are rejected at every
+  // write surface (a 136k base64 logoUrl once blew the design prompt to 277k
+  // chars); clearing with null stays allowed. Guards FR-10 (async-draft-actions).
+  test('data: URI logoUrl is rejected on create and PATCH; null clears it', async () => {
+    const dataUri = `data:image/png;base64,${PNG_1x1.toString('base64')}`
+
+    // POST create with a data: URI → 400.
+    const createRes = await api.post('/api/admin/brandkits', {
+      name: 'Data URI Kit',
+      logoUrl: dataUri,
+    })
+    expect(createRes.status()).toBe(400)
+
+    // PATCH an existing kit with a data: URI → 400, logoUrl untouched.
+    const kit = await (await api.post('/api/admin/brandkits', {
+      name: 'Logo Hygiene Kit',
+      logoUrl: 'https://example.com/logo.png',
+    })).json()
+    const patchRes = await api.patch(`/api/admin/brandkits/${kit.id}`, { logoUrl: dataUri })
+    expect(patchRes.status()).toBe(400)
+    let detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBe('https://example.com/logo.png')
+
+    // PATCH with null → 200 (clearing the logo stays allowed).
+    const clearRes = await api.patch(`/api/admin/brandkits/${kit.id}`, { logoUrl: null })
+    expect(clearRes.status()).toBe(200)
+    detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBeNull()
+  })
+
   // TC-BK-08 — Non-admin (editor) cannot write brand kits. Guards H4.
   test('non-admin cannot create or mutate a brand kit', async ({ request }) => {
     const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)

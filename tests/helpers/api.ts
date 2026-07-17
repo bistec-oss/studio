@@ -45,6 +45,27 @@ export async function waitForDraft(
   }
 }
 
+// Draft ACTIONS are async too (§Q): regenerate-design / regenerate-copy /
+// refine return 202 { ok: true } after claiming Draft.pendingAction, and the
+// work runs in the background. Poll the draft until pendingAction settles back
+// to null, then return the fresh draft — the caller asserts the outcome
+// (new revision / new copy on success, pendingActionError on failure, conflict
+// for a refine brand-kit conflict). The claim happens synchronously before the
+// 202 returns, so polling immediately after the POST can never miss the run.
+export async function waitForAction(
+  api: ApiClient,
+  draftId: string,
+  { timeoutMs = 30_000, intervalMs = 250 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const draft = await (await api.get(`/api/drafts/${draftId}`)).json()
+    if (draft.pendingAction == null) return draft // settled (or an error payload; caller asserts)
+    if (Date.now() > deadline) return draft // return whatever we have; caller asserts
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+}
+
 export async function loginAs(
   _request: APIRequestContext,
   email: string,

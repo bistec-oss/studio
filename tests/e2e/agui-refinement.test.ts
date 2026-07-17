@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
+import { loginAs, waitForDraft, waitForAction, type ApiClient } from '../helpers/api'
 
 const ADMIN_EMAIL = 'admin@bisteccare.lk'
 const ADMIN_PASSWORD = 'BistecStudio2026!'
@@ -10,12 +10,18 @@ const EDITOR_PASSWORD = 'BistecStudio2026!'
 // 'cli' COPY provider. The MOCK_AI design agent returns deterministic HTML, or a
 // conflict marker when the instruction contains "conflict_test".
 //
-// Real contracts (src/app/api/drafts/[id]/...):
-//   POST /refine {instruction}            → 200 {reply:'Design updated', revisionId, exportUrl}
-//   POST /refine {instruction:'conflict_test…'} → 200 {conflict:true, explanation, conflictId}
-//   POST /refine {instruction, overrideConflictId}  → 200 {reply:'Design updated', …}
+// Real contracts (src/app/api/drafts/[id]/... — refine is ASYNC as of the
+// async-draft-actions change, §Q):
+//   POST /refine {instruction}            → 202 {ok:true}; the refinement runs in
+//     the background — poll GET /api/drafts/[id] (waitForAction) until
+//     pendingAction settles to null, then assert the new revision / conflict.
+//   POST /refine {instruction:'conflict_test…'} → 202; after the poll the draft
+//     GET carries conflict {conflictId, explanation} (never pendingHtml).
+//   POST /refine {instruction, overrideConflictId} → SYNCHRONOUS 200
+//     {reply:'Design updated', revisionId, exportUrl} (commits stored HTML).
 //   GET  /revisions                        → BARE ARRAY [{id, revisionNumber, instruction, exportUrl, createdAt}]
-//   POST /revisions/[revisionNumber]/restore → 200 {exportUrl}
+//   POST /revisions/[revisionNumber]/restore → 200 {exportUrl} (409 while a
+//     pendingAction is in flight)
 
 async function createExportedDraft(api: ApiClient) {
   const kitRes = await api.post('/api/admin/brandkits', { name: 'AGUI Test Kit', colors: ['#0284c7'] })
@@ -39,6 +45,13 @@ async function createExportedDraft(api: ApiClient) {
   return waitForDraft(api, draftId)
 }
 
+// Fire a refine (202) and poll it to completion. Returns the settled draft.
+async function refineAndWait(api: ApiClient, draftId: string, instruction: string) {
+  const res = await api.post(`/api/drafts/${draftId}/refine`, { instruction })
+  expect(res.status()).toBe(202)
+  return waitForAction(api, draftId)
+}
+
 test.describe('AGUI design refinement', () => {
   let api: ApiClient
   test.beforeEach(async ({ request }) => {
@@ -51,27 +64,28 @@ test.describe('AGUI design refinement', () => {
     const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
+    // Async contract: 202 {ok:true}, then poll pendingAction to completion.
     const refineRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'Make the background darker',
     })
-    expect(refineRes.status()).toBe(200)
-    const result = await refineRes.json()
-    expect(result.reply).toBe('Design updated')
-    expect(result.revisionId).toBeTruthy()
-    expect(result.exportUrl).toMatch(/^https?:\/\//)
+    expect(refineRes.status()).toBe(202)
+    expect(await refineRes.json()).toEqual({ ok: true })
 
-    const updated = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    const updated = await waitForAction(api, draft.id as string)
+    expect(updated.pendingAction).toBeNull()
+    expect(updated.pendingActionError).toBeNull()
     expect(updated.htmlContent).toBeTruthy()
+    expect(updated.exportUrl).toMatch(/^https?:\/\//)
 
-    // /revisions is a BARE ARRAY.
+    // /revisions is a BARE ARRAY. The applied refinement is the new row.
     const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     expect(Array.isArray(revisions)).toBe(true)
-    const rev = revisions.find((r: { id: string }) => r.id === result.revisionId)
+    const rev = revisions.find((r: { instruction: string }) => r.instruction === 'Make the background darker')
     expect(rev).toBeTruthy()
-    expect(rev.instruction).toBe('Make the background darker')
+    expect(rev.id).toBeTruthy()
   })
 
-  test('conflicting instruction returns a conflict card; override applies it', async () => {
+  test('conflicting instruction surfaces a conflict via poll; override applies it', async () => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
     const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
@@ -80,20 +94,23 @@ test.describe('AGUI design refinement', () => {
     const refineRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'conflict_test: use completely off-brand colors',
     })
-    expect(refineRes.status()).toBe(200)
-    const body = await refineRes.json()
-    expect(body.conflict).toBe(true)
-    expect(body.explanation).toBeTruthy()
-    expect(body.conflictId).toBeTruthy()
+    expect(refineRes.status()).toBe(202)
+
+    // The conflict arrives via the draft GET's conflict field, not the response.
+    const settled = await waitForAction(api, draft.id as string)
+    expect(settled.pendingActionError).toBeNull()
+    const conflict = settled.conflict as { conflictId?: string; explanation?: string } | null
+    expect(conflict).toBeTruthy()
+    expect(conflict!.explanation).toBeTruthy()
+    expect(conflict!.conflictId).toBeTruthy()
 
     // htmlContent must NOT have changed yet.
-    const unchanged = await (await api.get(`/api/drafts/${draft.id}`)).json()
-    expect(unchanged.htmlContent).toBe(originalHtml)
+    expect(settled.htmlContent).toBe(originalHtml)
 
-    // Override → applies the withheld pendingHtml.
+    // Override → applies the withheld pendingHtml. Stays SYNCHRONOUS.
     const overrideRes = await api.post(`/api/drafts/${draft.id}/refine`, {
       instruction: 'conflict_test: use completely off-brand colors',
-      overrideConflictId: body.conflictId,
+      overrideConflictId: conflict!.conflictId,
     })
     expect(overrideRes.status()).toBe(200)
     const overrideResult = await overrideRes.json()
@@ -108,7 +125,7 @@ test.describe('AGUI design refinement', () => {
     const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
-    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Add a subtle gradient' })
+    await refineAndWait(api, draft.id as string, 'Add a subtle gradient')
     const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     expect(revisions.length).toBeGreaterThanOrEqual(1)
 
@@ -132,9 +149,8 @@ test.describe('AGUI design refinement', () => {
     const revs = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     expect(revs.some((r: { revisionNumber: number }) => r.revisionNumber === 1)).toBe(true)
 
-    // Refine → appends v2 and the pointer advances to it.
-    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Add a subtle gradient' })
-    let after = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    // Refine → appends v2 and the pointer advances to it (once the poll settles).
+    let after = await refineAndWait(api, draft.id as string, 'Add a subtle gradient')
     expect(after.currentRevisionNumber).toBe(2)
 
     // Jump BACK to v1 → the pointer follows.
@@ -156,8 +172,10 @@ test.describe('AGUI design refinement', () => {
     const draft = await createExportedDraft(api)
     if (!draft) { test.skip(); return }
 
-    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'First edit' })
-    await api.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Second edit' })
+    // Sequential refines — each must settle before the next can claim the
+    // action slot (a second refine while one is in flight is a 409).
+    await refineAndWait(api, draft.id as string, 'First edit')
+    await refineAndWait(api, draft.id as string, 'Second edit')
 
     const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
     const numbers = revisions.map((r: { revisionNumber: number }) => r.revisionNumber).sort((a: number, b: number) => a - b)
