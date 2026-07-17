@@ -33,6 +33,16 @@ enum DraftStatus {
   FAILED
 }
 
+// A draft action (regenerate/refine) running in the background via the F1
+// async pattern. Claimed atomically at request time; cleared when the run
+// settles. Distinct from DraftStatus — the draft keeps its content/status
+// while an action is in flight.
+enum DraftAction {
+  REGENERATE_COPY
+  REGENERATE_DESIGN
+  REFINE
+}
+
 enum Channel {
   INSTAGRAM
   LINKEDIN
@@ -369,6 +379,11 @@ model Draft {
   // Why the last generation attempt FAILED (model error, timeout, interruption).
   // Shown on the preview page's inline error card; cleared on a successful retry.
   failureReason   String?
+  // In-flight draft action marker for the async action pattern (regenerate
+  // copy/design, refine): set on atomic claim, cleared when the run settles.
+  pendingAction   DraftAction?
+  // Error from the last action run; cleared when the next action starts.
+  pendingActionError String?
   createdAt       DateTime        @default(now())
   // @default(now()) keeps the added column valid for pre-existing rows
   updatedAt       DateTime        @default(now()) @updatedAt
