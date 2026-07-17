@@ -12,15 +12,24 @@
  *   - hearts-talk-1080x1080.html   (required — stored as a BrandKitTemplate)
  *   - hearts-academy-logo.png      (optional — LOGO artifact + kit.logoUrl)
  *   - bistec-global-logo.png       (optional — LOGO artifact)
- * Logos are embedded as data: URIs, so they never expire and need no MinIO
- * (the admin UI stores 7-day presigned URLs that break after a week — avoided here).
+ * Logos are uploaded to the public-read brand-kits MinIO bucket (stable,
+ * non-expiring URLs since the H10 storage fix) — never embedded as data: URIs,
+ * which bloat AI prompts (see the 2026-07-17 300s-timeout incident).
  *
- * Requires env: DATABASE_URL.
+ * Requires env: DATABASE_URL, MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY,
+ * MINIO_BUCKET_BRANDKITS (falls back to "brand-kits").
  */
 import { PrismaClient } from "@prisma/client"
 import { readFileSync, existsSync } from "fs"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
+import {
+  S3Client,
+  HeadBucketCommand,
+  CreateBucketCommand,
+  PutObjectCommand,
+  PutBucketPolicyCommand,
+} from "@aws-sdk/client-s3"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ASSETS = join(__dirname, "seed-assets")
@@ -63,11 +72,53 @@ const LOGO_FILES = [
   ["bistec-global-logo.png", "BISTEC Global", false],
 ]
 
-function dataUri(path) {
-  const ext = path.split(".").pop().toLowerCase()
-  const mime =
-    ext === "svg" ? "image/svg+xml" : ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`
-  return `data:${mime};base64,${readFileSync(path).toString("base64")}`
+// ── MinIO (mirrors scripts/refine-bistec-brandkit.mjs / src/lib/storage/minio.ts) ──
+const endpoint = process.env.MINIO_ENDPOINT ?? "http://localhost:9000"
+const publicEndpoint = (process.env.MINIO_PUBLIC_ENDPOINT ?? endpoint).replace(/\/+$/, "")
+const BUCKET = process.env.MINIO_BUCKET_BRANDKITS ?? "brand-kits"
+
+const s3 = new S3Client({
+  endpoint,
+  region: "us-east-1",
+  credentials: {
+    accessKeyId: process.env.MINIO_ACCESS_KEY ?? "minioadmin",
+    secretAccessKey: process.env.MINIO_SECRET_KEY ?? "minioadmin",
+  },
+  forcePathStyle: true,
+})
+
+async function ensurePublicBucket(bucket) {
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: bucket }))
+  } catch {
+    await s3.send(new CreateBucketCommand({ Bucket: bucket }))
+  }
+  await s3.send(
+    new PutBucketPolicyCommand({
+      Bucket: bucket,
+      Policy: JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: { AWS: ["*"] },
+            Action: ["s3:GetObject"],
+            Resource: [`arn:aws:s3:::${bucket}/*`],
+          },
+        ],
+      }),
+    }),
+  )
+}
+
+async function uploadLogo(kitId, fileName) {
+  const abs = join(ASSETS, fileName)
+  const body = readFileSync(abs)
+  const key = `${kitId}/${fileName}`
+  await s3.send(
+    new PutObjectCommand({ Bucket: BUCKET, Key: key, Body: body, ContentType: "image/png" }),
+  )
+  return `${publicEndpoint}/${BUCKET}/${key}`
 }
 
 async function main() {
@@ -92,40 +143,51 @@ async function main() {
     (await prisma.user.findFirst({ orderBy: { createdAt: "asc" } }))
   const createdBy = owner?.id ?? "system-seed"
 
-  // Resolve whichever logo files are present on disk → data URIs.
+  // Resolve whichever logo files are present on disk.
   const logos = []
   for (const [file, name, isPrimary] of LOGO_FILES) {
-    const p = join(ASSETS, file)
-    if (existsSync(p)) logos.push({ name, url: dataUri(p), isPrimary })
+    if (existsSync(join(ASSETS, file))) logos.push({ file, name, isPrimary })
     else console.warn(`  Logo not found, skipping: scripts/seed-assets/${file}`)
   }
-  const primary = logos.find((l) => l.isPrimary) ?? logos[0] ?? null
 
-  const data = {
-    name: "Hearts Talk",
-    isDefault: false,
-    colors: COLORS,
-    fonts: FONTS,
-    logoUrl: primary?.url ?? null,
-    prompts: { create: { content: VOICE_PROMPT, version: 1, isActive: true, createdBy } },
-    templates: { create: { name: "Hearts Talk 1080×1080", htmlTemplate: html } },
-  }
-  if (logos.length > 0) {
-    data.artifacts = {
-      create: logos.map((l) => ({ type: "LOGO", name: l.name, url: l.url, feedToAI: false })),
-    }
-  }
-
+  // Create the kit first (the upload keys are namespaced by kit id), then
+  // upload the logos and attach logoUrl + LOGO artifacts.
   const kit = await prisma.brandKit.create({
-    data,
-    include: { prompts: true, templates: true, artifacts: true },
+    data: {
+      name: "Hearts Talk",
+      isDefault: false,
+      colors: COLORS,
+      fonts: FONTS,
+      prompts: { create: { content: VOICE_PROMPT, version: 1, isActive: true, createdBy } },
+      templates: { create: { name: "Hearts Talk 1080×1080", htmlTemplate: html } },
+    },
+    include: { prompts: true, templates: true },
   })
+
+  let primaryUrl = null
+  if (logos.length > 0) {
+    await ensurePublicBucket(BUCKET)
+    for (const logo of logos) {
+      logo.url = await uploadLogo(kit.id, logo.file)
+      console.log(`  ↑ ${logo.file} → ${logo.url}`)
+    }
+    primaryUrl = (logos.find((l) => l.isPrimary) ?? logos[0]).url
+    await prisma.brandKit.update({
+      where: { id: kit.id },
+      data: {
+        logoUrl: primaryUrl,
+        artifacts: {
+          create: logos.map((l) => ({ type: "LOGO", name: l.name, url: l.url, feedToAI: false })),
+        },
+      },
+    })
+  }
 
   console.log(`Created brand kit "Hearts Talk" (${kit.id})`)
   console.log(`  Colors:   ${COLORS.length} swatches`)
   console.log(`  Fonts:    ${FONTS.map((f) => f.name).join(", ")}`)
   console.log(`  Template: ${kit.templates[0].name} (${(html.length / 1024 / 1024).toFixed(2)} MB)`)
-  console.log(`  Logos:    ${kit.artifacts.length} artifact(s)${primary ? " — primary set as kit.logoUrl" : ""}`)
+  console.log(`  Logos:    ${logos.length} artifact(s)${primaryUrl ? " — primary set as kit.logoUrl" : ""}`)
   console.log(`  Prompt:   v${kit.prompts[0].version} (active), createdBy=${createdBy}`)
   if (logos.length < LOGO_FILES.length) {
     console.log(
