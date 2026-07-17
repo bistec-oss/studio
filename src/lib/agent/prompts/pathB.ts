@@ -24,8 +24,11 @@ export interface PathBPromptOptions {
 export function buildPathBSystemPrompt(opts: PathBPromptOptions): string {
   const { kit, mode, width, height, artifactUrls = [], referenceTemplateHtml, backgroundImageUrl } = opts
 
-  const artifactLine = artifactUrls.length > 0
-    ? `\n- Brand reference images: ${artifactUrls.join(', ')}`
+  // data: URIs are unreadable base64 that blow the model context — filter them
+  // out here, the single point where artifact URLs are joined into the prompt.
+  const referenceUrls = artifactUrls.filter((u) => !u.startsWith('data:'))
+  const artifactLine = referenceUrls.length > 0
+    ? `\n- Brand reference images: ${referenceUrls.join(', ')}`
     : ''
 
   const backgroundLine = backgroundImageUrl
