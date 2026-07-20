@@ -20,15 +20,37 @@ interface NavItem {
   superAdminOnly?: boolean
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/',                   icon: <LayoutDashboard size={18} /> },
-  { label: 'Library',   href: '/library',            icon: <BookOpen size={18} /> },
-  { label: 'Projects',  href: '/projects',           icon: <FolderOpen size={18} /> },
-  { label: 'Campaigns', href: '/campaigns',          icon: <Megaphone size={18} /> },
-  { label: 'Settings',  href: '/settings',           icon: <UserCog size={18} /> },
-  { label: 'Brandkits', href: '/admin/brandkits',    icon: <Settings size={18} />, adminOnly: true },
-  { label: 'Users',     href: '/admin/users',        icon: <Users size={18} />, superAdminOnly: true },
+interface NavSection {
+  label: string
+  items: NavItem[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: 'Create',
+    items: [
+      { label: 'Dashboard', href: '/',         icon: <LayoutDashboard size={18} /> },
+      { label: 'Library',   href: '/library',  icon: <BookOpen size={18} /> },
+    ],
+  },
+  {
+    label: 'Organize',
+    items: [
+      { label: 'Projects',  href: '/projects',  icon: <FolderOpen size={18} /> },
+      { label: 'Campaigns', href: '/campaigns', icon: <Megaphone size={18} /> },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { label: 'Brandkits', href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
+      { label: 'Users',     href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
+    ],
+  },
 ]
+
+// Pinned to the sidebar's bottom area, above Sign out.
+const SETTINGS_ITEM: NavItem = { label: 'Settings', href: '/settings', icon: <UserCog size={18} /> }
 
 function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
   const pathname = usePathname()
@@ -57,9 +79,14 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
   // the /admin layout — this is just honest navigation).
   const { isAdmin, isSuperAdmin } = useCurrentUser()
   const [signingOut, setSigningOut] = useState(false)
-  const items = NAV_ITEMS.filter(
-    item => (!item.adminOnly || isAdmin) && (!item.superAdminOnly || isSuperAdmin)
-  )
+  const sections = NAV_SECTIONS
+    .map(section => ({
+      ...section,
+      items: section.items.filter(
+        item => (!item.adminOnly || isAdmin) && (!item.superAdminOnly || isSuperAdmin)
+      ),
+    }))
+    .filter(section => section.items.length > 0)
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -85,21 +112,31 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         </div>
       )}
 
-      <nav className="flex flex-col gap-1">
-        {items.map(item => (
-          <NavLink key={item.href} item={item} onClick={onClose} />
+      <nav className="flex flex-col gap-4">
+        {sections.map(section => (
+          <div key={section.label} className="flex flex-col gap-1">
+            <div className="px-3 pt-1 text-[11px] font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+              {section.label}
+            </div>
+            {section.items.map(item => (
+              <NavLink key={item.href} item={item} onClick={onClose} />
+            ))}
+          </div>
         ))}
       </nav>
 
-      {/* Sign out — pinned to the bottom of the panel */}
-      <button
-        onClick={handleSignOut}
-        disabled={signingOut}
-        className="mt-auto flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-light-text dark:hover:text-dark-text border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <LogOut size={18} />
-        {signingOut ? 'Signing out…' : 'Sign out'}
-      </button>
+      {/* Settings + Sign out — pinned to the bottom of the panel */}
+      <div className="mt-auto flex flex-col gap-1 pt-3 border-t border-light-text/10 dark:border-white/10">
+        <NavLink item={SETTINGS_ITEM} onClick={onClose} />
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-light-text dark:hover:text-dark-text border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <LogOut size={18} />
+          {signingOut ? 'Signing out…' : 'Sign out'}
+        </button>
+      </div>
 
       {/* Bottom glow blob */}
       <div className="glow-blob w-48 h-48 -bottom-12 -left-8 opacity-60" />

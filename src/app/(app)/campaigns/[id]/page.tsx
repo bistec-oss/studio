@@ -103,12 +103,29 @@ export default function CampaignDetailPage() {
     return <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8">Loading…</div>
   }
 
+  const parentProject = campaign.projects[0]?.project ?? null
+
   return (
     <>
-      <div className="flex items-center gap-3 mb-6">
-        <Button variant="ghost" size="sm" onClick={() => router.push('/campaigns')}>
-          <ArrowLeft size={14} /> Campaigns
-        </Button>
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        {parentProject ? (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => router.push('/projects')}>
+              <ArrowLeft size={14} /> Projects
+            </Button>
+            <span className="text-light-text-muted dark:text-dark-text-muted">/</span>
+            <Link
+              href={`/projects/${parentProject.id}`}
+              className="text-sm font-medium text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light transition-colors"
+            >
+              {parentProject.name}
+            </Link>
+          </>
+        ) : (
+          <Button variant="ghost" size="sm" onClick={() => router.push('/campaigns')}>
+            <ArrowLeft size={14} /> Campaigns
+          </Button>
+        )}
         <span className="text-light-text-muted dark:text-dark-text-muted">/</span>
         <h1 className="text-2xl font-bold text-light-text dark:text-dark-text">{campaign.name}</h1>
       </div>

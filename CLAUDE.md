@@ -2,7 +2,15 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-07-17)
+## ✅ Outstanding work — START HERE (updated 2026-07-20)
+
+**✅ UI clarity pass — 2026-07-20** (UI-only; see `docs/handoff.md` top section):
+
+- **Select chevron fix:** `.glass-input` used the `background` **shorthand**, wiping the Select's chevron `background-image` in dark mode + on focus — now `background-color`. Never use the shorthand in classes that coexist with bg-image utilities.
+- **Sidebar sections** (`AppShell.tsx`): labeled groups **Create** (Dashboard, Library) / **Organize** (Projects, Campaigns) / **Admin** (Brandkits, Users — role-gated, hidden when empty); Settings joined Sign out in the bottom-pinned area.
+- **Campaigns page grouped by project:** per-project sections (linked heading + count), Standalone group last; brand-kit chips get a Palette icon, tone chips a MessageCircle icon (also on project cards); campaign detail breadcrumb shows `Projects / <project> / <campaign>` when applicable. No API/schema changes.
+- **Env hygiene:** `ANTHROPIC_API_KEY` removed from this machine's `.env` and commented out in `.env.example` (CLI mode never uses it; API-mode-only). `docs/cold-start.md` §2 updated.
+- Gates: tsc, lint (0 errors, 7 pre-existing warnings), 180/180 unit. No migrations, no new env vars.
 
 **✅ Async draft actions (202+poll) + brand-kit logo URL hygiene — 2026-07-17** (specclaw change `async-draft-actions`; see `docs/handoff.md` top section):
 

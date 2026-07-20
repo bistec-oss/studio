@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Trash2, RotateCcw, FolderOpen } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, FolderOpen, Palette, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { GlassInput } from '@/components/ui/GlassInput'
@@ -174,12 +174,20 @@ export default function ProjectsPage() {
               <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
                 <span>{project._count.campaigns} campaign{project._count.campaigns !== 1 ? 's' : ''}</span>
                 {project.defaultBrandKit && (
-                  <span className="bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full">
+                  <span
+                    title="Default brand kit"
+                    className="inline-flex items-center gap-1 bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full"
+                  >
+                    <Palette size={11} />
                     {project.defaultBrandKit.name}
                   </span>
                 )}
                 {project.defaultTone && (
-                  <span className="bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize">
+                  <span
+                    title="Default tone"
+                    className="inline-flex items-center gap-1 bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize"
+                  >
+                    <MessageCircle size={11} />
                     {project.defaultTone}
                   </span>
                 )}

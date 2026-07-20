@@ -1,9 +1,24 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-17 (latest: async draft actions + logo hygiene + brand-kit chat documents, all live-verified)
+**Date:** 2026-07-20 (latest: UI clarity pass — sidebar sections, campaigns grouped by project, select-chevron fix)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
 **Branch:** `main`
 **Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
+
+---
+
+## 2026-07-20 (latest) — UI clarity pass: hierarchy visibility + sidebar sections + select-chevron fix
+
+Small UI-only change set (no schema, no API changes, no migrations, no new env vars) addressing three reported problems: dropdowns missing their marker, the project↔campaign relationship being invisible, and the flat sidebar not distinguishing admin surfaces.
+
+1. **Select chevron fix (`globals.css`).** The shared `Select` always drew a chevron via a Tailwind inline-SVG `background-image` utility — but the `.glass-input` rules set the CSS **`background` shorthand**, which resets `background-image`. Net effect: the chevron vanished in dark mode (`.dark .glass-input` has higher specificity than the utility) and on focus in both themes. All four `.glass-input` rules now set `background-color` (and the transition property likewise). **Rule of thumb: never use the `background` shorthand in a class that coexists with background-image utilities.**
+2. **Sidebar sections (`AppShell.tsx`).** Nav is now three labeled groups — **Create** (Dashboard, Library), **Organize** (Projects, Campaigns), **Admin** (Brandkits, Users) — via a `NAV_SECTIONS` structure. Role filtering happens per item and empty sections disappear (an editor never sees the Admin heading). **Settings moved out of the main list** into the bottom-pinned area with Sign out, above a divider.
+3. **Campaigns page grouped by project (`campaigns/page.tsx`).** The flat card grid is replaced by per-project sections: folder icon + linked project heading (→ `/projects/<id>`) + campaign count, projects sorted by name, **Standalone** group (muted, unlinked) last. No API change — `GET /api/campaigns` already returned `projects: [{ project }]`; the UI just never showed it. Grouping uses `projects[0]` (the app assigns at most one project per campaign; the PATCH replaces membership).
+4. **Icon'd chips (campaigns + projects pages).** Brand-kit chips get a `Palette` icon, tone chips a `MessageCircle` icon (+ `title` tooltips), so the two previously-identical pill types are distinguishable at a glance.
+5. **Campaign detail breadcrumb (`campaigns/[id]/page.tsx`).** A campaign in a project now shows `← Projects / <project> / <campaign>` (project segment links to the project detail); standalone campaigns keep `← Campaigns / <name>`.
+
+- **Gates:** tsc clean; lint 0 errors (7 pre-existing warnings); **180/180 unit**. E2E exercises these pages at the API level only (no DOM assertions on the changed markup) — full suite not re-run for a UI-only change; visual check pending in a real browser.
+- **Env hygiene (this machine + committed example):** `.env` dropped the placeholder `ANTHROPIC_API_KEY` (we run CLI mode; the key was never real — `sk-ant-...`). `.env.example` now ships the var commented-out with a note that it's API-mode-only; `docs/cold-start.md` §2 reworded to match (CLI mode is the standard dev setup; `OPENAI_API_KEY` still needed for backgrounds). `.env.test` keeps its `sk-ant-test-placeholder` (MOCK_AI scaffolding, never used for real calls).
 
 ---
 

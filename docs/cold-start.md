@@ -101,7 +101,7 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
 
-**For real design generation:** also `ANTHROPIC_API_KEY` + `OPENAI_API_KEY`. To test **without** any AI key, set `DESIGN_PROVIDER=cli` (see §7).
+**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; Claude auth comes from `CLAUDE_CODE_OAUTH_TOKEN` (or the logged-in `claude` session), see §7. `OPENAI_API_KEY` is still required for AI background images in either mode. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
 Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing — when you do, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence).
 
 ---

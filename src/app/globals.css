@@ -78,28 +78,31 @@
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
   }
 
-  /* inputs, selects, textareas */
+  /* inputs, selects, textareas.
+     background-COLOR, never the `background` shorthand: the shorthand resets
+     background-image, which erases the Select chevron (an inline-SVG
+     background-image utility) in dark mode and on focus. */
   .glass-input {
-    background: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(15, 23, 42, 0.15);
     transition:
       border-color 0.15s ease,
       box-shadow 0.15s ease,
-      background 0.15s ease;
+      background-color 0.15s ease;
   }
   .glass-input:focus {
     outline: none;
-    background: #ffffff;
+    background-color: #ffffff;
     border-color: #0284c7;
     box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
   }
   .dark .glass-input {
-    background: rgba(15, 23, 42, 0.6);
+    background-color: rgba(15, 23, 42, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.1);
     color: #f8fafc;
   }
   .dark .glass-input:focus {
-    background: rgba(15, 23, 42, 0.8);
+    background-color: rgba(15, 23, 42, 0.8);
     border-color: #7dd3fc;
     box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.15);
   }
