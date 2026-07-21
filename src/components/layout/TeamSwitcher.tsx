@@ -92,7 +92,7 @@ export function TeamSwitcher() {
           sideOffset={6}
           className={cn(
             'z-50 min-w-56 max-w-72',
-            'glass-panel rounded-xl p-1.5',
+            'glass-popover rounded-xl p-1.5',
             'data-[state=open]:animate-fade-in',
           )}
         >

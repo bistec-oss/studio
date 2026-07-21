@@ -78,6 +78,22 @@
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
   }
 
+  /* Floating menus/popovers (portaled over arbitrary content): near-opaque —
+     the .glass-panel 60%/50% alpha is fine for in-flow panels over the page
+     backdrop but lets underlying text bleed through a floating menu. */
+  .glass-popover {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  }
+  .dark .glass-popover {
+    background: rgba(15, 23, 42, 0.96);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  }
+
   /* inputs, selects, textareas.
      background-COLOR, never the `background` shorthand: the shorthand resets
      background-image, which erases the Select chevron (an inline-SVG
