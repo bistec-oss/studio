@@ -23,6 +23,7 @@ import type { ImageProvider } from '@/providers/interfaces/ImageProvider'
 import { persistDataUrlImage } from '@/lib/storage/minio'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
 import { isCliMode, modelForBackground } from '@/lib/agent/config'
+import type { GenerationActor } from '@/lib/agent/types'
 import {
   buildBackgroundDecisionPrompt,
   buildRefineBackgroundDecisionPrompt,
@@ -84,12 +85,14 @@ async function runDecision(prompt: BackgroundDecisionPrompt): Promise<Background
 }
 
 // Shared tail: run the decision, then (when needed) generate + persist the image.
-// imageProviderKey is the brief's optional per-brief override.
+// imageProviderKey is the brief's optional per-brief override. actor is WHO is
+// running this call (see GenerationActor) — deliberately NOT derived from the
+// brief, since the acting teammate and the brief's owner are often different
+// people on a shared team brief.
 async function decideAndGenerate(
   prompt: BackgroundDecisionPrompt,
   opts: {
-    teamId: string
-    userId: string
+    actor: GenerationActor
     brandKitId: string
     aspectRatio: string
     imageProviderKey?: string | null
@@ -102,7 +105,7 @@ async function decideAndGenerate(
   let provider: ImageProvider | null
   try {
     provider = await resolveImageProvider(
-      { teamId: opts.teamId, userId: opts.userId },
+      { teamId: opts.actor.teamId, userId: opts.actor.userId },
       opts.imageProviderKey ?? undefined
     )
   } catch (err) {
@@ -151,7 +154,8 @@ export async function generateBackgroundForBrief(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
-  campaignBriefing?: string | null,
+  campaignBriefing: string | null | undefined,
+  actor: GenerationActor,
 ): Promise<string | null> {
   if (MOCK_AI) return null
   try {
@@ -165,8 +169,7 @@ export async function generateBackgroundForBrief(
       campaignBriefing,
     })
     return await decideAndGenerate(prompt, {
-      teamId: brief.teamId ?? '',
-      userId: brief.userId,
+      actor,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,
@@ -186,13 +189,13 @@ export async function generateBackgroundForRefine(
   brief: Brief,
   kit: ResolvedBrandKit,
   instruction: string,
+  actor: GenerationActor,
 ): Promise<string | null> {
   if (MOCK_AI) return null
   try {
     const prompt = buildRefineBackgroundDecisionPrompt({ kit, topic: brief.topic, instruction })
     return await decideAndGenerate(prompt, {
-      teamId: brief.teamId ?? '',
-      userId: brief.userId,
+      actor,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,

@@ -61,7 +61,11 @@ export async function generatePost(args: GeneratePostArgs) {
   // surface resolves the calling ApiKey's team and wraps its span in
   // withClaudeAuth(null, teamId, ...).
   try {
-    const { draft } = await generateDraftForBrief(brief)
+    // userId: null — MCP/ACP callers hold server API keys (M2M trust
+    // boundary, see the withClaudeAuth note above), not a signed-in teammate;
+    // the IMAGE-provider resolution must skip the personal tier and fall
+    // through to the team's default (see resolveImageProvider).
+    const { draft } = await generateDraftForBrief(brief, { userId: null, teamId: brief.teamId ?? '' })
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }
   } catch (err) {
     if (err instanceof NoBrandKitError) {

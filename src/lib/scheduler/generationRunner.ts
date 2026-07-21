@@ -136,7 +136,14 @@ export async function runGenerationJobs(): Promise<void> {
       // describe is gone (Task 10) — a CLI-mode run now has no ALS auth
       // context and will hard-fail with "No Claude credential available"
       // until this loop wraps each job in withClaudeAuth(null, entry.teamId, ...).
-      const { draft } = await generateDraftForBrief(brief, { templateId: entry.templateId })
+      // userId: null — an unattended scheduled run has no acting teammate, so
+      // the IMAGE-provider resolution must skip the personal tier entirely and
+      // fall through to the team's default (see resolveImageProvider).
+      const { draft } = await generateDraftForBrief(
+        brief,
+        { userId: null, teamId: entry.teamId ?? '' },
+        { templateId: entry.templateId }
+      )
 
       await executePostAction(entry, draft)
 

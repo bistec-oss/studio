@@ -2,21 +2,30 @@ import { prisma } from "@/lib/prisma"
 import { renderHtmlToPng } from "@/lib/renderer/puppeteer"
 import { uploadObject, resolveExportUrl, persistDataUrlImage, exportKey, BUCKET_EXPORTS } from "@/lib/storage/minio"
 import { resolveImageProvider } from "@/providers/registry"
-import type { BrandKitContext } from "./types"
+import type { BrandKitContext, GenerationActor } from "./types"
 
 export async function toolGenerateImage(
   prompt: string,
   brandKitId: string,
-  briefId: string
+  briefId: string,
+  actor?: GenerationActor
 ): Promise<{ url: string }> {
-  // The tool loop only carries briefId in its closure (see designAgent.ts's
-  // executeTool) — look up the owning team/user so resolution can consider a
-  // personal OpenAI key ahead of the team's.
-  const brief = await prisma.brief.findUnique({
-    where: { id: briefId },
-    select: { teamId: true, userId: true },
-  })
-  const provider = await resolveImageProvider({ teamId: brief?.teamId ?? '', userId: brief?.userId ?? null })
+  // actor is the ACTING teammate (threaded from the route via
+  // DesignAgentOptions/executeTool — see designAgent.ts) — prefer it always,
+  // since it's who the personal-key tier must resolve against, not the
+  // brief's owner. The brief lookup below is a fallback ONLY for a caller
+  // that genuinely cannot supply an actor (there is currently none — every
+  // pathA.ts/pathB.ts call site sets it — but this keeps the tool safe rather
+  // than silently defaulting to no team scope at all).
+  let ctx = actor
+  if (!ctx) {
+    const brief = await prisma.brief.findUnique({
+      where: { id: briefId },
+      select: { teamId: true, userId: true },
+    })
+    ctx = { teamId: brief?.teamId ?? '', userId: brief?.userId ?? null }
+  }
+  const provider = await resolveImageProvider({ teamId: ctx.teamId, userId: ctx.userId })
   if (!provider) {
     throw new Error('No image provider configured for this team')
   }

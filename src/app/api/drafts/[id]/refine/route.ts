@@ -131,8 +131,13 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   await startDraftAction(draft.id, user.userId, user.teamId, async () => {
     // Background pre-step: generates a new background ONLY when the instruction
     // asks for one (e.g. "change the background to a city skyline"); null
-    // otherwise, and on any failure. See agent/background.ts.
-    const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction)
+    // otherwise, and on any failure. See agent/background.ts. actor is the
+    // acting teammate (NOT the brief owner) — image-provider resolution must
+    // follow whoever is running this refine.
+    const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction, {
+      userId: user.userId,
+      teamId: user.teamId,
+    })
 
     const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
     const userMessage = buildRefineUserMessage({
@@ -169,6 +174,7 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
       inlineAssets,
       width,
       height,
+      actor: { userId: user.userId, teamId: user.teamId },
     })
 
     const conflict = parseConflict(result.htmlContent)

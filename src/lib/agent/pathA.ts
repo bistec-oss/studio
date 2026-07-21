@@ -1,6 +1,6 @@
 import type { Brief, BrandKitTemplate } from '@prisma/client'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
-import type { DesignAgentResult } from '@/lib/agent/types'
+import type { DesignAgentResult, GenerationActor } from '@/lib/agent/types'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
@@ -53,7 +53,8 @@ export async function runPathADesign(
   kit: ResolvedBrandKit | null,
   template: BrandKitTemplate,
   copyText: string,
-  campaignBriefing?: string | null,
+  campaignBriefing: string | null | undefined,
+  actor: GenerationActor,
 ): Promise<DesignAgentResult> {
   assertTemplateMatchesBrief(brief, template)
 
@@ -105,5 +106,6 @@ export async function runPathADesign(
         inlineAssets,
         width,
         height,
+        actor,
       })
 }

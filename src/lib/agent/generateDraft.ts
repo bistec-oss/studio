@@ -7,6 +7,7 @@ import { buildBriefInput } from '@/lib/agent/briefInput'
 import { runPathADesign, assertTemplateMatchesBrief } from '@/lib/agent/pathA'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import type { GenerationActor } from '@/lib/agent/types'
 
 // Path B needs a resolvable brand kit; thrown before any model call is paid for.
 export class NoBrandKitError extends Error {
@@ -73,12 +74,13 @@ async function produceDesign(
   brief: Brief,
   { kit, campaignBriefing, template }: ResolvedInputs,
   copyText: string,
+  actor: GenerationActor,
 ): Promise<ProducedDesign> {
   if (template) {
-    const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing)
+    const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing, actor)
     return { htmlContent: result.htmlContent, exportUrl: result.exportUrl, backgroundImageUrl: null }
   }
-  const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing)
+  const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing, actor)
   return {
     htmlContent: result.htmlContent,
     exportUrl: result.exportUrl,
@@ -128,6 +130,11 @@ async function finalizeDraftV1(
 // interactive brief wizard uses createPendingDraft + runGenerationForDraft instead.
 export async function generateDraftForBrief(
   brief: Brief,
+  // The MCP/ACP surface and the scheduler have no signed-in actor (Task 13/14
+  // territory) — callers there must pass an explicit { userId: null, teamId }
+  // rather than let this default to the brief's owner, which would incorrectly
+  // consult the OWNER's personal OpenAI key for a machine-triggered run.
+  actor: GenerationActor,
   opts?: { templateId?: string | null },
 ): Promise<GenerateDraftResult> {
   const inputs = await resolveGenerationInputs(brief, opts?.templateId)
@@ -135,7 +142,7 @@ export async function generateDraftForBrief(
   const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
   const copyText = await copyProvider.generateCopy(buildBriefInput(brief, inputs.kit, inputs.campaignBriefing))
 
-  const design = await produceDesign(brief, inputs, copyText)
+  const design = await produceDesign(brief, inputs, copyText, actor)
 
   const draft = await prisma.$transaction(async (tx) => {
     const created = await tx.draft.create({
@@ -198,7 +205,7 @@ export async function createPendingDraft(
 // image) → design + render → finalize as EXPORTED with a v1 revision. On any
 // failure the draft is marked FAILED with the reason for the inline error card.
 // Designed to be fire-and-forget from the route; also reused by the retry route.
-export async function runGenerationForDraft(draftId: string): Promise<void> {
+export async function runGenerationForDraft(draftId: string, actor: GenerationActor): Promise<void> {
   const draft = await prisma.draft.findUnique({ where: { id: draftId }, include: { brief: true } })
   if (!draft) return
   try {
@@ -212,7 +219,7 @@ export async function runGenerationForDraft(draftId: string): Promise<void> {
     // resolves now while the image skeleton keeps animating.
     await prisma.draft.update({ where: { id: draftId }, data: { copyText } })
 
-    const design = await produceDesign(draft.brief, inputs, copyText)
+    const design = await produceDesign(draft.brief, inputs, copyText, actor)
     await finalizeDraftV1(draftId, design)
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)

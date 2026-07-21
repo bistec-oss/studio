@@ -25,10 +25,14 @@ export async function startBackgroundGeneration(
   teamId: string
 ): Promise<void> {
   const auth = await resolveClaudeAuth(userId, teamId)
+  // The IMAGE-provider actor is the same acting teammate as the Claude auth
+  // above — background image generation must resolve THEIR personal OpenAI
+  // key (or the team default), never the brief owner's.
+  const actor = { userId, teamId }
   // runGenerationForDraft catches its own errors and records FAILED on the draft,
   // so this should never reject; the .catch is a belt-and-braces guard against an
   // unexpected throw becoming an unhandled rejection.
-  void runWithClaudeAuth(auth, () => runGenerationForDraft(draftId)).catch((e) => {
+  void runWithClaudeAuth(auth, () => runGenerationForDraft(draftId, actor)).catch((e) => {
     console.error(`[generation] background run for draft ${draftId} crashed:`, e)
   })
 }

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { MessageParam, ToolUseBlock, ToolResultBlockParam, Tool } from "@anthropic-ai/sdk/resources/messages"
-import type { DesignAgentOptions, DesignAgentResult } from "./types"
+import type { DesignAgentOptions, DesignAgentResult, GenerationActor } from "./types"
 import { AgentToolLimitError, AgentTimeoutError, AgentTruncatedError } from "./types"
 import { toolGenerateImage, toolRenderHtml, toolGetBrandKitContext } from "./tools"
 import { restoreInlineAssets, missingTokens } from "./inlineAssets"
@@ -64,11 +64,12 @@ type ToolInput = Record<string, unknown>
 async function executeTool(
   name: string,
   input: ToolInput,
-  briefId: string
+  briefId: string,
+  actor?: GenerationActor
 ): Promise<unknown> {
   switch (name) {
     case "generateImage":
-      return toolGenerateImage(input.prompt as string, input.brandKitId as string, briefId)
+      return toolGenerateImage(input.prompt as string, input.brandKitId as string, briefId, actor)
     case "renderHtml":
       return toolRenderHtml(
         input.html as string,
@@ -95,6 +96,7 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
     inlineAssets,
     width = 1080,
     height = 1080,
+    actor,
   } = options
 
   // Test seam: skip the Anthropic tool-use loop entirely. Emits deterministic
@@ -189,7 +191,7 @@ export async function runDesignAgent(options: DesignAgentOptions): Promise<Desig
           toolInput = { ...toolInput, html: restoreInlineAssets(html, inlineAssets) }
         }
 
-        const result = await executeTool(block.name, toolInput, briefId)
+        const result = await executeTool(block.name, toolInput, briefId, actor)
 
         if (block.name === "renderHtml") {
           lastHtml = (toolInput as { html: string }).html

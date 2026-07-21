@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Brief } from '@prisma/client'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
-import type { DesignAgentResult } from '@/lib/agent/types'
+import type { DesignAgentResult, GenerationActor } from '@/lib/agent/types'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
@@ -28,7 +28,8 @@ export async function runPathBDesign(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
-  campaignBriefing?: string | null,
+  campaignBriefing: string | null | undefined,
+  actor: GenerationActor,
 ): Promise<PathBDesignResult> {
   // Feed-to-AI artifact URLs (brand reference imagery).
   const artifacts = await prisma.brandKitArtifact.findMany({
@@ -65,7 +66,7 @@ export async function runPathBDesign(
   // Background pre-step: Claude (Haiku) decides + gpt-image generates a
   // full-bleed background before the design call. Null on skip/failure — the
   // design proceeds with CSS/SVG visuals as before. See agent/background.ts.
-  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing)
+  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing, actor)
 
   const systemPrompt = buildPathBSystemPrompt({
     kit,
@@ -100,6 +101,7 @@ export async function runPathBDesign(
         maxToolCalls: 15,
         width,
         height,
+        actor,
       })
 
   return { ...result, backgroundImageUrl }
