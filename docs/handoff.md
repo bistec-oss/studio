@@ -9,7 +9,7 @@
 
 ## 2026-07-21 (latest) — Team tenancy: full multi-tenant rework
 
-**Branch `feature/team-tenancy`, 31 commits, merge-ready but NOT merged** — per user directive, the branch stays open with a prod server running the new build for review; merge to `main` happens only on explicit go-ahead. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
+**Branch `feature/team-tenancy`, 34 commits, merge-ready but NOT merged** (final whole-branch review verdict: Ready to merge — Yes; `.superpowers/sdd/final-review.md`) — per user directive, the branch stays open with a prod server running the new build for review; merge to `main` happens only on explicit go-ahead. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
 
 ### What changed
 
@@ -34,7 +34,7 @@
 
 ### Testing
 
-New E2E suites: `tests/e2e/team-isolation.test.ts` (**§R**, 15 cases — the cross-tenant isolation guardrail: every list/by-id/mutation route checked against a second team) and `tests/e2e/team-settings.test.ts` (**§S**, 7 cases — `/team` and `/settings` credential CRUD). Seeding gained `scripts/seed-teams.mjs`, creating two teams (**Bistec** + **ClientX**, second admin `clientx.admin` / `BistecStudio2026!`) so isolation has a real second tenant to test against. `TC-AGUI-06` was rewritten for D6 semantics (campaign-shared drafts are now a legitimate 202 for in-team editors, not a 403). §J ACP cases now mint real `ApiKey` rows instead of relying on env-list keys. Full catalog at the branch's final commit: **166 passed / 4 skipped / 0 failed** (one flaky pass-on-retry); unit **253/253**; production build green. Details (and the section-lettering history) are in `docs/e2e-test-plan.md`.
+New E2E suites: `tests/e2e/team-isolation.test.ts` (**§R**, 19 cases — the cross-tenant isolation guardrail: every list/by-id/mutation route checked against a second team, plus foreign template/FK injection and kit-less-team fallback attack shapes from the final review) and `tests/e2e/team-settings.test.ts` (**§S**, 7 cases — `/team` and `/settings` credential CRUD). Seeding gained `scripts/seed-teams.mjs`, creating two teams (**Bistec** + **ClientX**, second admin `clientx.admin` / `BistecStudio2026!`) so isolation has a real second tenant to test against. `TC-AGUI-06` was rewritten for D6 semantics (campaign-shared drafts are now a legitimate 202 for in-team editors, not a 403). §J ACP cases now mint real `ApiKey` rows instead of relying on env-list keys. Full catalog at the branch's final commit: **170 passed / 4 skipped / 0 failed** (one flaky pass-on-retry); unit **264/264**; production build green. Details (and the section-lettering history) are in `docs/e2e-test-plan.md`.
 
 ### The 9 cross-tenant gaps (all fixed within the branch — none ever shipped to `main`)
 
