@@ -30,6 +30,20 @@ export type ClaudeTokenInfo =
 // a rejected team token is simply cleared, not flagged INVALID.
 export type TeamClaudeTokenInfo = { connected: true; keyPrefix: string } | { connected: false }
 
+// GET /api/team/api-keys — machine credentials for MCP/ACP (src/mcp/auth.ts).
+// Only keyPrefix is ever returned here; the plaintext appears exactly once,
+// in the POST response below.
+export type TeamApiKeySummary = {
+  id: string
+  label: string
+  keyPrefix: string
+  createdAt: string
+  revokedAt: string | null
+}
+
+// POST /api/team/api-keys — the only response that ever carries a plaintext key.
+export type TeamApiKeyCreated = { id: string; label: string; plaintext: string }
+
 // GET/PUT/DELETE /api/me/openai-key — the user's personal OpenAI API key,
 // used for image generation ahead of the team's configured IMAGE provider.
 // Only the masked suffix ever leaves the server. Unlike the Claude token

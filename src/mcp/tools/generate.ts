@@ -13,6 +13,8 @@ interface GeneratePostArgs {
   copyProviderKey?: string
   campaignId?: string
   description?: string
+  /** The calling ApiKey's team (resolved by the ACP route / MCP server via resolveApiKey). */
+  teamId: string
 }
 
 // ACP entry point for post generation — a thin adapter over the same Path B
@@ -26,18 +28,26 @@ export async function generatePost(args: GeneratePostArgs) {
     )
   }
 
-  // MCP/ACP has no team wrapper yet (Task 13) — derive from the explicit
-  // campaign when the caller passed one, same rule as POST /api/briefs.
-  const campaign = args.campaignId
-    ? await prisma.campaign.findFirst({ where: { id: args.campaignId, isDeleted: false }, select: { teamId: true } })
-    : null
+  // Task 13: the caller's team now comes from its resolved ApiKey, not a
+  // campaign lookup. An explicit campaignId still must belong to that same
+  // team — otherwise the new Brief would reference a campaign (and inherit
+  // its brand-kit precedence) the caller has no claim to.
+  if (args.campaignId) {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: args.campaignId, isDeleted: false },
+      select: { teamId: true },
+    })
+    if (!campaign || campaign.teamId !== args.teamId) {
+      throw new Error(`Campaign ${args.campaignId} not found`)
+    }
+  }
 
   // Create the Brief row first so copy + design run off the same record the
   // web pipeline would use.
   const brief = await prisma.brief.create({
     data: {
-      teamId: campaign?.teamId ?? null,
-      userId: await getSystemUserId(),
+      teamId: args.teamId,
+      userId: await getSystemUserId(args.teamId),
       topic: args.topic,
       description: args.description,
       goal: args.goal,
@@ -55,17 +65,16 @@ export async function generatePost(args: GeneratePostArgs) {
   // Path B design, Draft persistence — identical to the web routes.
   // Deliberately NOT wrapped in withClaudeAuth: MCP/ACP callers hold server
   // API keys (M2M trust boundary), not app-user sessions.
-  // TODO(Task 13): the shared env credential this comment used to describe is
-  // gone (Task 10) — an MCP/ACP call in CLI mode now has no ALS auth context
-  // and will hard-fail with "No Claude credential available" until this
-  // surface resolves the calling ApiKey's team and wraps its span in
-  // withClaudeAuth(null, teamId, ...).
+  // TODO(Task 14): in CLI mode this call has no ALS auth context (no personal
+  // token — there's no signed-in user — and the team-tier wiring is Task 14's
+  // scope) and will hard-fail with "No Claude credential available" until
+  // that task wraps this span in withClaudeAuth(null, args.teamId, ...).
   try {
     // userId: null — MCP/ACP callers hold server API keys (M2M trust
     // boundary, see the withClaudeAuth note above), not a signed-in teammate;
     // the IMAGE-provider resolution must skip the personal tier and fall
     // through to the team's default (see resolveImageProvider).
-    const { draft } = await generateDraftForBrief(brief, { userId: null, teamId: brief.teamId ?? '' })
+    const { draft } = await generateDraftForBrief(brief, { userId: null, teamId: args.teamId })
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }
   } catch (err) {
     if (err instanceof NoBrandKitError) {

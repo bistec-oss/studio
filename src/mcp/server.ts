@@ -1,12 +1,15 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { isAdminKey, isValidKey } from './auth'
+import { resolveApiKey } from './auth'
 import { createBrandKit, setBrandKitPrompt, uploadBrandTemplate, listBrandKits, getBrandKit } from './tools/brandkit'
 import { generatePost, getDraft } from './tools/generate'
 import { publishPost } from './tools/publish'
 import { env } from '@/lib/env'
 
+// The credential PRESENTED by this MCP process — resolved against the
+// ApiKey table (Task 13) on every call rather than once at startup, since a
+// key can be revoked mid-session and each call should see that immediately.
 const API_KEY = env.MCP_API_KEY ?? null
 
 const server = new Server(
@@ -113,45 +116,57 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params
-  const admin = isAdminKey(API_KEY)
-  const authenticated = isValidKey(API_KEY)
+  // Task 13: the admin/non-admin two-tier split is gone — a single resolved
+  // ApiKey grants that key's team the full tool surface (tools that used to
+  // require an admin-tier key now just need any valid key).
+  const key = await resolveApiKey(API_KEY)
 
-  const adminOnly = () => ({ content: [{ type: 'text' as const, text: 'Admin access required — set BISTEC_ADMIN_API_KEYS and MCP_API_KEY' }], isError: true })
-  const authRequired = () => ({ content: [{ type: 'text' as const, text: 'Authentication required — set MCP_API_KEY' }], isError: true })
+  const authRequired = () => ({
+    content: [{ type: 'text' as const, text: 'Authentication required — set MCP_API_KEY to a valid, non-revoked team API key' }],
+    isError: true,
+  })
 
   try {
+    if (!key) return authRequired()
+
     switch (name) {
       case 'create_brand_kit':
-        if (!admin) return adminOnly()
         return { content: [{ type: 'text', text: JSON.stringify(await createBrandKit(args as Parameters<typeof createBrandKit>[0])) }] }
 
       case 'set_brand_kit_prompt':
-        if (!admin) return adminOnly()
         return { content: [{ type: 'text', text: JSON.stringify(await setBrandKitPrompt(args as Parameters<typeof setBrandKitPrompt>[0])) }] }
 
       case 'upload_brand_template':
-        if (!admin) return adminOnly()
         return { content: [{ type: 'text', text: JSON.stringify(await uploadBrandTemplate(args as Parameters<typeof uploadBrandTemplate>[0])) }] }
 
       case 'list_brand_kits':
-        if (!authenticated) return authRequired()
         return { content: [{ type: 'text', text: JSON.stringify(await listBrandKits()) }] }
 
       case 'get_brand_kit':
-        if (!authenticated) return authRequired()
         return { content: [{ type: 'text', text: JSON.stringify(await getBrandKit(args as Parameters<typeof getBrandKit>[0])) }] }
 
       case 'generate_post':
-        if (!authenticated) return authRequired()
-        return { content: [{ type: 'text', text: JSON.stringify(await generatePost(args as unknown as Parameters<typeof generatePost>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await generatePost({ ...(args as unknown as Omit<Parameters<typeof generatePost>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'get_draft':
-        if (!authenticated) return authRequired()
         return { content: [{ type: 'text', text: JSON.stringify(await getDraft(args as Parameters<typeof getDraft>[0])) }] }
 
       case 'publish_post':
-        if (!authenticated) return authRequired()
-        return { content: [{ type: 'text', text: JSON.stringify(await publishPost(args as Parameters<typeof publishPost>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await publishPost({ ...(args as Parameters<typeof publishPost>[0]), teamId: key.teamId })
+            ),
+          }],
+        }
 
       default:
         return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true }

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
 // /api/acp is a machine-to-machine surface authenticated by its own API key
-// (isValidKey), not by the session cookie — exempt it from the session gate so
-// the route-level key check governs (and fails closed when no key is configured).
+// (resolveApiKey, DB-backed — src/mcp/auth.ts), not by the session cookie —
+// exempt it from the session gate so the route-level key check governs (and
+// fails closed when the key doesn't resolve to a live ApiKey row).
 const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp"]
 
 // Next 16: the `middleware` convention is deprecated in favour of `proxy`
