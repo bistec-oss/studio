@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { getDraftAccessInfo } from '@/lib/auth'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
 type Params = { id: string }
 
-export const GET = withAuth<Params>(async (_req, { params }, user) => {
-  const ownerId = await getDraftOwnerId(params.id)
-  if (ownerId === null) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, ownerId)
-  if (forbidden) return forbidden
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
+  const info = await getDraftAccessInfo(params.id)
+  if (!info || !canAccessContent(user, info)) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   const revisions = await prisma.draftRevision.findMany({
     where: { draftId: params.id },

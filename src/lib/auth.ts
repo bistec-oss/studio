@@ -74,13 +74,19 @@ export function forbiddenIfNotOwner(
   return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 }
 
-// Resolves the owning user's id for a draft (via its brief). null if not found.
-export async function getDraftOwnerId(draftId: string): Promise<string | null> {
+// Resolves the per-item access-check inputs for a draft (its own teamId, the
+// owning user's id via its brief, and the brief's campaignId — team-shared
+// per D6 when non-null). null if not found. Feeds canAccessContent()
+// (src/lib/authz/visibility.ts) at every draft-keyed route.
+export async function getDraftAccessInfo(
+  draftId: string,
+): Promise<{ teamId: string | null; ownerId: string; campaignId: string | null } | null> {
   const d = await prisma.draft.findUnique({
     where: { id: draftId },
-    select: { brief: { select: { userId: true } } },
+    select: { teamId: true, brief: { select: { userId: true, campaignId: true } } },
   })
-  return d?.brief.userId ?? null
+  if (!d) return null
+  return { teamId: d.teamId, ownerId: d.brief.userId, campaignId: d.brief.campaignId }
 }
 
 export async function getCurrentUser() {

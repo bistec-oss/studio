@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
 
 const bodySchema = z.object({ draftId: z.string() })
 
-export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, bodySchema)
   if (body.response) return body.response
   const { draftId } = body.data
 
   const draft = await prisma.draft.findUnique({
     where: { id: draftId },
-    include: { brief: { select: { userId: true, aspectRatio: true } } },
+    include: { brief: { select: { userId: true, aspectRatio: true, campaignId: true } } },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   if (draft.exportUrl) {
     // Stored value is an object key — sign it for read.

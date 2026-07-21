@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner, getDraftOwnerId } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { getDraftAccessInfo } from '@/lib/auth'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
@@ -11,16 +12,16 @@ export const maxDuration = 120
 
 type Params = { id: string; rev: string }
 
-export const POST = withAuth<Params>(async (_req, { params }, user) => {
+export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
   const revisionNumber = Number(params.rev)
   if (!Number.isInteger(revisionNumber)) {
     return NextResponse.json({ error: 'Invalid revision number' }, { status: 400 })
   }
 
-  const ownerId = await getDraftOwnerId(params.id)
-  if (ownerId === null) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, ownerId)
-  if (forbidden) return forbidden
+  const info = await getDraftAccessInfo(params.id)
+  if (!info || !canAccessContent(user, info)) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // A running async action (regenerate/refine) will move the revision pointer
   // itself — restoring concurrently would race it.

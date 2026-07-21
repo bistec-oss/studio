@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveCopyProvider } from '@/providers/registry'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
@@ -15,14 +15,17 @@ import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 // completion (the client captures the previous copy for Undo before firing).
 // The design HTML/PNG is untouched — copy and design regenerate independently,
 // and Draft.status never changes.
-export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
+export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
     include: { brief: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // Copy regeneration needs existing content to replace — a draft still
   // generating (or one whose generation failed) has none.

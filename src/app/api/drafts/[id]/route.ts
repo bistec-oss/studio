@@ -3,7 +3,8 @@ import { z } from 'zod'
 import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { withAuth, withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
@@ -118,6 +119,8 @@ async function loadDraft(id: string) {
 
   return {
     ownerId: draft.brief.userId,
+    teamId: draft.teamId,
+    campaignId: draft.brief.campaignId,
     data: {
     id: draft.id,
     briefId: draft.briefId,
@@ -151,11 +154,14 @@ async function loadDraft(id: string) {
   }
 }
 
-export const GET = withAuth<Params>(async (_req, { params }, user) => {
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
   const result = await loadDraft(params.id)
-  if (!result) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, result.ownerId)
-  if (forbidden) return forbidden
+  if (
+    !result ||
+    !canAccessContent(user, { teamId: result.teamId, ownerId: result.ownerId, campaignId: result.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   return NextResponse.json(result.data)
 })

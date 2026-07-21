@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { runPathBDesign } from '@/lib/agent/pathB'
@@ -17,14 +17,17 @@ import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 // polls pendingAction/pendingActionError to completion. Before overwriting,
 // the CURRENT design is snapshotted as a DraftRevision so the user can return
 // to it via the revision history. Path B only — Path A is a template fill.
-export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
+export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
     include: { brief: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   if (draft.brief.designMode !== 'GENERATE') {
     return NextResponse.json(

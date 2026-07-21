@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -62,7 +62,7 @@ const refineSchema = z.object({}).passthrough()
 // pattern — see draftActions.ts) and the route returns 202. The draft page
 // polls pendingAction/pendingActionError — and, for an API-mode brand-kit
 // conflict, the conflict surfaced from pendingConflict — to completion.
-export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
+export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) => {
   const body = await parseBody(req, refineSchema)
   if (body.response) return body.response
   const { instruction, overrideConflictId } = body.data as {
@@ -77,9 +77,12 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
     where: { id: params.id },
     include: { brief: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // Output canvas for this draft's brief (1080×1080 square or 1080×1350 portrait).
   const { width, height } = dimensionsFor(draft.brief.aspectRatio)
