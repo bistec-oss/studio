@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { withTeamAuth } from "@/lib/api/handler"
 import { draftVisibilityWhere } from "@/lib/authz/visibility"
 import { resolveExportUrl } from "@/lib/storage/minio"
-import { PostStatus } from "@prisma/client"
+import { Prisma, PostStatus } from "@prisma/client"
 
 export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
@@ -12,27 +12,19 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const statusFilter = searchParams.get("status") ?? "ALL"
   const search = searchParams.get("search")?.trim() ?? ""
 
-  // Build the where clause — drafted as a plain object; Prisma accepts the
-  // intersection of these shapes for Draft.findMany({ where }).
-  type WhereClause = {
-    status?: "EXPORTED"
-    posts?: { none?: Record<string, never>; some?: { status?: PostStatus } }
-    OR?: Array<{
-      status?: "EXPORTED"
-      posts?: { some?: { status?: PostStatus } }
-    }>
-    AND?: Array<{ brief?: { topic?: { contains: string; mode: "insensitive" }; userId?: string } }>
-  }
-
-  const where: WhereClause = {}
+  // Build the where clause with the real Prisma type (M3, final review) — the
+  // old hand-rolled WhereClause type didn't match Prisma's actual
+  // DraftWhereInput shape, so the visibility AND-clause below had to be
+  // silenced with `as never`. That cast meant a future change to
+  // draftVisibilityWhere's shape wouldn't be type-checked at this call
+  // site — exactly where a silent visibility regression (D6) would hurt.
+  const where: Prisma.DraftWhereInput = {}
 
   // Status filter
   if (statusFilter === "READY") {
     // READY = EXPORTED draft with no posts yet
-    Object.assign(where, {
-      status: "EXPORTED" as const,
-      posts: { none: {} },
-    })
+    where.status = "EXPORTED"
+    where.posts = { none: {} }
   } else if (
     statusFilter === "PUBLISHED" ||
     statusFilter === "SCHEDULED" ||
@@ -53,20 +45,21 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     ]
   }
 
+  // AND-ed conditions accumulate here (search + the mandatory D6 visibility
+  // clause below) so the two can never accidentally overwrite each other.
+  const andConditions: Prisma.DraftWhereInput[] = []
+
   if (search) {
-    const searchCondition = {
-      brief: { topic: { contains: search, mode: "insensitive" as const } },
-    }
-    if (where.AND) {
-      where.AND.push(searchCondition)
-    } else {
-      where.AND = [searchCondition]
-    }
+    andConditions.push({
+      brief: { topic: { contains: search, mode: "insensitive" } },
+    })
   }
 
   // D6 visibility: own drafts, or anything shared via a campaign-linked brief
   // (team-wide admins/super-admins see the whole team).
-  where.AND = [...(where.AND ?? []), draftVisibilityWhere(user) as never]
+  andConditions.push(draftVisibilityWhere(user))
+
+  where.AND = andConditions
 
   const [drafts, total] = await Promise.all([
     // select (not include): tiles never need htmlContent (megabytes/row after

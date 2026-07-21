@@ -123,8 +123,14 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     campaignId
       ? prisma.campaign.findFirst({ where: { id: campaignId, isDeleted: false } })
       : Promise.resolve(null),
+    // I2 (final review): include the template's brand kit so its team can be
+    // checked below — an unscoped findUnique let a foreign team's template
+    // HTML enter the design prompt as "style inspiration" (see pathB.ts).
     referenceTemplateId
-      ? prisma.brandKitTemplate.findUnique({ where: { id: referenceTemplateId } })
+      ? prisma.brandKitTemplate.findUnique({
+          where: { id: referenceTemplateId },
+          include: { brandKit: { select: { teamId: true } } },
+        })
       : Promise.resolve(null),
     brandKitId
       ? prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
@@ -137,21 +143,18 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   if (imageProviderKey && !imageProvider) {
     return NextResponse.json({ error: 'Invalid or disabled imageProviderKey' }, { status: 400 })
   }
-  if (campaignId && !campaign) {
-    return NextResponse.json({ error: 'Campaign not found' }, { status: 400 })
-  }
-  // Cross-team reference is treated identically to "doesn't exist" (IDOR-safe),
-  // but as a distinct 404 rather than the 400 above (bad id vs. wrong tenant).
-  if (campaign && campaign.teamId !== user.teamId) {
+  // M1 (final review): "doesn't exist" and "exists in another team" now share
+  // ONE status/message (404, the pre-existing not-found text) for every
+  // referenced record. The old 400-vs-404 split let a caller distinguish "bad
+  // id" from "id exists in some other tenant" — a cross-tenant existence
+  // oracle — by watching the status code alone.
+  if (campaignId && (!campaign || campaign.teamId !== user.teamId)) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
-  if (referenceTemplateId && !template) {
-    return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
+  if (referenceTemplateId && (!template || template.brandKit.teamId !== user.teamId)) {
+    return NextResponse.json({ error: 'Reference template not found' }, { status: 404 })
   }
-  if (brandKitId && !brandKit) {
-    return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
-  }
-  if (brandKit && brandKit.teamId !== user.teamId) {
+  if (brandKitId && (!brandKit || brandKit.teamId !== user.teamId)) {
     return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
   }
 

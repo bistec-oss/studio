@@ -98,7 +98,7 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   }
 
   // Explicit brief kit → campaign → project → system default.
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
+  const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
   if (!kit) {
     return NextResponse.json(
       { code: 'NO_BRAND_KIT', message: 'No brand kit found for this draft.' },

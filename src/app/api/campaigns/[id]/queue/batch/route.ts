@@ -44,7 +44,7 @@ export const POST = withTeamAuth<Params>(async (req, { params }, user) => {
 
   // Validate every template selection before writing anything.
   for (const entry of entries) {
-    const templateError = await validateTemplateSelection(params.id, entry)
+    const templateError = await validateTemplateSelection(params.id, entry, campaign.teamId)
     if (templateError) return templateError
   }
 

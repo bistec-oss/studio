@@ -26,6 +26,11 @@ const EDITOR_EMAIL = 'editor@bisteccare.lk'
 const EDITOR_PASSWORD = 'BistecStudio2026!'
 const CLIENTX_EMAIL = 'clientx.admin@users.bistec.internal'
 const CLIENTX_PASSWORD = 'BistecStudio2026!'
+// NoKitCo (scripts/seed-teams.mjs): a third team with a real admin + a 'cli'
+// COPY provider but deliberately NO brand kit — the final-review C1 guardrail
+// below proves a kit-less team gets NoBrandKit, never another team's branding.
+const NOKITCO_EMAIL = 'nokitco.admin@users.bistec.internal'
+const NOKITCO_PASSWORD = 'BistecStudio2026!'
 
 interface DraftRow {
   id: string
@@ -386,6 +391,133 @@ test.describe('Cross-tenant isolation (D7)', () => {
       expect((await bistecEditor.get(`/api/brief-drafts/${created.id}`)).status()).toBe(200)
     } finally {
       await bistecEditor.del(`/api/brief-drafts/${created.id}`)
+    }
+  })
+
+  // ── Final whole-branch review guardrails (D7) ──────────────────────────────
+  // Brand kits and templates were teamId-stamped but never fully brought
+  // inside the tenant boundary (resolveBrandKit's default tier, MCP brand-kit
+  // tools, Path A/B template lookups, campaign/project FK injection). These
+  // cases reproduce each named attack shape from the review.
+
+  test('foreign templateId on assemble-a (Path A) is rejected — cannot render another team\'s template (I1)', async () => {
+    // "Hearts Talk" is a pre-existing Bistec-team kit with a template (seeded
+    // by scripts/seed-hearts-talk.mjs), same fixture the /api/templates
+    // isolation case above uses.
+    const bistecTemplates = await (await bistecAdmin.get('/api/templates')).json()
+    const heartsTemplateId = (bistecTemplates as { id: string; name: string }[]).find((t) =>
+      t.name.includes('Hearts Talk'),
+    )?.id
+    expect(heartsTemplateId).toBeTruthy()
+
+    const brief = await (
+      await clientxAdmin.post('/api/briefs', {
+        topic: `Isolation foreign template ${Date.now()}`,
+        goal: 'Awareness',
+        tone: 'professional',
+        channels: ['INSTAGRAM'],
+        designMode: 'TEMPLATE',
+        copyProviderKey: 'cli',
+        aspectRatio: 'SQUARE',
+      })
+    ).json()
+
+    const res = await clientxAdmin.post('/api/generate/assemble-a', {
+      briefId: brief.id,
+      templateId: heartsTemplateId,
+    })
+    expect(res.status()).toBe(404)
+    expect((await res.json()).error).toBe('Template not found')
+  })
+
+  test('foreign referenceTemplateId on brief create is rejected (I2)', async () => {
+    const bistecTemplates = await (await bistecAdmin.get('/api/templates')).json()
+    const heartsTemplateId = (bistecTemplates as { id: string; name: string }[]).find((t) =>
+      t.name.includes('Hearts Talk'),
+    )?.id
+    expect(heartsTemplateId).toBeTruthy()
+
+    const res = await clientxAdmin.post('/api/briefs', {
+      topic: `Isolation foreign ref template ${Date.now()}`,
+      goal: 'Awareness',
+      tone: 'professional',
+      channels: ['INSTAGRAM'],
+      designMode: 'GENERATE',
+      copyProviderKey: 'cli',
+      referenceTemplateId: heartsTemplateId,
+    })
+    expect(res.status()).toBe(404)
+    expect((await res.json()).error).toBe('Reference template not found')
+  })
+
+  test('foreign brandKitId/projectId injection on campaign create/patch and project create/patch is rejected (I3)', async () => {
+    // Create: campaign with another team's brandKitId.
+    const campaignByKit = await clientxAdmin.post('/api/campaigns', {
+      name: `Isolation campaign kit-injection ${Date.now()}`,
+      brandKitId: bistecKitId,
+    })
+    expect(campaignByKit.status()).toBe(400)
+
+    // Create: campaign with another team's projectId.
+    const campaignByProject = await clientxAdmin.post('/api/campaigns', {
+      name: `Isolation campaign project-injection ${Date.now()}`,
+      projectId: bistecProjectId,
+    })
+    expect(campaignByProject.status()).toBe(400)
+
+    // Patch: a real ClientX campaign, injecting Bistec's brandKitId.
+    const ownCampaign = await (
+      await clientxAdmin.post('/api/campaigns', { name: `Isolation own campaign ${Date.now()}` })
+    ).json()
+    const patchByKit = await clientxAdmin.patch(`/api/campaigns/${ownCampaign.id}`, { brandKitId: bistecKitId })
+    expect(patchByKit.status()).toBe(400)
+
+    // Create: project with another team's defaultBrandKitId.
+    const projectByKit = await clientxAdmin.post('/api/projects', {
+      name: `Isolation project kit-injection ${Date.now()}`,
+      defaultBrandKitId: bistecKitId,
+    })
+    expect(projectByKit.status()).toBe(400)
+
+    // Patch: a real ClientX project, injecting Bistec's defaultBrandKitId.
+    const ownProject = await (
+      await clientxAdmin.post('/api/projects', { name: `Isolation own project ${Date.now()}` })
+    ).json()
+    const patchProjectByKit = await clientxAdmin.patch(`/api/projects/${ownProject.id}`, {
+      defaultBrandKitId: bistecKitId,
+    })
+    expect(patchProjectByKit.status()).toBe(400)
+  })
+
+  test('a team with no brand kit of its own gets NoBrandKit, never another team\'s branding (C1)', async ({
+    request,
+  }) => {
+    // NoBrandKitError is thrown by resolveGenerationInputs BEFORE any model
+    // call (createPendingDraft validates synchronously), so this assertion
+    // holds regardless of MOCK_AI. NoKitCo (scripts/seed-teams.mjs) has a
+    // real 'cli' COPY provider but deliberately no BrandKit, campaign, or
+    // project — before the C1 fix, resolveBrandKit's unscoped last-resort
+    // tier would have silently handed this team Bistec's real
+    // isDefault=true kit instead of failing.
+    const nokitco = await loginAs(request, NOKITCO_EMAIL, NOKITCO_PASSWORD, { team: 'NoKitCo' })
+    try {
+      const brief = await (
+        await nokitco.post('/api/briefs', {
+          topic: `Isolation no-kit generation ${Date.now()}`,
+          goal: 'Awareness',
+          tone: 'professional',
+          channels: ['INSTAGRAM'],
+          designMode: 'GENERATE',
+          copyProviderKey: 'cli',
+        })
+      ).json()
+
+      const res = await nokitco.post('/api/generate/assemble-b', { briefId: brief.id })
+      expect(res.status()).toBe(422)
+      const body = await res.json()
+      expect(body.code).toBe('NO_BRAND_KIT')
+    } finally {
+      await nokitco.dispose()
     }
   })
 })

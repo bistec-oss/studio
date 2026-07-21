@@ -92,7 +92,7 @@ export async function toolGetBrandKitContext(briefId: string): Promise<BrandKitC
     },
   })
 
-  // Resolve: explicit brief kit → campaign brand kit → project default → system default
+  // Resolve: explicit brief kit → campaign brand kit → project default → team default
   const explicitKit = brief.brandKit && !brief.brandKit.isDeleted ? brief.brandKit : null
   const campaignKit = brief.campaign?.brandKit ?? null
   const projectKit = brief.campaign?.projects[0]?.project?.defaultBrandKit ?? null
@@ -100,8 +100,13 @@ export async function toolGetBrandKitContext(briefId: string): Promise<BrandKitC
   let kit = explicitKit ?? campaignKit ?? projectKit
 
   if (!kit) {
+    // Same C1 fix as lib/brandkit/resolve.ts: this tool re-implements the
+    // precedence chain independently (it's the API-mode agent's
+    // getBrandKitContext tool, not a caller of resolveBrandKit) and had the
+    // identical unscoped last-resort lookup — a cross-tenant brand-kit leak
+    // by default. Scope it to the brief's own team.
     kit = await prisma.brandKit.findFirst({
-      where: { isDefault: true, isDeleted: false },
+      where: { teamId: brief.teamId, isDefault: true, isDeleted: false },
       include: {
         prompts: { where: { isActive: true }, take: 1 },
         artifacts: { where: { feedToAI: true } },

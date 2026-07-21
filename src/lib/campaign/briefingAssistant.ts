@@ -63,10 +63,12 @@ export async function runBriefingModel(system: string, messages: ChatMessage[], 
 
 // Shared campaign context (brand voice + source documents + current briefing)
 // for both assistant prompts. `brandKitId` (the brief's own kit selection)
-// overrides the campaign chain, matching generation-time precedence.
-async function buildCampaignContext(campaignId?: string, brandKitId?: string): Promise<string> {
+// overrides the campaign chain, matching generation-time precedence. `teamId`
+// is required (team-tenancy fix, final review C1) — resolveBrandKit needs it
+// to scope every tier, including its team-default fallback.
+async function buildCampaignContext(teamId: string, campaignId?: string, brandKitId?: string): Promise<string> {
   const [kit, docs, activeBriefing] = await Promise.all([
-    resolveBrandKit(campaignId, brandKitId),
+    resolveBrandKit(teamId, campaignId, brandKitId),
     campaignId ? collectCampaignDocsContext(campaignId) : Promise.resolve({ text: '', truncated: false }),
     campaignId ? getActiveCampaignBriefing(campaignId) : Promise.resolve(null),
   ])
@@ -159,7 +161,7 @@ export async function runBriefingChat(
   }
 
   const [context, imageUrls] = await Promise.all([
-    buildCampaignContext(campaignId),
+    buildCampaignContext(teamId, campaignId),
     collectCampaignDocImageUrls(campaignId),
   ])
   const system = [
@@ -204,7 +206,7 @@ export async function runBriefingChat(
 export async function enhanceBriefing(campaignId: string, content: string, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(content)
 
-  const context = await buildCampaignContext(campaignId)
+  const context = await buildCampaignContext(teamId, campaignId)
   const system = [
     'You improve campaign briefings for bistec-studio. The briefing is free-text context injected into every AI post generation under the campaign, on top of the brand voice.',
     'Rewrite the briefing the user provides: keep every concrete fact, sharpen vague statements, fill obvious gaps from the campaign context, and structure it so a copywriter and a designer can act on it (goal, audience, key messages, offers/CTAs, tone, do/don\'t rules).',
@@ -239,7 +241,7 @@ export interface EnhancePostBriefInput {
 export async function enhancePostBrief(input: EnhancePostBriefInput, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(input.content)
 
-  const context = await buildCampaignContext(input.campaignId, input.brandKitId)
+  const context = await buildCampaignContext(teamId, input.campaignId, input.brandKitId)
   const system = [
     'You improve briefs for single social media posts in bistec-studio. The brief is the prompt an AI copywriter and an AI designer act on to produce ONE Instagram/LinkedIn image post.',
     'Rewrite the brief the user provides: keep every concrete fact, sharpen vague statements, make the key message and call-to-action explicit, and add helpful specifics from the campaign context when they clearly apply to this post.',

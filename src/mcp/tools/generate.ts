@@ -84,7 +84,7 @@ export async function generatePost(args: GeneratePostArgs) {
   } catch (err) {
     if (err instanceof NoBrandKitError) {
       throw new Error(
-        'No brand kit found — configure a brand kit for this campaign, or set a system default.'
+        'No brand kit found — configure a brand kit for this campaign, or ask a team admin to set a team default.'
       )
     }
     throw err

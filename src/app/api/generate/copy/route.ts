@@ -28,7 +28,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
 
     // Brand voice for copy comes from the same kit precedence as design:
     // explicit brief kit → campaign → project → system default.
-    const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
+    const kit = await resolveBrandKit(brief.teamId, brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
     const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
 
     const copyText = await provider.generateCopy(buildBriefInput(brief, kit, campaignBriefing))

@@ -94,25 +94,36 @@ export function requiresAdmin(postAction: PostGenerationAction): boolean {
 // Shared DB validation for an entry's template selection (TEMPLATE mode): the
 // template must exist, belong to the campaign-resolved brand kit, and be
 // designed for the entry's size. Returns a ready 4xx response or null. Used by
-// both queue routes (create + edit).
+// both queue routes (create + edit). `teamId` is the entry/campaign's own team
+// (the routes already team-check the campaign before calling this).
 export async function validateTemplateSelection(
   campaignId: string,
   entry: QueueEntryInput,
+  teamId: string,
 ): Promise<NextResponse | null> {
   if (entry.designMode !== 'TEMPLATE') return null
 
   const template = await prisma.brandKitTemplate.findUnique({
     where: { id: entry.templateId! },
-    select: { brandKitId: true, aspectRatio: true },
+    select: { brandKitId: true, aspectRatio: true, brandKit: { select: { teamId: true } } },
   })
   if (!template) return NextResponse.json({ error: 'Template not found' }, { status: 404 })
 
-  const kit = await resolveBrandKit(campaignId)
-  if (kit && template.brandKitId !== kit.id) {
-    return NextResponse.json(
-      { error: "Template does not belong to the campaign's brand kit" },
-      { status: 400 }
-    )
+  const kit = await resolveBrandKit(teamId, campaignId)
+  if (kit) {
+    if (template.brandKitId !== kit.id) {
+      return NextResponse.json(
+        { error: "Template does not belong to the campaign's brand kit" },
+        { status: 400 }
+      )
+    }
+  } else if (template.brandKit.teamId !== teamId) {
+    // I4 (final review): when the campaign resolves no kit, `kit &&` used to
+    // skip validation entirely — ANY existing template id (including a
+    // foreign team's) passed and was stored on the entry, later picked up by
+    // the scheduler. Verify the template's own kit belongs to this team
+    // directly instead of trusting the (now-null) campaign-resolved kit.
+    return NextResponse.json({ error: 'Template not found' }, { status: 404 })
   }
   if (template.aspectRatio !== entry.aspectRatio) {
     return NextResponse.json(

@@ -41,11 +41,15 @@ export async function runPathBDesign(
   // Output canvas for this brief (1080×1080 square or 1080×1350 portrait).
   const { width, height } = dimensionsFor(brief.aspectRatio)
 
-  // Optional reference template for style inspiration.
+  // Optional reference template for style inspiration. Scoped to the brief's
+  // own team via its parent brand kit (I2, final review — defense-in-depth;
+  // briefs/route.ts already rejects a foreign referenceTemplateId at create
+  // time, but a pre-fix row or a direct DB write must not leak another team's
+  // template HTML into the design prompt as "style inspiration").
   let referenceTemplate: { htmlTemplate: string } | null = null
   if (brief.referenceTemplateId) {
-    referenceTemplate = await prisma.brandKitTemplate.findUnique({
-      where: { id: brief.referenceTemplateId },
+    referenceTemplate = await prisma.brandKitTemplate.findFirst({
+      where: { id: brief.referenceTemplateId, brandKit: { teamId: brief.teamId } },
       select: { htmlTemplate: true },
     })
   }

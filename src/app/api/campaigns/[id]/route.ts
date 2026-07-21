@@ -43,12 +43,13 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   const { name, brandKitId, defaultTone, projectId } = body.data
 
   // Verify referenced records so a bogus id is a 400, not a P2003 500.
+  // Team-scoped (I3, final review) — see the matching note in ../route.ts POST.
   if (brandKitId) {
-    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
+    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, teamId: user.teamId, isDeleted: false } })
     if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
   }
   if (projectId) {
-    const project = await prisma.project.findFirst({ where: { id: projectId, isDeleted: false } })
+    const project = await prisma.project.findFirst({ where: { id: projectId, teamId: user.teamId, isDeleted: false } })
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
   }
 

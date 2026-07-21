@@ -140,17 +140,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }],
         }
 
+      // C2 (final review): thread key.teamId into every brand-kit tool, same
+      // anti-spoof pattern as create_brand_kit/generate_post/get_draft/
+      // publish_post below — args is spread FIRST so a caller-supplied teamId
+      // in the tool arguments can never override the ApiKey's real team.
       case 'set_brand_kit_prompt':
-        return { content: [{ type: 'text', text: JSON.stringify(await setBrandKitPrompt(args as Parameters<typeof setBrandKitPrompt>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await setBrandKitPrompt({ ...(args as unknown as Omit<Parameters<typeof setBrandKitPrompt>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'upload_brand_template':
-        return { content: [{ type: 'text', text: JSON.stringify(await uploadBrandTemplate(args as Parameters<typeof uploadBrandTemplate>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await uploadBrandTemplate({ ...(args as unknown as Omit<Parameters<typeof uploadBrandTemplate>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'list_brand_kits':
-        return { content: [{ type: 'text', text: JSON.stringify(await listBrandKits()) }] }
+        return { content: [{ type: 'text', text: JSON.stringify(await listBrandKits({ teamId: key.teamId })) }] }
 
       case 'get_brand_kit':
-        return { content: [{ type: 'text', text: JSON.stringify(await getBrandKit(args as Parameters<typeof getBrandKit>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await getBrandKit({ ...(args as unknown as Omit<Parameters<typeof getBrandKit>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'generate_post':
         return {

@@ -51,7 +51,7 @@ export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
     )
   }
 
-  const templateError = await validateTemplateSelection(params.id, entry)
+  const templateError = await validateTemplateSelection(params.id, entry, user.teamId)
   if (templateError) return templateError
 
   const updated = await prisma.scheduledGeneration.update({

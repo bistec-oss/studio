@@ -26,6 +26,14 @@
  *     resolveExportUrl can presign without the object needing to actually
  *     exist in MinIO (presigning is a pure computation, not an existence
  *     check), so no real upload is needed for these fixtures.
+ *   - Team "NoKitCo" (new, final-review C1 guardrail): a third team with a
+ *     `nokitco.admin` user (fixed test password, TeamRole.ADMIN) and a 'cli'
+ *     COPY provider, but deliberately NO BrandKit, campaign, or drafts. Only
+ *     "Bistec" gets a real isDefault=true system kit (via seed-brandkit.mjs,
+ *     which runs after this script) — this team exercises resolveBrandKit's
+ *     last-resort tier finding NOTHING of its own, which is exactly the
+ *     shape that used to leak Bistec's default kit across tenants (see
+ *     tests/e2e/team-isolation.test.ts's "kit-less team" case).
  */
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
@@ -44,6 +52,9 @@ const EDITOR_EMAIL = "editor@bisteccare.lk"
 
 const CLIENTX_ADMIN_USERNAME = "clientx.admin"
 const CLIENTX_ADMIN_EMAIL = `${CLIENTX_ADMIN_USERNAME}@users.bistec.internal`
+
+const NOKITCO_ADMIN_USERNAME = "nokitco.admin"
+const NOKITCO_ADMIN_EMAIL = `${NOKITCO_ADMIN_USERNAME}@users.bistec.internal`
 
 async function ensureTeam(name) {
   const existing = await prisma.team.findUnique({ where: { name } })
@@ -88,36 +99,56 @@ async function ensureCliProvider(teamId) {
   })
 }
 
-async function ensureClientXAdmin() {
-  const existing = await prisma.user.findUnique({ where: { email: CLIENTX_ADMIN_EMAIL } })
+async function ensureTeamAdminUser(email, username, displayName) {
+  const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) return existing
 
   await auth.api.signUpEmail({
-    body: { name: "ClientX Admin", email: CLIENTX_ADMIN_EMAIL, password: FIXED_TEST_PASSWORD },
+    body: { name: displayName, email, password: FIXED_TEST_PASSWORD },
   })
   const user = await prisma.user.update({
-    where: { email: CLIENTX_ADMIN_EMAIL },
+    where: { email },
     data: {
       role: "ADMIN",
-      username: CLIENTX_ADMIN_USERNAME.toLowerCase(),
-      displayUsername: CLIENTX_ADMIN_USERNAME,
+      username: username.toLowerCase(),
+      displayUsername: username,
     },
   })
-  console.log(`Created user "${CLIENTX_ADMIN_USERNAME}" (${user.id})`)
+  console.log(`Created user "${username}" (${user.id})`)
   return user
 }
 
 // One brand kit, one campaign (linked to it), one uncategorized brief+draft,
 // one campaign-linked brief+draft — all find-or-create by a stable name
 // scoped to the team, so re-running this script is a no-op.
-async function ensureTeamFixtures(teamId, teamLabel, ownerId) {
+//
+// `kitIsDefault` (final review C1 fixture gap): Bistec keeps isDefault:false
+// here because seed-brandkit.mjs (which runs right after this script) creates
+// the REAL "Bistec" default kit with its full voice prompt/colors/fonts — a
+// pre-existing team-tenancy invariant this script must not disturb. Every
+// OTHER team fixtured here (ClientX, and any future one) has no such separate
+// default-kit seed script, so ITS "{team} Kit" must be the team's own default
+// — otherwise resolveBrandKit's last-resort tier finds nothing for that team
+// (correctly, post-C1-fix) and any campaign-less generation 422s with
+// NoBrandKit. This was masked before the C1 fix: the team-default tier's
+// missing teamId filter let a kit-less team silently fall through to
+// Bistec's real default kit and "pass" anyway.
+async function ensureTeamFixtures(teamId, teamLabel, ownerId, { kitIsDefault = false } = {}) {
   const kitName = `${teamLabel} Kit`
   let kit = await prisma.brandKit.findFirst({ where: { teamId, name: kitName, isDeleted: false } })
   if (!kit) {
+    if (kitIsDefault) {
+      await prisma.brandKit.updateMany({ where: { teamId, isDefault: true }, data: { isDefault: false } })
+    }
     kit = await prisma.brandKit.create({
-      data: { teamId, name: kitName, colors: ["#0284c7"], fonts: [], isDefault: false },
+      data: { teamId, name: kitName, colors: ["#0284c7"], fonts: [], isDefault: kitIsDefault },
     })
     console.log(`  [${teamLabel}] brand kit "${kitName}" (${kit.id})`)
+  } else if (kitIsDefault && !kit.isDefault) {
+    // Idempotency fix-up for a DB seeded before this default-kit fix existed.
+    await prisma.brandKit.updateMany({ where: { teamId, isDefault: true }, data: { isDefault: false } })
+    kit = await prisma.brandKit.update({ where: { id: kit.id }, data: { isDefault: true } })
+    console.log(`  [${teamLabel}] brand kit "${kitName}" marked as the team default (${kit.id})`)
   }
 
   const campaignName = `${teamLabel} Campaign`
@@ -193,28 +224,39 @@ async function main() {
 
   const bistec = await ensureTeam("Bistec")
   const clientx = await ensureTeam("ClientX")
+  const nokitco = await ensureTeam("NoKitCo")
 
   await ensureMembership(bistec.id, admin.id, "ADMIN")
   await ensureMembership(bistec.id, editor.id, "EDITOR")
 
-  const clientxAdmin = await ensureClientXAdmin()
+  const clientxAdmin = await ensureTeamAdminUser(CLIENTX_ADMIN_EMAIL, CLIENTX_ADMIN_USERNAME, "ClientX Admin")
   await ensureMembership(clientx.id, clientxAdmin.id, "ADMIN")
 
+  const nokitcoAdmin = await ensureTeamAdminUser(NOKITCO_ADMIN_EMAIL, NOKITCO_ADMIN_USERNAME, "NoKitCo Admin")
+  await ensureMembership(nokitco.id, nokitcoAdmin.id, "ADMIN")
+
   // Bistec's "cli" row is seeded by scripts/seed-cli-provider.mjs (runs after
-  // this script) — ensure both explicitly here so this script alone leaves
-  // no dangling copyProviderKey: 'cli' reference regardless of run order.
+  // this script) — ensure all three explicitly here so this script alone
+  // leaves no dangling copyProviderKey: 'cli' reference regardless of run
+  // order. NoKitCo needs this too (a brief needs SOME valid copyProviderKey
+  // to be created at all) even though it deliberately gets no brand kit.
   await ensureCliProvider(bistec.id)
   await ensureCliProvider(clientx.id)
+  await ensureCliProvider(nokitco.id)
 
   console.log("Bistec team fixtures:")
   await ensureTeamFixtures(bistec.id, "Bistec", editor.id)
 
   console.log("ClientX team fixtures:")
-  await ensureTeamFixtures(clientx.id, "ClientX", clientxAdmin.id)
+  await ensureTeamFixtures(clientx.id, "ClientX", clientxAdmin.id, { kitIsDefault: true })
+
+  // NoKitCo deliberately gets NO ensureTeamFixtures call — no brand kit, no
+  // campaign, no drafts. That absence is the fixture (see the file header).
 
   console.log("\nTeams ready:")
-  console.log(`  Bistec  (${bistec.id}) — adminBTG=ADMIN, editor=EDITOR`)
-  console.log(`  ClientX (${clientx.id}) — ${CLIENTX_ADMIN_USERNAME}=ADMIN (password: ${FIXED_TEST_PASSWORD})`)
+  console.log(`  Bistec   (${bistec.id}) — adminBTG=ADMIN, editor=EDITOR`)
+  console.log(`  ClientX  (${clientx.id}) — ${CLIENTX_ADMIN_USERNAME}=ADMIN (password: ${FIXED_TEST_PASSWORD})`)
+  console.log(`  NoKitCo  (${nokitco.id}) — ${NOKITCO_ADMIN_USERNAME}=ADMIN (password: ${FIXED_TEST_PASSWORD}), no brand kit`)
 }
 
 main()

@@ -42,6 +42,15 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   if (body.response) return body.response
   const { name, defaultBrandKitId, defaultTone } = body.data
 
+  // I3 (final review): same missing/foreign-team validation as POST above —
+  // PATCH accepts defaultBrandKitId too and was equally unguarded.
+  if (defaultBrandKitId) {
+    const kit = await prisma.brandKit.findFirst({
+      where: { id: defaultBrandKitId, teamId: project.teamId, isDeleted: false },
+    })
+    if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  }
+
   const updated = await prisma.project.update({
     where: { id: params.id },
     data: {

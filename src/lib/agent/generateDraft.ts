@@ -12,7 +12,7 @@ import type { GenerationActor } from '@/lib/agent/types'
 // Path B needs a resolvable brand kit; thrown before any model call is paid for.
 export class NoBrandKitError extends Error {
   constructor() {
-    super('No brand kit found — configure a brand kit for this campaign, project, or set a system default.')
+    super('No brand kit found — configure a brand kit for this campaign, project, or ask a team admin to set a team default.')
     this.name = 'NoBrandKitError'
   }
 }
@@ -44,8 +44,8 @@ async function resolveGenerationInputs(
   brief: Brief,
   templateId: string | null | undefined,
 ): Promise<ResolvedInputs> {
-  // Brand kit precedence: explicit brief kit → campaign → project → system default.
-  const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
+  // Brand kit precedence: explicit brief kit → campaign → project → team default.
+  const kit = await resolveBrandKit(brief.teamId, brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
   // Campaign-level briefing (when the brief's campaign has an active one) —
   // injected into copy and design prompts alongside the brand voice.
   const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
@@ -53,7 +53,13 @@ async function resolveGenerationInputs(
   let template = null
   if (brief.designMode === 'TEMPLATE') {
     if (!templateId) throw new TemplateNotFoundError()
-    template = await prisma.brandKitTemplate.findUnique({ where: { id: templateId } })
+    // I1 (final review): scope the template lookup to the brief's own team via
+    // its parent brand kit — an unscoped findUnique let any signed-in user
+    // render another team's full template HTML (a cross-tenant read where the
+    // rendered PNG is the exfiltration channel) by passing a foreign templateId.
+    template = await prisma.brandKitTemplate.findFirst({
+      where: { id: templateId, brandKit: { teamId: brief.teamId, isDeleted: false } },
+    })
     if (!template) throw new TemplateNotFoundError()
     assertTemplateMatchesBrief(brief, template)
   } else if (!kit) {

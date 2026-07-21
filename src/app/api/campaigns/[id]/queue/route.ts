@@ -56,7 +56,7 @@ export const POST = withTeamAuth<Params>(async (req, { params }, user) => {
     )
   }
 
-  const templateError = await validateTemplateSelection(params.id, entry)
+  const templateError = await validateTemplateSelection(params.id, entry, campaign.teamId)
   if (templateError) return templateError
 
   const created = await prisma.scheduledGeneration.create({

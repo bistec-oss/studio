@@ -15,7 +15,7 @@ export const GET = withTeamAuth<{ id: string }>(async (_req, { params }, user) =
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
 
-  const resolved = await resolveBrandKit(params.id)
+  const resolved = await resolveBrandKit(user.teamId, params.id)
   if (!resolved) return NextResponse.json({ kit: null, source: null })
 
   return NextResponse.json({ kit: resolved, source: resolved.source })

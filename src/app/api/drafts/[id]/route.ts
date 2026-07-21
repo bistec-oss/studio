@@ -114,7 +114,7 @@ async function loadDraft(id: string) {
     explanation: string
   } | null
 
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
+  const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
   return {
     ownerId: draft.brief.userId,
