@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 
 type Params = { id: string }
 
-export const GET = withAdmin<Params>(async (_req, { params }) => {
+export const GET = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const kit = await prisma.brandKit.findUnique({
     where: { id: params.id },
     include: {
@@ -15,7 +15,9 @@ export const GET = withAdmin<Params>(async (_req, { params }) => {
     },
   })
 
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   return NextResponse.json(kit)
 })
 
@@ -27,9 +29,11 @@ const patchSchema = z.object({
   isDefault: z.boolean().optional(),
 })
 
-export const PATCH = withAdmin<Params>(async (req, { params }) => {
+export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
@@ -40,7 +44,7 @@ export const PATCH = withAdmin<Params>(async (req, { params }) => {
   const updated = await prisma.$transaction(async (tx) => {
     if (isDefault) {
       await tx.brandKit.updateMany({
-        where: { isDefault: true, id: { not: params.id } },
+        where: { isDefault: true, id: { not: params.id }, teamId: user.teamId },
         data: { isDefault: false },
       })
     }
@@ -59,9 +63,11 @@ export const PATCH = withAdmin<Params>(async (req, { params }) => {
   return NextResponse.json(updated)
 })
 
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   if (kit.isDefault) {
     return NextResponse.json({ error: 'Assign another default brand kit first' }, { status: 409 })

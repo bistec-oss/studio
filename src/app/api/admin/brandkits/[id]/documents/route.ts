@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/lib/api/handler'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { BUCKET_DOCS, uploadObject, validateUpload } from '@/lib/storage/minio'
 import {
   isAllowedDocument,
@@ -24,7 +24,15 @@ const DOC_SELECT = {
   createdAt: true,
 } as const
 
-export const GET = withAdmin<Params>(async (_req, { params }) => {
+export const GET = withTeamAdmin<Params>(async (_req, { params }, user) => {
+  const kit = await prisma.brandKit.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
+  }
+
   const docs = await prisma.brandKitDocument.findMany({
     where: { brandKitId: params.id },
     orderBy: { createdAt: 'asc' },
@@ -33,12 +41,14 @@ export const GET = withAdmin<Params>(async (_req, { params }) => {
   return NextResponse.json(docs)
 })
 
-export const POST = withAdmin<Params>(async (req, { params }, user) => {
+export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const kit = await prisma.brandKit.findFirst({
     where: { id: params.id, isDeleted: false },
     select: { id: true, teamId: true },
   })
-  if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
+  }
 
   const fd = await req.formData()
   const file = fd.get('file')

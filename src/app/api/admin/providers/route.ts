@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { encrypt } from '@/lib/crypto'
 
 function detectProvider(apiKey: string): { providerName: string; autoLabel: string } | null {
@@ -30,8 +30,9 @@ async function validateApiKey(providerName: string, apiKey: string): Promise<str
   }
 }
 
-export const GET = withAdmin(async () => {
+export const GET = withTeamAdmin(async (_req, _ctx, user) => {
   const providers = await prisma.availableProvider.findMany({
+    where: { teamId: user.teamId },
     select: {
       id: true,
       slot: true,
@@ -60,7 +61,7 @@ const createSchema = z.object({
   isDefault: z.boolean().optional(),
 })
 
-export const POST = withAdmin(async (req: NextRequest) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { apiKey, slot, providerName: bodyProviderName, label: bodyLabel, isDefault } = body.data
@@ -86,15 +87,13 @@ export const POST = withAdmin(async (req: NextRequest) => {
   const keyPrefix = `…${apiKey.slice(-4)}`
   const encryptedApiKey = encrypt(apiKey)
 
-  // No wrapper-supplied team yet (Task 7/8 flips withAdmin → withTeamAdmin and
-  // will pass the real value here).
-  const teamId: string | null = null
+  const teamId = user.teamId
 
   // Clearing the prior default + creating the new row must be atomic so a
   // failure can't leave the slot with zero (or two) defaults.
   const provider = await prisma.$transaction(async (tx) => {
     if (isDefault) {
-      await tx.availableProvider.updateMany({ where: { slot }, data: { isDefault: false } })
+      await tx.availableProvider.updateMany({ where: { slot, teamId }, data: { isDefault: false } })
     }
     return tx.availableProvider.create({
       data: { teamId, slot, providerKey, providerName, label, keyPrefix, encryptedApiKey, isEnabled: true, isDefault: isDefault ?? false },

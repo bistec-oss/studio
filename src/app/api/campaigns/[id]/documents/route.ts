@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withAdmin } from '@/lib/api/handler'
+import { withAuth, withTeamAdmin } from '@/lib/api/handler'
 import { BUCKET_DOCS, uploadObject, validateUpload } from '@/lib/storage/minio'
 import {
   MAX_DOCS_PER_CAMPAIGN,
@@ -29,12 +29,14 @@ export const GET = withAuth<Params>(async (_req, { params }) => {
   return NextResponse.json(docs)
 })
 
-export const POST = withAdmin<Params>(async (req, { params }, user) => {
+export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const campaign = await prisma.campaign.findFirst({
     where: { id: params.id, isDeleted: false },
     select: { id: true, teamId: true },
   })
-  if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  if (!campaign || campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
 
   const fd = await req.formData()
   const file = fd.get('file')

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withAdmin } from '@/lib/api/handler'
+import { withAuth, withTeamAdmin } from '@/lib/api/handler'
 import { hasRole } from '@/lib/auth'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
@@ -27,9 +27,11 @@ export const GET = withAuth<Params>(async (_req, { params }, user) => {
   })
 })
 
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const post = await prisma.post.findUnique({ where: { id: params.id } })
-  if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!post || post.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   if (post.status !== 'SCHEDULED') {
     return NextResponse.json({ error: 'Post is not scheduled' }, { status: 409 })

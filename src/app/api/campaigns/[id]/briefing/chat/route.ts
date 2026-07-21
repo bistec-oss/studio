@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { runBriefingChat } from '@/lib/campaign/briefingAssistant'
 import { withUserClaudeAuth } from '@/lib/agent/userToken'
 
@@ -25,15 +25,17 @@ const chatSchema = z.object({
     }),
 })
 
-export const POST = withAdmin<Params>(async (req, { params }, user) => {
+export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, chatSchema)
   if (body.response) return body.response
 
   const campaign = await prisma.campaign.findFirst({
     where: { id: params.id, isDeleted: false },
-    select: { id: true },
+    select: { id: true, teamId: true },
   })
-  if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  if (!campaign || campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
 
   // CLI mode bills the acting user's personal Claude token when connected
   // (shared server token otherwise) — see src/lib/agent/userToken.ts.

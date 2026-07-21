@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/lib/api/handler'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload, RASTER_IMAGE_TYPES } from '@/lib/storage/minio'
 import { isAllowedDocument, parseDocumentText } from '@/lib/campaign/documents'
 import type { ArtifactType } from '@prisma/client'
@@ -14,7 +14,15 @@ const IMAGE_TYPES: ArtifactType[] = ['LOGO', 'REFERENCE_IMAGE', 'EXAMPLE_POST']
 
 type Params = { id: string }
 
-export const GET = withAdmin<Params>(async (_req, { params }) => {
+export const GET = withTeamAdmin<Params>(async (_req, { params }, user) => {
+  const kit = await prisma.brandKit.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const artifacts = await prisma.brandKitArtifact.findMany({
     where: { brandKitId: params.id },
     orderBy: { createdAt: 'desc' },
@@ -23,9 +31,11 @@ export const GET = withAdmin<Params>(async (_req, { params }) => {
   return NextResponse.json(artifacts)
 })
 
-export const POST = withAdmin<Params>(async (req, { params }) => {
+export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const kit = await prisma.brandKit.findUnique({ where: { id: params.id } })
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null

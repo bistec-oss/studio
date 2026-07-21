@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withTeamAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { postVisibilityWhere } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
@@ -11,7 +11,7 @@ import { Channel } from '@prisma/client'
 // their exact error messages (asserted by tests).
 const createSchema = z.object({}).passthrough()
 
-export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, auth) => {
   const parsed = await parseBody(req, createSchema)
   if (parsed.response) return parsed.response
 
@@ -29,7 +29,9 @@ export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
   }
 
   const draft = await prisma.draft.findUnique({ where: { id: draftId } })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  if (!draft || draft.teamId !== auth.teamId) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   if (!draft.exportUrl) {
     return NextResponse.json({ error: 'Draft has no export URL' }, { status: 422 })

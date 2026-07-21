@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/lib/api/handler'
+import { withTeamAdmin } from '@/lib/api/handler'
 
 // Rollback: re-activate an older briefing version (no new version is created).
 // Mirrors the BrandKitPrompt activate route.
-export const POST = withAdmin<{ id: string; vid: string }>(async (_req, { params }) => {
+export const POST = withTeamAdmin<{ id: string; vid: string }>(async (_req, { params }, user) => {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!campaign || campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const briefing = await prisma.campaignBriefing.findFirst({
     where: { id: params.vid, campaignId: params.id },
   })

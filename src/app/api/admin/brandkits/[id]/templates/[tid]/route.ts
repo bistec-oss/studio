@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 
 type Params = { id: string; tid: string }
 
@@ -10,7 +10,15 @@ const patchSchema = z.object({
   htmlTemplate: z.string().trim().optional(),
 })
 
-export const PATCH = withAdmin<Params>(async (req, { params }) => {
+export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
+  const kit = await prisma.brandKit.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
   const { name, htmlTemplate } = body.data
@@ -31,7 +39,15 @@ export const PATCH = withAdmin<Params>(async (req, { params }) => {
   return NextResponse.json(updated)
 })
 
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
+  const kit = await prisma.brandKit.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const template = await prisma.brandKitTemplate.findFirst({
     where: { id: params.tid, brandKitId: params.id },
   })

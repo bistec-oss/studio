@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { withAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
@@ -206,12 +206,14 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 // a SCHEDULED post is thereby cancelled), revisions, and the parent Brief when no
 // other draft references it. No cascades exist on these relations, so children
 // are deleted first, all in one transaction.
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
-    select: { id: true, briefId: true },
+    select: { id: true, briefId: true, teamId: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  if (!draft || draft.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   const briefDeleted = await prisma.$transaction(async (tx) => {
     await tx.post.deleteMany({ where: { draftId: draft.id } })

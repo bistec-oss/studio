@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { withAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
 type Params = { id: string }
 
@@ -26,9 +26,11 @@ const patchSchema = z.object({
   defaultTone: z.string().nullable().optional(),
 })
 
-export const PATCH = withAdmin<Params>(async (req, { params }) => {
+export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   const project = await prisma.project.findUnique({ where: { id: params.id } })
-  if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project || project.isDeleted || project.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
@@ -47,9 +49,11 @@ export const PATCH = withAdmin<Params>(async (req, { params }) => {
   return NextResponse.json(updated)
 })
 
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const project = await prisma.project.findUnique({ where: { id: params.id } })
-  if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project || project.isDeleted || project.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   await prisma.project.update({
     where: { id: params.id },

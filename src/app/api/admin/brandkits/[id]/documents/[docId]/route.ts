@@ -1,11 +1,19 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/lib/api/handler'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { BUCKET_DOCS, deleteObject } from '@/lib/storage/minio'
 
 type Params = { id: string; docId: string }
 
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
+  const kit = await prisma.brandKit.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!kit || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const doc = await prisma.brandKitDocument.findFirst({
     where: { id: params.docId, brandKitId: params.id },
   })

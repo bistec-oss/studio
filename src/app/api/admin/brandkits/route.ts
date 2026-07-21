@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 
-export const GET = withAdmin(async () => {
+export const GET = withTeamAdmin(async (_req, _ctx, user) => {
   const kits = await prisma.brandKit.findMany({
-    where: { isDeleted: false },
+    where: { isDeleted: false, teamId: user.teamId },
     include: {
       prompts: { where: { isActive: true }, take: 1, select: { content: true, version: true } },
       _count: { select: { templates: true, artifacts: true } },
@@ -24,19 +24,17 @@ const createSchema = z.object({
   isDefault: z.boolean().nullish(),
 })
 
-export const POST = withAdmin(async (req: NextRequest) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { name, colors, fonts, logoUrl, isDefault } = body.data
 
-  // No wrapper-supplied team yet (Task 7/8 flips withAdmin → withTeamAdmin and
-  // will pass the real value here).
-  const teamId: string | null = null
+  const teamId = user.teamId
 
   // Only one kit can be the system default — clear + create atomically.
   const kit = await prisma.$transaction(async (tx) => {
     if (isDefault) {
-      await tx.brandKit.updateMany({ where: { isDefault: true }, data: { isDefault: false } })
+      await tx.brandKit.updateMany({ where: { isDefault: true, teamId }, data: { isDefault: false } })
     }
     return tx.brandKit.create({
       data: {
