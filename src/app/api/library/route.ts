@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { withAuth } from "@/lib/api/handler"
-import { hasRole } from "@/lib/auth"
+import { withTeamAuth } from "@/lib/api/handler"
+import { draftVisibilityWhere } from "@/lib/authz/visibility"
 import { resolveExportUrl } from "@/lib/storage/minio"
 import { PostStatus } from "@prisma/client"
 
-export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
+export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10))
   const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20", 10)))
@@ -64,11 +64,9 @@ export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
     }
   }
 
-  // Non-admins only see drafts from their own briefs (IDOR fix).
-  if (!hasRole(user.role, "admin")) {
-    const ownership = { brief: { userId: user.userId } }
-    where.AND = where.AND ? [...where.AND, ownership] : [ownership]
-  }
+  // D6 visibility: own drafts, or anything shared via a campaign-linked brief
+  // (team-wide admins/super-admins see the whole team).
+  where.AND = [...(where.AND ?? []), draftVisibilityWhere(user) as never]
 
   const [drafts, total] = await Promise.all([
     // select (not include): tiles never need htmlContent (megabytes/row after

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { Prisma, Channel, DesignMode, type AspectRatio } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
@@ -10,7 +10,7 @@ import { isAspectRatio } from '@/lib/aspectRatio'
 // validation below (exact error messages + channel normalization) is kept as-is.
 const createSchema = z.object({}).passthrough()
 
-export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const parsed = await parseBody(req, createSchema)
   if (parsed.response) return parsed.response
   // Untrusted request body — every field is validated at runtime below; the cast
@@ -136,18 +136,24 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   if (campaignId && !campaign) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 400 })
   }
+  // Cross-team reference is treated identically to "doesn't exist" (IDOR-safe),
+  // but as a distinct 404 rather than the 400 above (bad id vs. wrong tenant).
+  if (campaign && campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
   if (referenceTemplateId && !template) {
     return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
   }
   if (brandKitId && !brandKit) {
     return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
   }
+  if (brandKit && brandKit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
+  }
 
   const brief = await prisma.brief.create({
     data: {
-      // No wrapper-supplied team yet (Task 7/8) — derive from the explicit
-      // campaign/brand-kit so generated data is consistent even before the flip.
-      teamId: campaign?.teamId ?? brandKit?.teamId ?? null,
+      teamId: user.teamId,
       userId: user.userId,
       topic: topic.trim(),
       description: description?.trim() ?? null,

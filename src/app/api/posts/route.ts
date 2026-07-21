@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
-import { hasRole } from '@/lib/auth'
+import { withTeamAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { postVisibilityWhere } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
 import { Channel } from '@prisma/client'
@@ -84,12 +84,12 @@ export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
   return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
 })
 
-export const GET = withAuth(async (req: NextRequest, _ctx, user) => {
+export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
   const pageSize = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') ?? '20', 10)))
 
-  const where = hasRole(user.role, 'admin') ? {} : { userId: user.userId }
+  const where = postVisibilityWhere(user)
 
   const [posts, total] = await Promise.all([
     prisma.post.findMany({

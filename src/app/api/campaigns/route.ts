@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
-export const GET = withAuth(async () => {
+export const GET = withTeamAuth(async (_req, _ctx, user) => {
   const campaigns = await prisma.campaign.findMany({
-    where: { isDeleted: false },
+    where: { isDeleted: false, teamId: user.teamId },
     include: {
       brandKit: { select: { id: true, name: true } },
       // Project membership lets the brief wizard group campaigns by project.
@@ -28,7 +28,7 @@ const createSchema = z.object({
   projectId: z.string().nullish(),
 })
 
-export const POST = withAuth(async (req: NextRequest) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { name, brandKitId, defaultTone, projectId } = body.data
@@ -43,13 +43,9 @@ export const POST = withAuth(async (req: NextRequest) => {
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
   }
 
-  // No wrapper-supplied team yet (Task 7/8 flips withAuth → withTeamAuth and
-  // will pass the real value here).
-  const teamId: string | null = null
-
   const campaign = await prisma.campaign.create({
     data: {
-      teamId,
+      teamId: user.teamId,
       name,
       brandKitId: brandKitId ?? null,
       defaultTone: defaultTone ?? null,

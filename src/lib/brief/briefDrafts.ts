@@ -68,11 +68,13 @@ export async function sweepExpiredBriefDrafts(userId: string): Promise<void> {
 }
 
 // Newest-first list for the dashboard. Sweeps first; silently drops (and
-// deletes) rows whose payload no longer parses.
-export async function listBriefDrafts(userId: string): Promise<BriefDraftRow[]> {
+// deletes) rows whose payload no longer parses. teamId is an optional extra
+// scope (the API route passes the caller's active team; the dashboard's
+// personal call omits it — these rows are strictly owner-scoped either way).
+export async function listBriefDrafts(userId: string, teamId?: string): Promise<BriefDraftRow[]> {
   await sweepExpiredBriefDrafts(userId)
   const rows = await prisma.briefDraft.findMany({
-    where: { userId },
+    where: { userId, ...(teamId ? { teamId } : {}) },
     orderBy: { updatedAt: 'desc' },
   })
   const out: BriefDraftRow[] = []
