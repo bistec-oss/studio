@@ -1,13 +1,48 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-20 (latest: UI clarity pass — sidebar sections, campaigns grouped by project, select-chevron fix)
+**Date:** 2026-07-21 (latest: team tenancy — full multi-tenant rework)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main`
+**Branch:** `feature/team-tenancy` (not yet merged to `main` — see below)
 **Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
 
 ---
 
-## 2026-07-20 (latest) — UI clarity pass: hierarchy visibility + sidebar sections + select-chevron fix
+## 2026-07-21 (latest) — Team tenancy: full multi-tenant rework
+
+**Branch `feature/team-tenancy`, 31 commits, merge-ready but NOT merged** — per user directive, the branch stays open with a prod server running the new build for review; merge to `main` happens only on explicit go-ahead. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
+
+### What changed
+
+- **Tenancy column.** `teamId` added to 12 models: `Project`, `Campaign`, `BrandKit`, `Brief`, `Draft`, `Post`, `ScheduledGeneration`, `BriefDraft`, `CampaignDocument`, `BrandKitDocument`, `AvailableProvider`, `ChannelToken`. Two migrations: `20260721090042_team_tenancy_a` (new `Team`/`TeamMembership`/`UserOpenAiKey`/`ApiKey` models, nullable `teamId` columns) and `20260721120000_team_tenancy_b` (backfill — default team "Bistec" absorbs all pre-team rows, memberships derived from existing user roles — embedded ahead of `SET NOT NULL` + the constraint swaps below, so a plain `prisma migrate deploy` needs no separate script step).
+- **Auth wrappers.** `withTeamAuth`/`withTeamAdmin` (`src/lib/api/handler.ts`) resolve the active team from the `bistec-active-team` cookie, validated against live memberships each call. A multi-team user with no/invalid cookie gets 409 `{error, code:'team-choice-required'}`; `apiFetch` catches that code and redirects to `/choose-team`. `withTeamAdmin` additionally requires `TeamRole.ADMIN` (or super admin). `TeamRole` is a closed 2-value enum (`ADMIN | EDITOR`) compared directly — not run through `hasRole()`, which stays reserved for the global `SUPER_ADMIN > ADMIN > EDITOR` hierarchy.
+- **Visibility (spec D6), one source of truth: `src/lib/authz/visibility.ts`.** The person is the privacy boundary; the campaign is the sharing container. An editor sees `{teamId}` AND (owned-by-me OR under a non-null campaign); team admins and super admins see the whole `{teamId}`. `canAccessContent()` is the per-item twin used on by-id routes — cross-team access is always a 404 (never 403, so existence never leaks across tenants), matching the by-id routes for briefs/drafts/posts/campaigns/projects/brand-kits.
+- **Credentials moved entirely into the DB — the env-var credential tier is gone.**
+  - **Personal** (per user, `/settings`): Claude OAuth token (`UserClaudeToken`, pre-existing) + new `UserOpenAiKey`.
+  - **Team** (per team, `/team`, team-admin only): Claude token (`Team.encryptedClaudeToken`), AI providers (`AvailableProvider`, now keyed `(teamId, slot, providerKey)`), social channel tokens (`ChannelToken`, now keyed `(teamId, channel)`), and MCP/ACP `ApiKey` rows.
+  - **Teams + memberships** (`/admin/teams`, super-admin only): create/rename/deactivate teams, add/remove members, set roles.
+  - **Resolution order:** personal → team → fail (Claude/social) or skip gracefully (OpenAI — a missing key just skips the background-image step, it never breaks the pipeline). MCP/ACP auth is a hashed `bstk_`-prefixed `ApiKey` (SHA-256 compared, plaintext shown exactly once at creation); `MCP_API_KEY` is now the credential a stdio client _presents_, not an env allowlist.
+- **Old surfaces retired.** `/admin/settings` is gone (its cards moved into `/team`); the old role-based `withAdmin` wrapper is deleted — plain `withAuth` (role checks via `hasRole()`) now only guards `/api/me/*`, other auth-adjacent routes, and the owner-only brief-draft routes (spec D6: no admin override on personal working state). Sign-out and unrelated nav are unchanged.
+- **UI:** team switcher (dropdown, new `@radix-ui/react-dropdown-menu` dep) + `/choose-team` picker screen for multi-team/no-cookie landings; nav gates team-admin-only surfaces; `/team` (settings cards: Claude token, AI providers, social channels, API keys) and `/admin/teams` (teams + membership management) are new pages.
+
+### ⚠️ Deploy sequence (next machine)
+
+1. `npm install` (picks up `@radix-ui/react-dropdown-menu`).
+2. `npx prisma migrate deploy` — applies both new migrations, migration B runs the backfill inline. No manual script step.
+3. **Delete these 8 env vars** from `.env` (they no longer do anything — reading them was removed from `src/lib/env.ts` and every call site): `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `BISTEC_API_KEYS`, `BISTEC_ADMIN_API_KEYS`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_ORGANIZATION_ID`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`. Keep `ANTHROPIC_API_KEY` (API mode) and `MCP_API_KEY` (presented MCP credential).
+4. Post-deploy ops, in-app: set the team's Claude/OpenAI/social credentials at `/team`; each user connects their own personal Claude/OpenAI token at `/settings`; re-issue MCP/ACP API keys at `/team` (the plaintext is shown once — save it immediately, the old env-list keys are dead).
+5. `scripts/migrate-to-teams.mjs --dry-run` is kept around as an inspection tool only — it is not part of the deploy path anymore (the backfill lives in migration B).
+
+### Testing
+
+New E2E suites: `tests/e2e/team-isolation.test.ts` (**§R**, 15 cases — the cross-tenant isolation guardrail: every list/by-id/mutation route checked against a second team) and `tests/e2e/team-settings.test.ts` (**§S**, 7 cases — `/team` and `/settings` credential CRUD). Seeding gained `scripts/seed-teams.mjs`, creating two teams (**Bistec** + **ClientX**, second admin `clientx.admin` / `BistecStudio2026!`) so isolation has a real second tenant to test against. `TC-AGUI-06` was rewritten for D6 semantics (campaign-shared drafts are now a legitimate 202 for in-team editors, not a 403). §J ACP cases now mint real `ApiKey` rows instead of relying on env-list keys. Full catalog at the branch's final commit: **166 passed / 4 skipped / 0 failed** (one flaky pass-on-retry); unit **253/253**; production build green. Details (and the section-lettering history) are in `docs/e2e-test-plan.md`.
+
+### The 9 cross-tenant gaps (all fixed within the branch — none ever shipped to `main`)
+
+The Task 19 isolation suite is what found these — writing team-isolation.test.ts against a real second tenant (ClientX) surfaced real IDOR-shaped holes that the per-task reviews had missed: cross-team GET-by-id on campaigns/projects/brand-kits, the scheduled-queue subtree, a draft PATCH, and `resolveCopyProvider` falling back to any team's default provider row (8 fixes, commit range `bbd7adaf..ac05d23d`). A 9th surfaced the same day as a follow-up blocker (Task 19b): `resolveAnthropicApiKey` had an unscoped default-row lookup that could resolve another team's Anthropic key — fixed by threading `teamId` through 7 call signatures (commit `73c289ec`). Every one of the 9 was caught and closed before this branch was offered for merge; full narrative in `.superpowers/sdd/progress.md`.
+
+---
+
+## 2026-07-20 — UI clarity pass: hierarchy visibility + sidebar sections + select-chevron fix
 
 Small UI-only change set (no schema, no API changes, no migrations, no new env vars) addressing three reported problems: dropdowns missing their marker, the project↔campaign relationship being invisible, and the flat sidebar not distinguishing admin surfaces.
 
