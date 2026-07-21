@@ -34,6 +34,9 @@ export function useCurrentUser() {
     activeTeamId: data?.activeTeamId ?? null,
     teamRole,
     isTeamAdmin: teamRole === 'ADMIN' || isSuperAdmin,
+    // True when the user belongs to teams but hasn't (yet) resolved one as
+    // active (see resolveActiveTeam) — the shell bounces to /choose-team.
+    teamChoiceRequired: data?.teamChoiceRequired ?? false,
     isLoading,
     isError,
   }
