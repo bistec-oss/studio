@@ -274,7 +274,7 @@ function RenameTeamModal({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={saving}>
+          <Button type="submit" disabled={saving || !name.trim()}>
             {saving ? 'Saving…' : 'Rename'}
           </Button>
         </div>
