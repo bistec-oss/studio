@@ -124,7 +124,7 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   }
 
   // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise) — startDraftAction resolves it before the
+  // (the team token otherwise) — startDraftAction resolves it before the
   // request unwinds and runs the whole closure inside that auth context, so the
   // background decision and the refine agent call can't observe different
   // tokens. A throw below is recorded on Draft.pendingActionError.

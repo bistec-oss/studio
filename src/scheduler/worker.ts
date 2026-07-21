@@ -1,7 +1,6 @@
 import { runScheduledJobs } from "../lib/scheduler/jobRunner"
 import { runGenerationJobs } from "../lib/scheduler/generationRunner"
 import { isCliMode } from "../lib/agent/config"
-import { env } from "../lib/env"
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -22,24 +21,26 @@ async function loop(name: string, run: () => Promise<void>) {
 async function main() {
   console.log("[scheduler] starting, poll interval:", POLL_INTERVAL_MS, "ms")
 
-  // Scheduled generation spawns `claude -p` in CLI mode. The Docker image ships
-  // the Claude Code CLI (since the 2026-07-07 per-user-token feature), and the
-  // worker ALWAYS uses the shared CLAUDE_CODE_OAUTH_TOKEN — never a user's
-  // personal token. Warn when that shared token is missing: a headless
-  // container has no logged-in session to fall back to, so every scheduled
-  // generation would fail. Publishing is unaffected either way.
+  // Scheduled generation spawns `claude -p` in CLI mode. As of Task 10 there is
+  // NO shared env credential tier anymore — every CLI-mode `claude -p` call
+  // needs a resolved personal-or-team ClaudeCliAuth in its AsyncLocalStorage
+  // context (src/lib/agent/claudeAuth.ts), and this loop never enters one
+  // (generateDraftForBrief runs with no ALS context here — see the
+  // TODO(Task 14) at the call site in generationRunner.ts). So today, in CLI
+  // mode, every scheduled generation will fail with the no-credential
+  // ClaudeCliError regardless of any env var. Publishing is unaffected either
+  // way (it doesn't call Claude).
+  // TODO(Task 14): once each ScheduledGeneration/Post carries a teamId and this
+  // loop resolves+logs that team's Claude token presence, replace this whole
+  // block with real per-team credential-presence diagnostics.
   if (isCliMode()) {
-    if (env.CLAUDE_CODE_OAUTH_TOKEN) {
-      console.log(
-        "[generation] DESIGN_PROVIDER=cli — scheduled generations spawn `claude -p` on the shared CLAUDE_CODE_OAUTH_TOKEN."
-      )
-    } else {
-      console.warn(
-        "[generation] ⚠ DESIGN_PROVIDER=cli with no CLAUDE_CODE_OAUTH_TOKEN set — headless `claude -p` spawns have " +
-          "no credential to run on (a container has no logged-in Claude session), so scheduled generations will fail. " +
-          "Set CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) or use API mode (DESIGN_PROVIDER=claude-html + ANTHROPIC_API_KEY)."
-      )
-    }
+    console.warn(
+      "[generation] ⚠ DESIGN_PROVIDER=cli — scheduled generations have no Claude credential source yet " +
+        "(the shared CLAUDE_CODE_OAUTH_TOKEN tier was removed in the team-tenancy rework; per-team " +
+        "credential resolution for the scheduler is Task 14, not yet implemented). Every CLI-mode scheduled " +
+        "generation will fail until then. Use API mode (DESIGN_PROVIDER=claude-html + a team's OpenAI/Anthropic " +
+        "keys) in the meantime, or hold off on scheduling CLI-mode generations."
+    )
   }
 
   await Promise.all([

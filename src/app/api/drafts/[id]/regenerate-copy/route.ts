@@ -45,7 +45,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
     }
 
     // CLI mode bills the acting user's personal Claude token when connected
-    // (shared server token otherwise) — startDraftAction resolves it before the
+    // (the team token otherwise) — startDraftAction resolves it before the
     // request unwinds and pins it onto the background run. A throw below is
     // recorded on Draft.pendingActionError; the previous copy is left untouched.
     await startDraftAction(draft.id, user.userId, user.teamId, async () => {
