@@ -2,6 +2,7 @@ import type { Channel, Draft, ScheduledGeneration } from "@prisma/client"
 import { prisma } from "../prisma"
 import { generateDraftForBrief } from "../agent/generateDraft"
 import { findLivePost } from "../publish/publishDraft"
+import { withClaudeAuth } from "../agent/userToken"
 
 // Generation is expensive (a design run is minutes of model time), so fewer
 // retries than the publish scheduler's 5.
@@ -129,20 +130,27 @@ export async function runGenerationJobs(): Promise<void> {
     try {
       const brief = await ensureBrief(entry)
 
-      // Deliberately NOT wrapped in withClaudeAuth: scheduled generations run
-      // unattended, so a member's expired/revoked personal token must never
-      // fail a run. (Product decision, 2026-07-07.)
-      // TODO(Task 14): the shared env credential this comment used to
-      // describe is gone (Task 10) — a CLI-mode run now has no ALS auth
-      // context and will hard-fail with "No Claude credential available"
-      // until this loop wraps each job in withClaudeAuth(null, entry.teamId, ...).
+      // TODO(Task 15): entry.teamId is nullable until the Task 15 backfill —
+      // ?? '' is the established placeholder (same pattern as the other
+      // team-tenancy call sites); a credential-less '' team resolves to no
+      // token, same effect as a real team with none.
+      const teamId = entry.teamId ?? ''
+
       // userId: null — an unattended scheduled run has no acting teammate, so
-      // the IMAGE-provider resolution must skip the personal tier entirely and
-      // fall through to the team's default (see resolveImageProvider).
-      const { draft } = await generateDraftForBrief(
-        brief,
-        { userId: null, teamId: entry.teamId ?? '' },
-        { templateId: entry.templateId }
+      // both the Claude-CLI credential and the IMAGE-provider resolution skip
+      // the personal tier entirely and fall through to the team's own
+      // credential/default (see resolveImageProvider and userToken.ts). The
+      // whole model-calling span (copy → background image → design) runs
+      // inside withClaudeAuth so every `claude -p` this job spawns shares the
+      // one resolved team credential; a team with none throws a no-credential
+      // ClaudeCliError here, caught below and handled by the existing
+      // retry/failure path like any other generation error.
+      const { draft } = await withClaudeAuth(null, teamId, () =>
+        generateDraftForBrief(
+          brief,
+          { userId: null, teamId },
+          { templateId: entry.templateId }
+        )
       )
 
       await executePostAction(entry, draft)

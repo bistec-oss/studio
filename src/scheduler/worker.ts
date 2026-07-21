@@ -1,6 +1,7 @@
 import { runScheduledJobs } from "../lib/scheduler/jobRunner"
 import { runGenerationJobs } from "../lib/scheduler/generationRunner"
 import { isCliMode } from "../lib/agent/config"
+import { prisma } from "../lib/prisma"
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -18,30 +19,38 @@ async function loop(name: string, run: () => Promise<void>) {
   }
 }
 
+// Informational startup diagnostic (CLI mode only): each claimed
+// ScheduledGeneration job now resolves its own team's Claude credential
+// (withClaudeAuth(null, entry.teamId, ...) in generationRunner.ts) instead of
+// a shared env token, so a team with none will have its scheduled generations
+// fail (via the existing retry/failure path, not a crash) until a team admin
+// connects one in Team Settings. This is a plain query, never fatal to
+// startup — a DB hiccup here must not stop the scheduler from polling.
+async function logTeamsWithoutClaudeToken(): Promise<void> {
+  if (!isCliMode()) return
+  try {
+    const teams = await prisma.team.findMany({
+      where: { encryptedClaudeToken: null },
+      select: { name: true },
+    })
+    if (teams.length > 0) {
+      console.log(
+        `[scheduler] ${teams.length} team(s) have no Claude token — their CLI-mode scheduled ` +
+          `generations will fail until a team admin connects one in Team Settings: ` +
+          teams.map((t) => t.name).join(", ")
+      )
+    } else {
+      console.log("[scheduler] all teams have a Claude token configured")
+    }
+  } catch (err) {
+    console.error("[scheduler] startup Claude-token check failed (non-fatal):", err)
+  }
+}
+
 async function main() {
   console.log("[scheduler] starting, poll interval:", POLL_INTERVAL_MS, "ms")
 
-  // Scheduled generation spawns `claude -p` in CLI mode. As of Task 10 there is
-  // NO shared env credential tier anymore — every CLI-mode `claude -p` call
-  // needs a resolved personal-or-team ClaudeCliAuth in its AsyncLocalStorage
-  // context (src/lib/agent/claudeAuth.ts), and this loop never enters one
-  // (generateDraftForBrief runs with no ALS context here — see the
-  // TODO(Task 14) at the call site in generationRunner.ts). So today, in CLI
-  // mode, every scheduled generation will fail with the no-credential
-  // ClaudeCliError regardless of any env var. Publishing is unaffected either
-  // way (it doesn't call Claude).
-  // TODO(Task 14): once each ScheduledGeneration/Post carries a teamId and this
-  // loop resolves+logs that team's Claude token presence, replace this whole
-  // block with real per-team credential-presence diagnostics.
-  if (isCliMode()) {
-    console.warn(
-      "[generation] ⚠ DESIGN_PROVIDER=cli — scheduled generations have no Claude credential source yet " +
-        "(the shared CLAUDE_CODE_OAUTH_TOKEN tier was removed in the team-tenancy rework; per-team " +
-        "credential resolution for the scheduler is Task 14, not yet implemented). Every CLI-mode scheduled " +
-        "generation will fail until then. Use API mode (DESIGN_PROVIDER=claude-html + a team's OpenAI/Anthropic " +
-        "keys) in the meantime, or hold off on scheduling CLI-mode generations."
-    )
-  }
+  await logTeamsWithoutClaudeToken()
 
   await Promise.all([
     loop("scheduler", runScheduledJobs),

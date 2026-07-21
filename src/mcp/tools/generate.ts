@@ -65,10 +65,11 @@ export async function generatePost(args: GeneratePostArgs) {
   // Path B design, Draft persistence — identical to the web routes.
   // Deliberately NOT wrapped in withClaudeAuth: MCP/ACP callers hold server
   // API keys (M2M trust boundary), not app-user sessions.
-  // TODO(Task 14): in CLI mode this call has no ALS auth context (no personal
-  // token — there's no signed-in user — and the team-tier wiring is Task 14's
-  // scope) and will hard-fail with "No Claude credential available" until
-  // that task wraps this span in withClaudeAuth(null, args.teamId, ...).
+  // TODO(follow-up, out of Task 14's scope — that task only covered the
+  // scheduler): in CLI mode this call has no ALS auth context (no personal
+  // token — there's no signed-in user) and will hard-fail with "No Claude
+  // credential available" until a dedicated task wraps this span in
+  // withClaudeAuth(null, args.teamId, ...), mirroring generationRunner.ts.
   try {
     // userId: null — MCP/ACP callers hold server API keys (M2M trust
     // boundary, see the withClaudeAuth note above), not a signed-in teammate;
