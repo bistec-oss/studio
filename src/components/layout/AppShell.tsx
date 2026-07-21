@@ -47,6 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: 'Brandkits',     href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
       { label: 'Team Settings', href: '/team',            icon: <Building2 size={18} />, adminOnly: true },
       { label: 'Users',         href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
+      { label: 'Teams',         href: '/admin/teams',     icon: <Building2 size={18} />, superAdminOnly: true },
     ],
   },
 ]
