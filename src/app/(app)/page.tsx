@@ -77,9 +77,11 @@ async function getDashboardData(user: TeamAuthedUser) {
     prisma.availableProvider.findMany({ where: { teamId }, take: 5, orderBy: { createdAt: 'desc' } }),
   ])
 
-  // The viewer's own unfinished (autosaved) briefs — owner-scoped regardless
-  // of team; listBriefDrafts also runs the lazy 7-day TTL sweep.
-  const unfinishedBriefs = await listBriefDrafts(user.userId)
+  // The viewer's own unfinished (autosaved) briefs, scoped to the active team
+  // (a multi-team user's other-team drafts must not surface here — Resume
+  // would otherwise dead-end on the briefs POST route's cross-team 404).
+  // listBriefDrafts also runs the lazy 7-day TTL sweep.
+  const unfinishedBriefs = await listBriefDrafts(user.userId, user.teamId)
 
   // Build a merged, chronological activity feed from the available signals.
   type Event = { id: string; at: Date; text: string; kind: 'draft' | 'post' | 'provider' }
