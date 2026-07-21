@@ -1,18 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-  const params = await ctx.params
+type Params = { id: string }
 
+export const POST = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const kit = await prisma.brandKit.findUnique({
     where: { id: params.id },
     include: { prompts: { where: { isActive: true }, take: 1 } },
   })
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const currentPrompt = kit.prompts[0]?.content
   if (!currentPrompt) {
@@ -35,4 +35,4 @@ Make it more specific, actionable, and comprehensive. Add concrete guidance on v
 
   // Return the draft — admin must explicitly save it as a new version
   return NextResponse.json({ draft })
-}
+})

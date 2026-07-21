@@ -86,7 +86,7 @@ export function toEntryCreateData(
 }
 
 // Auto-publish actions are a deferred publish, so they inherit the admin-only
-// publish gate (POST /api/posts is withAdmin). HOLD entries are editor-plannable.
+// publish gate (POST /api/posts is withTeamAdmin). HOLD entries are editor-plannable.
 export function requiresAdmin(postAction: PostGenerationAction): boolean {
   return postAction !== 'HOLD'
 }
