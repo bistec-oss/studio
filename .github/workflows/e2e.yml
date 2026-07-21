@@ -61,8 +61,8 @@ jobs:
       MOCK_AI: "true"
       MOCK_PUPPETEER: "true"
       MOCK_SOCIAL: "true"
-      BISTEC_API_KEYS: e2e-test-key
-      BISTEC_ADMIN_API_KEYS: e2e-admin-key
+      # BISTEC_API_KEYS / BISTEC_ADMIN_API_KEYS removed 2026-07-21 (team tenancy):
+      # the §J ACP-auth cases mint real hashed ApiKey rows via POST /api/team/api-keys.
       TEST_BASE_URL: http://localhost:3001
 
     steps:

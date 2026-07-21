@@ -30,7 +30,7 @@ All §6 cases are now written. New/changed files:
   - Two production-safe `testHooks.ts` seams — `buildMockCopy()` routes the brief topic into the mock caption, and `shouldMockPublishFail()` lets a `__FAIL_ALWAYS__`/`__FAIL_ONCE__` sentinel in the brief topic drive deterministic publish failures (TC-PUB-03/04, TC-REG-H12b) within a single serve.
   - **`POST /api/test/scheduler-tick`** — a test-only seam that runs one `runScheduledJobs()` pass so §K H12 can drive the scheduler over HTTP (Playwright's loader can't resolve the transitive `@/` aliases in the app module graph). **Dormant in prod: hard-404 when `NODE_ENV==='production'` AND 404 unless `MOCK_SOCIAL` is set, plus admin-gated.**
   - `playwright.config.ts`: the global `Content-Type: application/json` was **removed** (it overrode the multipart boundary and 500'd every upload route); `retries: 1` added (cold `next dev` route compiles flake under load).
-  - `.env.test` additions for this suite: `BISTEC_API_KEYS=e2e-test-key`, `BISTEC_ADMIN_API_KEYS=e2e-admin-key` (enables the §J ACP-auth cases). `.env.test` is git-ignored — the CI workflow sets these as job env.
+  - ~~`.env.test` additions: `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS`~~ **Superseded 2026-07-21 (team tenancy):** the env-key lists are deleted; the §J ACP-auth cases now mint real hashed `ApiKey` rows via `POST /api/team/api-keys` at test time — no env vars, no CI job env needed.
   - `npm run test:e2e:reg` runs the suite with `.env.test` loaded (handy for ad-hoc DB-aware runs); not required for a green run anymore (the H12 HTTP seam removed the reg-mode dependency).
 
 **Contract corrections baked in (differed from the original §6 wording):**
@@ -48,7 +48,7 @@ All §6 cases are now written. New/changed files:
 
 - **DB-dependent cases** (TC-PUB-07/08, TC-EXP-01/03, TC-GEN-B2, TC-REG-H9/H10b/c) self-resolve the test DB via `tests/helpers/db.ts` (reads `.env.test`), so they run under `test:e2e:mock` — no reg-mode needed.
 - **Scheduler** (TC-REG-H12a/b/c) drive the scheduler over the `/api/test/scheduler-tick` HTTP seam, so they run in the standard mock suite (no app-module import, no reg-mode).
-- **ACP authenticated** (TC-ACP-02/03/04/05) read `BISTEC_API_KEYS` from `.env.test` / job env. TC-ACP-05 is folded into the generate_post output-signing assertion (the MCP stdio surface isn't HTTP-reachable).
+- **ACP authenticated** (TC-ACP-02/03/04/05) mint a real `ApiKey` via `POST /api/team/api-keys` (team-admin session) and present the plaintext — always run, no env/job-env dependency (superseded 2026-07-21). TC-ACP-05 is folded into the generate_post output-signing assertion (the MCP stdio surface isn't HTTP-reachable).
   **Owner:** _unassigned_
   **Scope:** End-to-end coverage of the full app surface (API + UI) plus a dedicated regression suite for the 28 code-review remediation fixes (see [`code-review-findings.md`](code-review-findings.md)).
 
@@ -128,8 +128,7 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 MOCK_AI=true
 MOCK_PUPPETEER=true
 MOCK_SOCIAL=true
-BISTEC_API_KEYS=e2e-test-key          # enables the §J ACP-auth cases (TC-ACP-02/03/04/05)
-BISTEC_ADMIN_API_KEYS=e2e-admin-key
+# (BISTEC_API_KEYS / BISTEC_ADMIN_API_KEYS deleted 2026-07-21 — §J mints real ApiKey rows via the API)
 ```
 
 ### Known seeded accounts
@@ -306,7 +305,7 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 ### J. MCP / ACP surface
 
 - **TC-ACP-01 — No key → 401.** S: GET `/api/acp/manifest`, POST `/api/acp/run` with no/empty/garbage key. E: 401 (fails closed). **Guards H1.**
-- **TC-ACP-02 — Valid key → manifest.** P: configured `BISTEC_API_KEYS`/admin key. E: 200 manifest.
+- **TC-ACP-02 — Valid key → manifest.** P: an `ApiKey` minted via `POST /api/team/api-keys` (plaintext presented once). E: 200 manifest. _(Env-list keys deleted 2026-07-21.)_
 - **TC-ACP-03 — `run` input validation.** S: `generate_post`/`publish_post` with missing fields. E: 400. **Guards M6.**
 - **TC-ACP-04 — MCP system-user FK.** S: `generate_post` via MCP. E: Brief/Draft created with a real system user id (no FK violation). **Guards L1.**
 - **TC-ACP-05 — MCP getDraft signs exportUrl.** E: returned `exportUrl` is signed/fetchable. **Guards H10.**
