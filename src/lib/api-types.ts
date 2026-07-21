@@ -5,7 +5,7 @@
 // in sync with the routes it documents; when a route's `select`/`include`
 // changes, update the matching type here rather than re-declaring an
 // inline interface in a page.
-import type { AspectRatio, Channel, DesignMode } from '@prisma/client'
+import type { AspectRatio, Channel, DesignMode, TeamRole } from '@prisma/client'
 import type { Role } from '@/lib/auth'
 
 // ── Auth ─────────────────────────────────────────────────────────────────
@@ -36,6 +36,13 @@ export interface MeResponse {
     keyPrefix: string
     connectedAt: string
   } | null
+  // Team membership + active-team resolution (see resolveActiveTeam) — lets
+  // the client show a team switcher or force /choose-team without a second
+  // request.
+  teams: Array<{ id: string; name: string; role: TeamRole }>
+  activeTeamId: string | null
+  teamRole: TeamRole | null
+  teamChoiceRequired: boolean
 }
 
 // ── Shared reference shapes ─────────────────────────────────────────────

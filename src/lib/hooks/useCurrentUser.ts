@@ -17,16 +17,23 @@ export function useCurrentUser() {
   })
 
   const role = data?.role?.toLowerCase()
+  const isSuperAdmin = role === 'super_admin'
+  const teamRole = data?.teamRole ?? null
 
   return {
     user: data ?? null,
     // super_admin passes every admin gate (mirrors hasRole on the server)
-    isAdmin: role === 'admin' || role === 'super_admin',
-    isSuperAdmin: role === 'super_admin',
+    isAdmin: role === 'admin' || isSuperAdmin,
+    isSuperAdmin,
     // Personal-Claude-token surface (see MeResponse): whether the server runs
     // CLI mode and the user's (masked) token connection state.
     cliMode: data?.cliMode ?? false,
     claudeToken: data?.claudeToken ?? null,
+    // Team membership + active-team resolution (see MeResponse).
+    teams: data?.teams ?? [],
+    activeTeamId: data?.activeTeamId ?? null,
+    teamRole,
+    isTeamAdmin: teamRole === 'ADMIN' || isSuperAdmin,
     isLoading,
     isError,
   }
