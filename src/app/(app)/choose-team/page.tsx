@@ -2,7 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { GlassPanel } from '@/components/ui/GlassPanel'
@@ -15,6 +17,7 @@ import { cn } from '@/lib/utils'
 export default function ChooseTeamPage() {
   const { teams } = useCurrentUser()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [pickingId, setPickingId] = useState<string | null>(null)
 
   async function pick(teamId: string) {
@@ -26,7 +29,16 @@ export default function ChooseTeamPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teamId }),
       })
+      // Must land before the push: AppShell persists across this client nav
+      // and its useCurrentUser() cache still holds the stale
+      // teamChoiceRequired:true from before the pick — without this await,
+      // the redirect effect sees that stale state on arrival at "/" and
+      // bounces straight back here. Invalidating (and letting the refetch
+      // resolve) first means the effect reads fresh data post-navigation.
+      await queryClient.invalidateQueries()
       router.push('/')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to switch team')
     } finally {
       setPickingId(null)
     }

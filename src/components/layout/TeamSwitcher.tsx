@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, ChevronsUpDown, Users } from 'lucide-react'
+import { toast } from 'sonner'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { cn } from '@/lib/utils'
@@ -17,11 +18,16 @@ export function TeamSwitcher() {
   const { teams, activeTeamId } = useCurrentUser()
   const queryClient = useQueryClient()
   const router = useRouter()
+  const pathname = usePathname()
   const [switching, setSwitching] = useState(false)
 
   if (teams.length === 0) return null
 
-  const activeTeam = teams.find(t => t.id === activeTeamId) ?? teams[0]
+  // activeTeamId is null while a choice is still required (parked on
+  // /choose-team) — don't imply teams[0] is active in that state, show a
+  // neutral label instead.
+  const activeTeam = teams.find(t => t.id === activeTeamId) ?? null
+  const label = activeTeam?.name ?? 'Choose a team'
 
   async function selectTeam(teamId: string) {
     if (teamId === activeTeamId || switching) return
@@ -33,9 +39,20 @@ export function TeamSwitcher() {
         body: JSON.stringify({ teamId }),
       })
       // No key = invalidate everything: every team-scoped query in the app
-      // needs to refetch under the newly active team.
-      queryClient.invalidateQueries()
-      router.refresh()
+      // needs to refetch under the newly active team. Awaited so the
+      // ['me'] cache (and its teamChoiceRequired) is fresh before we
+      // navigate — otherwise AppShell's redirect effect can read the
+      // pre-switch value for a tick and bounce right back to /choose-team.
+      await queryClient.invalidateQueries()
+      // Switching from the chooser doesn't otherwise navigate anywhere —
+      // land on the dashboard instead of leaving the user parked there.
+      if (pathname === '/choose-team') {
+        router.push('/')
+      } else {
+        router.refresh()
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to switch team')
     } finally {
       setSwitching(false)
     }
@@ -45,7 +62,7 @@ export function TeamSwitcher() {
     return (
       <div className="flex items-center gap-3 px-3 py-2.5 mb-3 rounded-xl text-sm font-medium text-light-text dark:text-dark-text border border-light-text/10 dark:border-white/10">
         <Users size={18} className="flex-shrink-0 text-light-text-muted dark:text-dark-text-muted" />
-        <span className="truncate">{activeTeam.name}</span>
+        <span className="truncate">{label}</span>
       </div>
     )
   }
@@ -55,6 +72,7 @@ export function TeamSwitcher() {
       <DropdownMenu.Trigger asChild>
         <button
           disabled={switching}
+          aria-label="Switch team"
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 mb-3 rounded-xl text-sm font-medium w-full',
             'transition-all duration-150 text-light-text dark:text-dark-text',
@@ -64,7 +82,7 @@ export function TeamSwitcher() {
           )}
         >
           <Users size={18} className="flex-shrink-0 text-light-text-muted dark:text-dark-text-muted" />
-          <span className="truncate flex-1 text-left">{activeTeam.name}</span>
+          <span className="truncate flex-1 text-left">{label}</span>
           <ChevronsUpDown size={14} className="flex-shrink-0 text-light-text-muted dark:text-dark-text-muted" />
         </button>
       </DropdownMenu.Trigger>
