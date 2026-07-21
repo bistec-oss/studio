@@ -317,6 +317,24 @@ export interface SaveBriefDraftResponse {
   id: string
 }
 
+// ── Admin: teams (super-admin platform management) ──────────────────────
+
+// GET/POST /api/admin/teams
+export interface AdminTeamSummary {
+  id: string
+  name: string
+  memberCount: number
+  createdAt: string
+}
+
+// GET/POST /api/admin/teams/[id]/members — POST upsert response mirrors GET's shape.
+export interface AdminTeamMember {
+  userId: string
+  name: string
+  loginLabel: string
+  role: TeamRole
+}
+
 // ── Admin: AI providers ──────────────────────────────────────────────────
 
 export type ProviderSlot = 'COPY' | 'IMAGE'
