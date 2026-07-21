@@ -28,7 +28,45 @@
 
 1. `npm install` (picks up `@radix-ui/react-dropdown-menu`).
 2. `npx prisma migrate deploy` — applies both new migrations, migration B runs the backfill inline. No manual script step.
-3. **Delete these 8 env vars** from `.env` (they no longer do anything — reading them was removed from `src/lib/env.ts` and every call site): `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `BISTEC_API_KEYS`, `BISTEC_ADMIN_API_KEYS`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_ORGANIZATION_ID`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`. Keep `ANTHROPIC_API_KEY` (API mode) and `MCP_API_KEY` (presented MCP credential).
+3. **Bring `.env` to the canonical shape below** — this applies to **every device that runs this repo** (Claude Code sessions included): edit the machine's `.env` to exactly this variable set, machine-specific values kept, everything else deleted. In particular the 8 dead credential vars must go (reading them was removed from `src/lib/env.ts` and every call site): `OPENAI_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `BISTEC_API_KEYS`, `BISTEC_ADMIN_API_KEYS`, `LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_ORGANIZATION_ID`, `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_BUSINESS_ACCOUNT_ID`.
+
+   ```bash
+   # App
+   NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+   # better-auth (self-hosted)
+   BETTER_AUTH_SECRET=<this machine's secret>
+   BETTER_AUTH_URL=http://localhost:3000
+
+   # Database (PostgreSQL via Docker Compose)
+   DATABASE_URL=postgresql://<user>:<pass>@localhost:5432/bistec_studio
+
+   # PostgreSQL container credentials (read by docker-compose; must match DATABASE_URL)
+   POSTGRES_DB=bistec_studio
+   POSTGRES_USER=<user>
+   POSTGRES_PASSWORD=<pass>
+
+   # MinIO (S3-compatible object storage via Docker Compose)
+   MINIO_ENDPOINT=http://localhost:9000
+   MINIO_ACCESS_KEY=<this machine's key — never the minioadmin default>
+   MINIO_SECRET_KEY=<this machine's secret>
+   MINIO_BUCKET_IMAGES=generated-images
+   MINIO_BUCKET_EXPORTS=exported-designs
+   MINIO_BUCKET_BRANDKITS=brand-kits
+
+   # Design provider: "cli" (Claude Code CLI; Claude tokens are set in-app at
+   # /settings and /team) or "claude-html" (Anthropic API; needs ANTHROPIC_API_KEY).
+   DESIGN_PROVIDER=cli
+   CLAUDE_CLI_PATH=<this machine's claude binary, if not on PATH>
+
+   # Token encryption for all DB-stored credentials (generate: openssl rand -hex 32)
+   TOKEN_ENCRYPTION_KEY=<this machine's 64-char hex key>
+
+   PUPPETEER_EXECUTABLE_PATH=<this machine's Chrome path>
+   ```
+
+   Optional additions only when actually used: `ANTHROPIC_API_KEY` (API mode), `MCP_API_KEY` (the credential a stdio MCP client presents), `MINIO_PUBLIC_ENDPOINT` (Instagram tunnel testing, see `docs/social-publishing-setup.md` §4), `CLAUDE_CLI_MODEL`/`CLAUDE_CLI_DEBUG`. Nothing else belongs in `.env` — all AI/social credentials live in the DB (`/settings`, `/team`). This machine's `.env` was brought to this exact state on 2026-07-21.
+
 4. Post-deploy ops, in-app: set the team's Claude/OpenAI/social credentials at `/team`; each user connects their own personal Claude/OpenAI token at `/settings`; re-issue MCP/ACP API keys at `/team` (the plaintext is shown once — save it immediately, the old env-list keys are dead).
 5. `scripts/migrate-to-teams.mjs --dry-run` is kept around as an inspection tool only — it is not part of the deploy path anymore (the backfill lives in migration B).
 
