@@ -86,12 +86,16 @@ export async function generatePost(args: GeneratePostArgs) {
   }
 }
 
-export async function getDraft(args: { id: string }) {
+export async function getDraft(args: { id: string; teamId: string }) {
   const draft = await prisma.draft.findUnique({
     where: { id: args.id },
-    select: { copyText: true, imageUrl: true, exportUrl: true, status: true },
+    select: { copyText: true, imageUrl: true, exportUrl: true, status: true, teamId: true },
   })
-  if (!draft) throw new Error(`Draft ${args.id} not found`)
+  // Task 13 (reviewer follow-up): same team-bound guard as publishPost — a
+  // draft belonging to a different team (or the pre-tenancy null) reads as
+  // "not found" rather than leaking its existence/content across tenants.
+  if (!draft || draft.teamId !== args.teamId) throw new Error(`Draft ${args.id} not found`)
   // exportUrl is stored as an EXPORTS object key — sign it for the caller.
-  return { ...draft, exportUrl: await resolveExportUrl(draft.exportUrl) }
+  const { teamId: _teamId, ...rest } = draft
+  return { ...rest, exportUrl: await resolveExportUrl(draft.exportUrl) }
 }

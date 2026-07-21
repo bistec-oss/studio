@@ -156,7 +156,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
       case 'get_draft':
-        return { content: [{ type: 'text', text: JSON.stringify(await getDraft(args as Parameters<typeof getDraft>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await getDraft({ ...(args as unknown as Omit<Parameters<typeof getDraft>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'publish_post':
         return {

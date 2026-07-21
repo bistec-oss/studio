@@ -13,7 +13,12 @@ export async function createBrandKit(args: {
   }
   const kit = await prisma.brandKit.create({
     data: {
-      // No team wrapper on the MCP surface yet (Task 13).
+      // Deliberately team-less: Task 13 (DB-backed MCP/ACP auth) scoped
+      // generate/publish to the caller's team but left brand-kit MCP tools
+      // (this file) untouched — brand kits are a cross-team/system-default
+      // concept today, and every tool here still runs with no team scoping
+      // at all (server.ts gates on "any valid key", not the key's team).
+      // Revisit if/when brand kits become per-team resources.
       teamId: null,
       name: args.name,
       colors: args.colors ?? [],
