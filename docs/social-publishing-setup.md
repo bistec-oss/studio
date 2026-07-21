@@ -20,9 +20,10 @@ in CLI mode and the Cloudflare-tunnel image path was proven with a real external
   - Both claims are `FOR UPDATE SKIP LOCKED` + lease, so multiple worker replicas are safe.
 - **One publish service** (`src/lib/publish/publishDraft.ts`) owns the channel map. Every
   surface (publish dialog, scheduler tick, ACP) goes through it.
-- **Credential resolution, per publish:** encrypted `ChannelToken` DB row (set in
-  Admin → Settings) → env-var fallback. The DB row **always wins**; no restart needed
-  after changing it (read per publish).
+- **Credential resolution, per publish:** the **post's team's** encrypted `ChannelToken`
+  DB row (set at `/team` → Social Channels), read per publish — no restart needed after
+  changing it. No env-var fallback exists (deleted 2026-07-21); a team without a row
+  fails with `No <channel> credentials configured for this team`.
 - **The image handoff differs per channel — this drives the whole setup below:**
 
   | Channel       | How the platform gets the image                                                                                               | Local-dev implication                                                                         |
