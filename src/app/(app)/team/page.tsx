@@ -3,7 +3,23 @@
 import React, { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Trash2, ToggleLeft, ToggleRight, Star, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
+import { Plus, Trash2, ToggleLeft, ToggleRight, Star, CheckCircle, XCircle, Eye, EyeOff, ShieldAlert } from 'lucide-react'
+import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Button } from '@/components/ui/Button'
+import { GlassInput } from '@/components/ui/GlassInput'
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
+import { QueryError } from '@/components/ui/QueryError'
+import { TeamClaudeTokenCard } from '@/components/team/TeamClaudeTokenCard'
+import { ApiKeysCard } from '@/components/team/ApiKeysCard'
+import { apiFetch } from '@/lib/apiFetch'
+import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import type { AdminProvider as Provider, ProviderSlot, ChannelStatus, ChannelMap } from '@/lib/api-types'
+
+// Team settings: AI providers + social channels (moved here from the old
+// /admin/settings tab page — the routes are team-scoped, and every setting
+// here now applies to the whole team, so it belongs beside the team's Claude
+// token and API keys rather than under /admin). Gated on isTeamAdmin, not
+// app-role admin: a team's own admin manages it regardless of app role.
 
 // lucide-react 1.x removed brand icons — inline equivalents (stroke style
 // matches lucide so they sit naturally beside the other icons).
@@ -26,12 +42,6 @@ function LinkedinIcon({ size = 18 }: { size?: number }) {
     </svg>
   )
 }
-import { Button } from '@/components/ui/Button'
-import { GlassInput } from '@/components/ui/GlassInput'
-import { SegmentedToggle } from '@/components/ui/SegmentedToggle'
-import { QueryError } from '@/components/ui/QueryError'
-import { apiFetch } from '@/lib/apiFetch'
-import type { AdminProvider as Provider, ProviderSlot, ChannelStatus, ChannelMap } from '@/lib/api-types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -253,7 +263,7 @@ function ChannelRow({
     setError('')
     setLoading(true)
     try {
-      await apiFetch('/api/admin/channels', {
+      await apiFetch('/api/team/channels', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, token, metadata }),
@@ -267,7 +277,7 @@ function ChannelRow({
 
   async function revoke() {
     try {
-      await apiFetch(`/api/admin/channels/${channel}`, { method: 'DELETE' })
+      await apiFetch(`/api/team/channels/${channel}`, { method: 'DELETE' })
       onRefresh()
     } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
   }
@@ -325,111 +335,153 @@ function ChannelRow({
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Section: AI Providers ─────────────────────────────────────────────────────
 
-export default function AdminSettingsPage() {
+function ProvidersSection() {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<'providers' | 'channels'>('providers')
   const [showRegister, setShowRegister] = useState(false)
 
   const providersQuery = useQuery({
     queryKey: ['admin-providers'],
     queryFn: () => apiFetch<Provider[]>('/api/admin/providers'),
   })
-  const channelsQuery = useQuery({
-    queryKey: ['admin-channels'],
-    queryFn: () => apiFetch<ChannelMap>('/api/admin/channels'),
-  })
-
   const providers = providersQuery.data ?? []
-  const channels = channelsQuery.data ?? { INSTAGRAM: { connected: false }, LINKEDIN: { connected: false } }
-  const loading = providersQuery.isLoading || channelsQuery.isLoading
 
   function invalidateProviders() {
     return queryClient.invalidateQueries({ queryKey: ['admin-providers'] })
   }
-  function invalidateChannels() {
-    return queryClient.invalidateQueries({ queryKey: ['admin-channels'] })
-  }
 
   const providersBySlot = (slot: ProviderSlot) => providers.filter(p => p.slot === slot)
 
+  if (providersQuery.isLoading) {
+    return <p className="text-sm text-light-text-muted dark:text-dark-text-muted">Loading…</p>
+  }
+  if (providersQuery.isError) {
+    return <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} />
+  }
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
+    <div className="space-y-6">
+      {(['COPY', 'IMAGE'] as ProviderSlot[]).map(slot => (
+        <div key={slot} className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+              {slot === 'COPY' ? 'Copy (text generation)' : 'Image generation'}
+            </h3>
+          </div>
+          {providersBySlot(slot).length === 0 && (
+            <p className="text-sm text-light-text-muted dark:text-dark-text-muted italic">No providers registered for {slot}</p>
+          )}
+          {providersBySlot(slot).map(p => (
+            <ProviderCard key={p.id} provider={p} onRefresh={invalidateProviders} />
+          ))}
+        </div>
+      ))}
+
+      {showRegister ? (
+        <RegisterForm onSuccess={() => { setShowRegister(false); invalidateProviders() }} />
+      ) : (
+        <Button variant="secondary" onClick={() => setShowRegister(true)} className="flex items-center gap-2">
+          <Plus size={15} /> Register Provider
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// ─── Section: Social Channels ───────────────────────────────────────────────────
+
+function ChannelsSection() {
+  const queryClient = useQueryClient()
+
+  const channelsQuery = useQuery({
+    queryKey: ['team-channels'],
+    queryFn: () => apiFetch<ChannelMap>('/api/team/channels'),
+  })
+  const channels = channelsQuery.data ?? { INSTAGRAM: { connected: false }, LINKEDIN: { connected: false } }
+
+  function invalidateChannels() {
+    return queryClient.invalidateQueries({ queryKey: ['team-channels'] })
+  }
+
+  if (channelsQuery.isLoading) {
+    return <p className="text-sm text-light-text-muted dark:text-dark-text-muted">Loading…</p>
+  }
+  if (channelsQuery.isError) {
+    return <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} />
+  }
+
+  return (
+    <div className="space-y-4">
+      <ChannelRow
+        channel="INSTAGRAM"
+        status={channels.INSTAGRAM}
+        label="Instagram"
+        tokenPlaceholder="Access token"
+        metadataPlaceholder="Business Account ID"
+        icon={<InstagramIcon size={18} />}
+        onRefresh={invalidateChannels}
+      />
+      <ChannelRow
+        channel="LINKEDIN"
+        status={channels.LINKEDIN}
+        label="LinkedIn"
+        tokenPlaceholder="Access token"
+        metadataPlaceholder="Organization ID"
+        icon={<LinkedinIcon size={18} />}
+        onRefresh={invalidateChannels}
+      />
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function TeamSettingsPage() {
+  const { isTeamAdmin, isLoading } = useCurrentUser()
+
+  if (isLoading) return null
+
+  if (!isTeamAdmin) {
+    return (
+      <GlassPanel className="p-12 text-center max-w-md mx-auto mt-12">
+        <ShieldAlert size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
+        <h1 className="text-lg font-semibold text-light-text dark:text-dark-text mb-1">
+          Requires team admin
+        </h1>
+        <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
+          Team settings are limited to this team&apos;s administrators.
+        </p>
+      </GlassPanel>
+    )
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-8 space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-light-text dark:text-dark-text">Settings</h1>
+        <h1 className="text-2xl font-bold text-light-text dark:text-dark-text">Team settings</h1>
         <p className="text-sm text-light-text-muted dark:text-dark-text-muted mt-1">
-          Manage AI providers and social channel connections
+          Providers, channels, and credentials shared by everyone on this team.
         </p>
       </div>
 
-      {/* Tab bar */}
-      <SegmentedToggle
-        options={[
-          { value: 'providers', label: 'AI Providers' },
-          { value: 'channels', label: 'Social Channels' },
-        ]}
-        value={tab}
-        onChange={v => setTab(v as 'providers' | 'channels')}
-      />
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-light-text dark:text-dark-text">AI Providers</h2>
+        <ProvidersSection />
+      </section>
 
-      {loading ? (
-        <p className="text-sm text-light-text-muted dark:text-dark-text-muted">Loading…</p>
-      ) : tab === 'providers' ? (
-        providersQuery.isError ? (
-          <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} />
-        ) : (
-        <div className="space-y-6">
-          {(['COPY', 'IMAGE'] as ProviderSlot[]).map(slot => (
-            <div key={slot} className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-                  {slot === 'COPY' ? 'Copy (text generation)' : 'Image generation'}
-                </h2>
-              </div>
-              {providersBySlot(slot).length === 0 && (
-                <p className="text-sm text-light-text-muted dark:text-dark-text-muted italic">No providers registered for {slot}</p>
-              )}
-              {providersBySlot(slot).map(p => (
-                <ProviderCard key={p.id} provider={p} onRefresh={invalidateProviders} />
-              ))}
-            </div>
-          ))}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold text-light-text dark:text-dark-text">Social Channels</h2>
+        <ChannelsSection />
+      </section>
 
-          {showRegister ? (
-            <RegisterForm onSuccess={() => { setShowRegister(false); invalidateProviders() }} />
-          ) : (
-            <Button variant="secondary" onClick={() => setShowRegister(true)} className="flex items-center gap-2">
-              <Plus size={15} /> Register Provider
-            </Button>
-          )}
-        </div>
-        )
-      ) : channelsQuery.isError ? (
-        <QueryError error={channelsQuery.error} onRetry={() => channelsQuery.refetch()} />
-      ) : (
-        <div className="space-y-4">
-          <ChannelRow
-            channel="INSTAGRAM"
-            status={channels.INSTAGRAM}
-            label="Instagram"
-            tokenPlaceholder="Access token"
-            metadataPlaceholder="Business Account ID"
-            icon={<InstagramIcon size={18} />}
-            onRefresh={invalidateChannels}
-          />
-          <ChannelRow
-            channel="LINKEDIN"
-            status={channels.LINKEDIN}
-            label="LinkedIn"
-            tokenPlaceholder="Access token"
-            metadataPlaceholder="Organization ID"
-            icon={<LinkedinIcon size={18} />}
-            onRefresh={invalidateChannels}
-          />
-        </div>
-      )}
+      <section>
+        <TeamClaudeTokenCard />
+      </section>
+
+      <section>
+        <ApiKeysCard />
+      </section>
     </div>
   )
 }

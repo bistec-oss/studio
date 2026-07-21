@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Menu, X, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Building2, Menu, X, LogOut } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
@@ -44,8 +44,9 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Admin',
     items: [
-      { label: 'Brandkits', href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
-      { label: 'Users',     href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
+      { label: 'Brandkits',     href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
+      { label: 'Team Settings', href: '/team',            icon: <Building2 size={18} />, adminOnly: true },
+      { label: 'Users',         href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
     ],
   },
 ]
