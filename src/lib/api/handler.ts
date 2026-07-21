@@ -31,7 +31,7 @@ type AuthedHandler<P> = (
 // instead of Next's opaque default.
 export function withAuth<P = Record<string, string>>(
   handler: AuthedHandler<P>,
-  opts: { role?: 'admin' | 'super_admin' } = {}
+  opts: { role?: 'super_admin' } = {}
 ) {
   return async (req: NextRequest, ctx: IncomingRouteContext<P>): Promise<NextResponse> => {
     try {
@@ -46,10 +46,6 @@ export function withAuth<P = Record<string, string>>(
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
   }
-}
-
-export function withAdmin<P = Record<string, string>>(handler: AuthedHandler<P>) {
-  return withAuth(handler, { role: 'admin' })
 }
 
 export function withSuperAdmin<P = Record<string, string>>(handler: AuthedHandler<P>) {

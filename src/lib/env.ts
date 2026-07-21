@@ -49,7 +49,6 @@ const envSchema = z.object({
   // "claude-html" (API path) or "cli" (local Claude Code CLI, keyless).
   DESIGN_PROVIDER: z.string().default(''),
   ANTHROPIC_API_KEY: z.string().optional(),
-  OPENAI_API_KEY: z.string().optional(),
 
   // --- Claude Code CLI mode (DESIGN_PROVIDER=cli) ---
   CLAUDE_CLI_PATH: z.string().optional(),
@@ -57,29 +56,14 @@ const envSchema = z.object({
   CLAUDE_CLI_MODEL: z.string().optional(),
   // Diagnostics on by default; "0" silences (claudeCli.ts compares !== "0").
   CLAUDE_CLI_DEBUG: z.string().default('1'),
-  // Long-lived OAuth token (`claude setup-token`, ~1 year) so headless
-  // `claude -p` spawns authenticate without the developer's interactive login.
-  // ANTHROPIC_API_KEY outranks it in the CLI's own precedence chain, but the
-  // spawn strips that var (see claudeCli.ts), so in CLI mode this token — or,
-  // when unset, the logged-in session — is always the auth source.
-  CLAUDE_CODE_OAUTH_TOKEN: z.string().optional(),
 
   // --- Puppeteer renderer ---
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
   // Raw string; puppeteer.ts keeps its parseInt-with-fallback-2, min-1 logic.
   PUPPETEER_MAX_CONCURRENCY: z.string().optional(),
 
-  // --- MCP server / API-key allow-lists ---
+  // --- MCP server (presented credential; team-level keys live in the DB) ---
   MCP_API_KEY: z.string().optional(),
-  // Comma-separated allow-lists (parsed in src/mcp/auth.ts).
-  BISTEC_API_KEYS: z.string().optional(),
-  BISTEC_ADMIN_API_KEYS: z.string().optional(),
-
-  // --- Social channels (env fallback behind the encrypted ChannelToken rows) ---
-  INSTAGRAM_ACCESS_TOKEN: z.string().optional(),
-  INSTAGRAM_BUSINESS_ACCOUNT_ID: z.string().optional(),
-  LINKEDIN_ACCESS_TOKEN: z.string().optional(),
-  LINKEDIN_ORGANIZATION_ID: z.string().optional(),
 
   // --- Test seams (dormant unless exactly "true"; NEVER set in production) ---
   // Declared for completeness/typing only — the canonical reads live in
