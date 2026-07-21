@@ -1,4 +1,5 @@
 import React from 'react'
+import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface SelectOption {
@@ -34,29 +35,37 @@ export function Select({
           {label}
         </label>
       )}
-      <select
-        id={selectId}
-        className={cn(
-          'glass-input',
-          'w-full rounded-xl px-3 py-2 text-sm',
-          'text-light-text dark:text-dark-text',
-          'focus:outline-none',
-          'appearance-none',
-          'bg-no-repeat bg-right',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          // Chevron icon via inline SVG background
-          "bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")] pr-8",
-          error && 'border-red-500',
-          className,
-        )}
-        {...props}
-      >
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+      {/* The chevron is a real positioned element, not a background-image:
+          bg-image utilities are one `background` shorthand away from being
+          wiped (happened once via .glass-input), and Tailwind arbitrary
+          values silently drop URLs containing spaces. */}
+      <div className="relative">
+        <select
+          id={selectId}
+          className={cn(
+            'glass-input',
+            'w-full rounded-xl px-3 py-2 text-sm',
+            'text-light-text dark:text-dark-text',
+            'focus:outline-none',
+            'appearance-none pr-8',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
+            error && 'border-red-500',
+            className,
+          )}
+          {...props}
+        >
+          {options.map(opt => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-light-text-muted dark:text-dark-text-muted"
+        />
+      </div>
       {error && (
         <p className="text-xs text-red-500 dark:text-red-400">{error}</p>
       )}
