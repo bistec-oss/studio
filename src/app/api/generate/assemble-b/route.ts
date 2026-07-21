@@ -31,7 +31,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     // Fire-and-forget: keeps running in-process after this response returns, on
     // the acting user's CLI token (shared token otherwise). Errors are caught
     // inside and recorded on the draft (status FAILED) for the inline error card.
-    await startBackgroundGeneration(draft.id, user.userId)
+    await startBackgroundGeneration(draft.id, user.userId, user.teamId)
     return NextResponse.json({ draftId: draft.id }, { status: 202 })
   } catch (err) {
     if (err instanceof NoBrandKitError) {

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { runBrandKitChat } from '@/lib/brandkit/assistant'
-import { withUserClaudeAuth } from '@/lib/agent/userToken'
+import { withClaudeAuth } from '@/lib/agent/userToken'
 
 type Params = { id: string }
 
@@ -37,7 +37,7 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   }
 
   // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise) — see src/lib/agent/userToken.ts.
-  const result = await withUserClaudeAuth(user.userId, () => runBrandKitChat(params.id, body.data.messages))
+  // (the team token otherwise) — see src/lib/agent/userToken.ts.
+  const result = await withClaudeAuth(user.userId, user.teamId, () => runBrandKitChat(params.id, body.data.messages))
   return NextResponse.json(result)
 })

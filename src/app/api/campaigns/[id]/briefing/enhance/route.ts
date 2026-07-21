@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { enhanceBriefing } from '@/lib/campaign/briefingAssistant'
-import { withUserClaudeAuth } from '@/lib/agent/userToken'
+import { withClaudeAuth } from '@/lib/agent/userToken'
 
 type Params = { id: string }
 
@@ -25,8 +25,8 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   }
 
   // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise) — see src/lib/agent/userToken.ts.
-  const draft = await withUserClaudeAuth(user.userId, () =>
+  // (the team token otherwise) — see src/lib/agent/userToken.ts.
+  const draft = await withClaudeAuth(user.userId, user.teamId, () =>
     enhanceBriefing(params.id, body.data.content)
   )
   if (!draft) {

@@ -131,9 +131,9 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
   // Token-validation path: run once with the candidate token, never retry.
   if (opts.authToken) return runClaudeCliOnce(prompt, opts, opts.authToken)
 
-  // Per-user auth (set at the route entry via withUserClaudeAuth — see
-  // claudeAuth.ts for the ALS design note). Absent context ⇒ shared credential,
-  // exactly the pre-feature behaviour (scheduler worker, MCP/ACP, scripts).
+  // Per-user/team auth (set at the route entry via withClaudeAuth — see
+  // claudeAuth.ts for the ALS design note). Absent context ⇒ runClaudeCliOnce
+  // itself throws the no-credential error below — there is no further tier.
   const auth = currentClaudeAuth()
   if (!auth) return runClaudeCliOnce(prompt, opts, undefined)
 
@@ -141,21 +141,32 @@ export async function runClaudeCli(prompt: string, opts: ClaudeCliOptions = {}):
     return await runClaudeCliOnce(prompt, opts, auth.token)
   } catch (err) {
     if (!isClaudeAuthFailure(err)) throw err
-    // The user's token was rejected (expired/revoked). Mark it INVALID so the
-    // UI prompts a reconnect, then complete THIS call on the shared credential
-    // so the user's work isn't lost. One retry only; a second failure surfaces.
+    // The primary token was rejected (expired/revoked). Mark it invalid so the
+    // owner is prompted to reconnect, then fall back ONE tier (personal → team)
+    // so this call can still complete. One retry only; a second failure surfaces.
     cliLog(
       opts.label ?? "",
-      `user token auth failure (user ${auth.userId}) — marking token INVALID, retrying once with shared credential`,
+      `auth failure for ${auth.userId ? `user ${auth.userId}` : `team ${auth.teamId}`} — marking credential invalid, trying the next tier`,
     )
     await auth.onAuthFailure().catch((e: unknown) => {
-      cliLog(opts.label ?? "", `failed to mark token INVALID: ${(e as Error).message}`)
+      cliLog(opts.label ?? "", `failed to mark credential invalid: ${(e as Error).message}`)
     })
-    return runClaudeCliOnce(prompt, opts, undefined)
+    const fallback = auth.resolveFallback ? await auth.resolveFallback() : null
+    if (!fallback) throw err
+    try {
+      return await runClaudeCliOnce(prompt, opts, fallback.token)
+    } catch (err2) {
+      if (isClaudeAuthFailure(err2)) {
+        await fallback.onAuthFailure().catch((e: unknown) => {
+          cliLog(opts.label ?? "", `failed to mark team credential invalid: ${(e as Error).message}`)
+        })
+      }
+      throw err2
+    }
   }
 }
 
-function runClaudeCliOnce(
+export async function runClaudeCliOnce(
   prompt: string,
   opts: ClaudeCliOptions,
   tokenOverride: string | undefined,
@@ -163,27 +174,34 @@ function runClaudeCliOnce(
   const { cmd, shell } = claudeCommand()
   const { timeoutMs = 180_000, maxBuffer = 16 * 1024 * 1024, label = "", model, allowedTools } = opts
 
-  // CLI-mode auth, in order of preference:
-  //   1. tokenOverride — the acting user's personal token (from the ALS auth
-  //      context) or a candidate token under validation (opts.authToken).
-  //   2. CLAUDE_CODE_OAUTH_TOKEN — the SHARED server token from
-  //      `claude setup-token`, so headless spawns work without (and independent
-  //      of) the developer's interactive login.
-  //   3. The developer's logged-in Claude Code session (when neither is set).
+  // CLI-mode auth is REQUIRED — there is no env/dev-session fallback tier.
+  // Order of preference:
+  //   1. tokenOverride — the acting user's personal token, or the team token
+  //      passed in by runClaudeCli's retry after a personal-token auth
+  //      failure, or a candidate token under validation (opts.authToken).
+  //   2. currentClaudeAuth()?.token — the ALS auth context set by
+  //      withClaudeAuth (userToken.ts), read directly when no override was
+  //      passed in (the no-auth-context early-return in runClaudeCli above).
+  // Neither present ⇒ no credential exists for this call (no personal token
+  // and no team token) — throw rather than spawn silently unauthenticated.
   // The token travels via env, never argv (argv would leak through `shell: true`
   // on win32 and process listings). ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN are
-  // stripped either way: the CLI prefers them over all sources above, so a stray
-  // invalid/placeholder key in the server env would make `claude -p` exit 1 (and
-  // a real one would silently bill the API instead of the subscription).
+  // stripped either way: the CLI prefers them over CLAUDE_CODE_OAUTH_TOKEN, so a
+  // stray invalid/placeholder key in the server env would make `claude -p` exit 1
+  // (and a real one would silently bill the API instead of the subscription).
   const childEnv = { ...process.env }
   delete childEnv.ANTHROPIC_API_KEY
   delete childEnv.ANTHROPIC_AUTH_TOKEN
-  const oauthToken = tokenOverride ?? env.CLAUDE_CODE_OAUTH_TOKEN
-  if (oauthToken) {
-    childEnv.CLAUDE_CODE_OAUTH_TOKEN = oauthToken
-  } else {
-    delete childEnv.CLAUDE_CODE_OAUTH_TOKEN
+  const oauthToken = tokenOverride ?? currentClaudeAuth()?.token
+  if (!oauthToken) {
+    throw new ClaudeCliError(
+      "No Claude credential available — connect a personal token in Settings or set the team token in Team Settings",
+      null,
+      "",
+      "",
+    )
   }
+  childEnv.CLAUDE_CODE_OAUTH_TOKEN = oauthToken
 
   // --strict-mcp-config + no --mcp-config => load ZERO MCP servers. Without it the
   // spawned CLI inherits the developer's full Claude Code config (Canva, Google

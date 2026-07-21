@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   updateMany: vi.fn(),
-  resolveClaudeAuthForUser: vi.fn(),
+  resolveClaudeAuth: vi.fn(),
   runWithClaudeAuth: vi.fn(),
 }))
 
@@ -15,7 +15,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: { draft: { updateMany: h.updateMany } },
 }))
 vi.mock('@/lib/agent/userToken', () => ({
-  resolveClaudeAuthForUser: h.resolveClaudeAuthForUser,
+  resolveClaudeAuth: h.resolveClaudeAuth,
 }))
 vi.mock('@/lib/agent/claudeAuth', () => ({
   runWithClaudeAuth: h.runWithClaudeAuth,
@@ -27,7 +27,7 @@ const { claimDraftAction, releaseDraftAction, startDraftAction } = await import(
 
 beforeEach(() => {
   h.updateMany.mockReset().mockResolvedValue({ count: 1 })
-  h.resolveClaudeAuthForUser.mockReset().mockResolvedValue(null)
+  h.resolveClaudeAuth.mockReset().mockResolvedValue(null)
   // Default: transparent pass-through, like the real fn with a null auth.
   h.runWithClaudeAuth.mockReset().mockImplementation((_auth, fn) => fn())
 })
@@ -73,7 +73,7 @@ describe('releaseDraftAction', () => {
 
 describe('startDraftAction', () => {
   it('releases clean when the work succeeds', async () => {
-    await startDraftAction('draft-1', 'user-1', async () => {})
+    await startDraftAction('draft-1', 'user-1', 'team-1', async () => {})
     await waitForRelease(1)
     expect(h.updateMany).toHaveBeenCalledWith({
       where: { id: 'draft-1' },
@@ -82,7 +82,7 @@ describe('startDraftAction', () => {
   })
 
   it('releases with the error message when the work throws', async () => {
-    await startDraftAction('draft-1', 'user-1', async () => {
+    await startDraftAction('draft-1', 'user-1', 'team-1', async () => {
       throw new Error('refine exploded')
     })
     await waitForRelease(1)
@@ -93,7 +93,7 @@ describe('startDraftAction', () => {
   })
 
   it('stringifies non-Error throws', async () => {
-    await startDraftAction('draft-1', 'user-1', async () => {
+    await startDraftAction('draft-1', 'user-1', 'team-1', async () => {
       throw 'plain string failure'
     })
     await waitForRelease(1)
@@ -105,17 +105,17 @@ describe('startDraftAction', () => {
 
   it('resolves auth BEFORE invoking the work, and pins it onto the run', async () => {
     const order: string[] = []
-    const auth = { token: 'sk-ant-oat01-user', userId: 'user-1' }
-    h.resolveClaudeAuthForUser.mockImplementation(async () => {
+    const auth = { token: 'sk-ant-oat01-user', userId: 'user-1', teamId: 'team-1' }
+    h.resolveClaudeAuth.mockImplementation(async () => {
       order.push('auth')
       return auth
     })
-    await startDraftAction('draft-1', 'user-1', async () => {
+    await startDraftAction('draft-1', 'user-1', 'team-1', async () => {
       order.push('work')
     })
     await waitForRelease(1)
     expect(order).toEqual(['auth', 'work'])
-    expect(h.resolveClaudeAuthForUser).toHaveBeenCalledWith('user-1')
+    expect(h.resolveClaudeAuth).toHaveBeenCalledWith('user-1', 'team-1')
     expect(h.runWithClaudeAuth).toHaveBeenCalledWith(auth, expect.any(Function))
   })
 })

@@ -53,9 +53,13 @@ export async function generatePost(args: GeneratePostArgs) {
   // Shared brief→draft orchestrator: kit precedence (campaign → project →
   // system default; no explicit kit on this surface), campaign briefing, copy,
   // Path B design, Draft persistence — identical to the web routes.
-  // Deliberately NOT wrapped in withUserClaudeAuth: MCP/ACP callers hold
-  // server API keys (M2M trust boundary), not app-user sessions — CLI-mode
-  // calls here always use the shared server credential.
+  // Deliberately NOT wrapped in withClaudeAuth: MCP/ACP callers hold server
+  // API keys (M2M trust boundary), not app-user sessions.
+  // TODO(Task 13): the shared env credential this comment used to describe is
+  // gone (Task 10) — an MCP/ACP call in CLI mode now has no ALS auth context
+  // and will hard-fail with "No Claude credential available" until this
+  // surface resolves the calling ApiKey's team and wraps its span in
+  // withClaudeAuth(null, teamId, ...).
   try {
     const { draft } = await generateDraftForBrief(brief)
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }

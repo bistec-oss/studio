@@ -129,10 +129,13 @@ export async function runGenerationJobs(): Promise<void> {
     try {
       const brief = await ensureBrief(entry)
 
-      // Deliberately NOT wrapped in withUserClaudeAuth: scheduled generations
-      // always run on the SHARED server credential, even though the planner is
-      // known (entry.createdById) — a user's expired/revoked personal token
-      // must never fail an unattended run. (Product decision, 2026-07-07.)
+      // Deliberately NOT wrapped in withClaudeAuth: scheduled generations run
+      // unattended, so a member's expired/revoked personal token must never
+      // fail a run. (Product decision, 2026-07-07.)
+      // TODO(Task 14): the shared env credential this comment used to
+      // describe is gone (Task 10) — a CLI-mode run now has no ALS auth
+      // context and will hard-fail with "No Claude credential available"
+      // until this loop wraps each job in withClaudeAuth(null, entry.teamId, ...).
       const { draft } = await generateDraftForBrief(brief, { templateId: entry.templateId })
 
       await executePostAction(entry, draft)

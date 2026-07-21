@@ -28,7 +28,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
 
   try {
     const draft = await createPendingDraft(brief, { templateId })
-    await startBackgroundGeneration(draft.id, user.userId)
+    await startBackgroundGeneration(draft.id, user.userId, user.teamId)
     return NextResponse.json({ draftId: draft.id }, { status: 202 })
   } catch (err) {
     if (err instanceof TemplateNotFoundError) {

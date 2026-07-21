@@ -34,7 +34,7 @@ export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
     where: { id: params.id },
     data: { status: 'IN_PROGRESS', failureReason: null },
   })
-  await startBackgroundGeneration(params.id, user.userId)
+  await startBackgroundGeneration(params.id, user.userId, user.teamId)
 
   return NextResponse.json({ ok: true }, { status: 202 })
 })

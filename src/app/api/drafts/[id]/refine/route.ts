@@ -128,7 +128,7 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   // request unwinds and runs the whole closure inside that auth context, so the
   // background decision and the refine agent call can't observe different
   // tokens. A throw below is recorded on Draft.pendingActionError.
-  await startDraftAction(draft.id, user.userId, async () => {
+  await startDraftAction(draft.id, user.userId, user.teamId, async () => {
     // Background pre-step: generates a new background ONLY when the instruction
     // asks for one (e.g. "change the background to a city skyline"); null
     // otherwise, and on any failure. See agent/background.ts.

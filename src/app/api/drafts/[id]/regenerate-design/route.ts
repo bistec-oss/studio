@@ -55,7 +55,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
   // (shared server token otherwise) — startDraftAction resolves it before the
   // request unwinds and pins it onto the background run. A throw below is
   // recorded on Draft.pendingActionError; the draft itself is left untouched.
-  await startDraftAction(draft.id, user.userId, async () => {
+  await startDraftAction(draft.id, user.userId, user.teamId, async () => {
     // Run the new design first — if it fails, the draft is left untouched.
     const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
 

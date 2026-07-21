@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withTeamAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 import { generateTemplateFromImage } from '@/lib/brandkit/templateFromImage'
-import { withUserClaudeAuth } from '@/lib/agent/userToken'
+import { withClaudeAuth } from '@/lib/agent/userToken'
 import { isAspectRatio } from '@/lib/aspectRatio'
 
 export const maxDuration = 300
@@ -45,8 +45,9 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
 
   const imageDataUrl = `data:${contentType};base64,${buffer.toString('base64')}`
   try {
-    // CLI mode bills the acting user's personal Claude token when connected.
-    const result = await withUserClaudeAuth(user.userId, () =>
+    // CLI mode bills the acting user's personal Claude token when connected
+    // (the team token otherwise) — see src/lib/agent/userToken.ts.
+    const result = await withClaudeAuth(user.userId, user.teamId, () =>
       generateTemplateFromImage({ imageDataUrl, imageUrl: url, aspectRatioOverride })
     )
     return NextResponse.json({ html: result.html, aspectRatio: result.aspectRatio, sourceArtifact: artifact })

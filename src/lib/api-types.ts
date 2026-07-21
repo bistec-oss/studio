@@ -24,6 +24,12 @@ export type ClaudeTokenInfo =
     }
   | { connected: false }
 
+// GET/PUT/DELETE /api/team/claude-token — the team's shared Claude OAuth
+// token (the fallback tier below each member's personal token). The Team
+// model has no status/timestamp columns for it, unlike the personal token —
+// a rejected team token is simply cleared, not flagged INVALID.
+export type TeamClaudeTokenInfo = { connected: true; keyPrefix: string } | { connected: false }
+
 // GET /api/me
 export interface MeResponse {
   userId: string
