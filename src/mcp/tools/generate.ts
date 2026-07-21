@@ -3,6 +3,7 @@ import type { Channel } from '@prisma/client'
 import { generateDraftForBrief, NoBrandKitError } from '@/lib/agent/generateDraft'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { getSystemUserId } from '@/mcp/systemUser'
+import { withClaudeAuth } from '@/lib/agent/userToken'
 
 interface GeneratePostArgs {
   topic: string
@@ -62,20 +63,23 @@ export async function generatePost(args: GeneratePostArgs) {
 
   // Shared brief→draft orchestrator: kit precedence (campaign → project →
   // system default; no explicit kit on this surface), campaign briefing, copy,
-  // Path B design, Draft persistence — identical to the web routes.
-  // Deliberately NOT wrapped in withClaudeAuth: MCP/ACP callers hold server
-  // API keys (M2M trust boundary), not app-user sessions.
-  // TODO(follow-up, out of Task 14's scope — that task only covered the
-  // scheduler): in CLI mode this call has no ALS auth context (no personal
-  // token — there's no signed-in user) and will hard-fail with "No Claude
-  // credential available" until a dedicated task wraps this span in
-  // withClaudeAuth(null, args.teamId, ...), mirroring generationRunner.ts.
+  // Path B design, Draft persistence — identical to the web routes. MCP/ACP
+  // callers hold server API keys (M2M trust boundary), not app-user sessions,
+  // so there is no personal-token tier here — userId: null skips straight to
+  // the caller's TEAM Claude credential (and, for the IMAGE provider, the
+  // team's default — see resolveImageProvider). The whole model-calling span
+  // (copy → background image → design) runs inside withClaudeAuth so every
+  // `claude -p` it spawns shares that one resolved team credential, mirroring
+  // generationRunner.ts; a team with none throws the usual no-credential
+  // ClaudeCliError, caught below like any other generation failure.
+  // args.teamId ?? '' guards a malformed/legacy caller the same way the
+  // scheduler guards a pre-Task-15 null ScheduledGeneration.teamId — the
+  // GeneratePostArgs type already requires teamId, so this is defense in depth.
+  const teamId = args.teamId ?? ''
   try {
-    // userId: null — MCP/ACP callers hold server API keys (M2M trust
-    // boundary, see the withClaudeAuth note above), not a signed-in teammate;
-    // the IMAGE-provider resolution must skip the personal tier and fall
-    // through to the team's default (see resolveImageProvider).
-    const { draft } = await generateDraftForBrief(brief, { userId: null, teamId: args.teamId })
+    const { draft } = await withClaudeAuth(null, teamId, () =>
+      generateDraftForBrief(brief, { userId: null, teamId })
+    )
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }
   } catch (err) {
     if (err instanceof NoBrandKitError) {
