@@ -11,7 +11,10 @@ import type { Channel, Post } from '@prisma/client'
 export const publishers = {
   INSTAGRAM: instagramPublisher,
   LINKEDIN: linkedinPublisher,
-} as const satisfies Record<Channel, { publish(url: string, caption: string): Promise<{ platformId: string }> }>
+} as const satisfies Record<
+  Channel,
+  { publish(url: string, caption: string, teamId: string): Promise<{ platformId: string }> }
+>
 
 // Statuses that count as "live" for duplicate detection: a second publish of the
 // same (draft, channel) while one of these exists would double-post. FAILED and
@@ -30,13 +33,14 @@ export async function findLivePost(draftId: string, channel: Channel): Promise<P
 export async function publishToChannel(
   channel: Channel,
   exportKey: string | null | undefined,
-  copyText: string
+  copyText: string,
+  teamId: string
 ): Promise<{ platformId: string }> {
   const signedExportUrl = await resolveExportUrl(exportKey)
   if (!signedExportUrl) {
     throw new PublishError(channel, 'draft export missing')
   }
-  return publishers[channel].publish(signedExportUrl, copyText)
+  return publishers[channel].publish(signedExportUrl, copyText, teamId)
 }
 
 // Immediate-publish state machine shared by the API POST /api/posts path and
@@ -69,7 +73,11 @@ export async function createAndPublishPost(opts: {
   })
 
   try {
-    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '')
+    // TODO(Task 15): teamId is nullable until Migration B backfills/constrains
+    // it — a null here (pre-tenancy row) simply fails credential lookup below,
+    // which is the correct failure mode rather than silently using someone
+    // else's channel token.
+    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '', draft.teamId ?? '')
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: { status: 'PUBLISHED', publishedAt: new Date(), platformId },

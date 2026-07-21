@@ -30,7 +30,7 @@ export const POST = withTeamAdmin<{ id: string }>(async (_req, { params }, user)
   }
 
   try {
-    const { platformId } = await publishToChannel(post.channel, draft.exportUrl, draft.copyText ?? '')
+    const { platformId } = await publishToChannel(post.channel, draft.exportUrl, draft.copyText ?? '', user.teamId)
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: {

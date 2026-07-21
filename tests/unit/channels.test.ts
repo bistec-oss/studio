@@ -1,10 +1,70 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   CHANNEL_VALUES,
   channelLabel,
   channelCopyLimit,
   isChannel,
 } from '@/lib/channels'
+
+// --- Team-scoped channel-token credential resolution (Task 12) ---
+// linkedin.ts / instagram.ts each resolve their credentials via
+// prisma.channelToken.findFirst({ where: { teamId, channel } }) and throw a
+// fixed message when no row exists for that team — the env-var fallback
+// (LINKEDIN_ACCESS_TOKEN/ORGANIZATION_ID, INSTAGRAM_ACCESS_TOKEN/BUSINESS_ACCOUNT_ID)
+// is gone. Prisma is mocked; the throw happens before any network/crypto call,
+// so no encryption key setup is needed for these cases.
+const h = vi.hoisted(() => ({
+  channelTokenFindFirst: vi.fn(),
+}))
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: { channelToken: { findFirst: h.channelTokenFindFirst } },
+}))
+
+const linkedin = await import('@/lib/social/linkedin')
+const instagram = await import('@/lib/social/instagram')
+
+const TEAM_ID = 'team-1'
+const EXPORT_URL = 'https://example.com/export.png'
+const CAPTION = 'caption text'
+
+beforeEach(() => {
+  h.channelTokenFindFirst.mockReset()
+})
+
+describe('linkedin.publish — team-scoped credentials', () => {
+  it('throws the exact missing-credentials message when no row exists for this team', async () => {
+    h.channelTokenFindFirst.mockResolvedValue(null)
+    await expect(linkedin.publish(EXPORT_URL, CAPTION, TEAM_ID)).rejects.toThrow(
+      'No LinkedIn credentials configured for this team'
+    )
+  })
+
+  it('looks up the token scoped by teamId + channel, not a global row', async () => {
+    h.channelTokenFindFirst.mockResolvedValue(null)
+    await expect(linkedin.publish(EXPORT_URL, CAPTION, TEAM_ID)).rejects.toThrow()
+    expect(h.channelTokenFindFirst).toHaveBeenCalledWith({
+      where: { teamId: TEAM_ID, channel: 'LINKEDIN' },
+    })
+  })
+})
+
+describe('instagram.publish — team-scoped credentials', () => {
+  it('throws the exact missing-credentials message when no row exists for this team', async () => {
+    h.channelTokenFindFirst.mockResolvedValue(null)
+    await expect(instagram.publish(EXPORT_URL, CAPTION, TEAM_ID)).rejects.toThrow(
+      'No Instagram credentials configured for this team'
+    )
+  })
+
+  it('looks up the token scoped by teamId + channel, not a global row', async () => {
+    h.channelTokenFindFirst.mockResolvedValue(null)
+    await expect(instagram.publish(EXPORT_URL, CAPTION, TEAM_ID)).rejects.toThrow()
+    expect(h.channelTokenFindFirst).toHaveBeenCalledWith({
+      where: { teamId: TEAM_ID, channel: 'INSTAGRAM' },
+    })
+  })
+})
 
 describe('channelLabel', () => {
   it('maps enum values to human labels', () => {

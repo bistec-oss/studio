@@ -2,19 +2,15 @@ import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
-import { env } from "@/lib/env"
 
-async function resolveCredentials(): Promise<{ accessToken: string; organizationId: string }> {
-  const row = await prisma.channelToken.findUnique({ where: { channel: "LINKEDIN" } })
-  if (row) {
-    return { accessToken: decrypt(row.encryptedToken), organizationId: decrypt(row.encryptedMetadata) }
+// Team-scoped lookup — no env-var fallback. A team with no connected
+// LinkedIn channel simply can't publish; there is no shared/global credential.
+async function resolveCredentials(teamId: string): Promise<{ accessToken: string; organizationId: string }> {
+  const row = await prisma.channelToken.findFirst({ where: { teamId, channel: "LINKEDIN" } })
+  if (!row) {
+    throw new Error("No LinkedIn credentials configured for this team")
   }
-  const accessToken = env.LINKEDIN_ACCESS_TOKEN
-  const organizationId = env.LINKEDIN_ORGANIZATION_ID
-  if (!accessToken || !organizationId) {
-    throw new Error("LinkedIn credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
-  }
-  return { accessToken, organizationId }
+  return { accessToken: decrypt(row.encryptedToken), organizationId: decrypt(row.encryptedMetadata) }
 }
 
 interface RegisterUploadResponse {
@@ -32,6 +28,7 @@ interface RegisterUploadResponse {
 export async function publish(
   exportUrl: string,
   copyText: string,
+  teamId: string,
 ): Promise<{ platformId: string }> {
   // Test seam: skip the LinkedIn UGC flow. The failure path (MOCK_SOCIAL_FAIL
   // global, or a __FAIL_ALWAYS__/__FAIL_ONCE__ sentinel in the caption) drives
@@ -41,7 +38,7 @@ export async function publish(
     return { platformId: `mock-linkedin-${Date.now()}` }
   }
 
-  const { accessToken, organizationId } = await resolveCredentials()
+  const { accessToken, organizationId } = await resolveCredentials(teamId)
 
   const organizationUrn = `urn:li:organization:${organizationId}`
 

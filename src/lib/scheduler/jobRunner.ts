@@ -70,10 +70,14 @@ export async function runScheduledJobs(): Promise<void> {
     try {
       // Shared sign+publish (throws PublishError 'draft export missing' when the
       // draft lost its export between scheduling and this tick).
+      // TODO(Task 15): post.teamId is nullable until Migration B backfills/
+      // constrains it — a null here (pre-tenancy row) simply fails credential
+      // lookup, which is the correct failure mode.
       const { platformId } = await publishToChannel(
         post.channel,
         post.draft.exportUrl,
-        post.draft.copyText
+        post.draft.copyText,
+        post.teamId ?? ''
       )
 
       await prisma.post.update({
