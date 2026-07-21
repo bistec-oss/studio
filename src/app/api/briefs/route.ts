@@ -106,14 +106,18 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     }
   }
 
-  // Verify referenced records in parallel (independent lookups).
+  // Verify referenced records in parallel (independent lookups). Provider
+  // lookups are team-scoped (team-tenancy fix — these used to validate
+  // against ANY team's provider row, which would let a brief reference, and
+  // then at generation time resolve to, a different team's registered
+  // provider/API key; see the matching fix in resolveCopyProvider).
   const [copyProvider, imageProvider, campaign, template, brandKit] = await Promise.all([
     prisma.availableProvider.findFirst({
-      where: { providerKey: copyProviderKey, slot: 'COPY', isEnabled: true },
+      where: { providerKey: copyProviderKey, slot: 'COPY', teamId: user.teamId, isEnabled: true },
     }),
     imageProviderKey
       ? prisma.availableProvider.findFirst({
-          where: { providerKey: imageProviderKey, slot: 'IMAGE', isEnabled: true },
+          where: { providerKey: imageProviderKey, slot: 'IMAGE', teamId: user.teamId, isEnabled: true },
         })
       : Promise.resolve(null),
     campaignId

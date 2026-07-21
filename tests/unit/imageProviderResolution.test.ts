@@ -212,6 +212,14 @@ describe('resolveImageProvider — no provider configured', () => {
 describe('resolveCopyProvider — env.OPENAI_API_KEY fallback removed', () => {
   it('throws (does not silently fall back to env) when no default COPY provider is configured', async () => {
     h.availableProviderFindFirst.mockResolvedValue(null)
-    await expect(resolveCopyProvider()).rejects.toThrow(/No COPY provider configured/)
+    await expect(resolveCopyProvider(TEAM_ID)).rejects.toThrow(/No COPY provider configured/)
+  })
+
+  it('is team-scoped: the default-COPY-provider lookup is filtered by teamId (team-tenancy fix)', async () => {
+    h.availableProviderFindFirst.mockResolvedValue(null)
+    await expect(resolveCopyProvider(TEAM_ID)).rejects.toThrow(/No COPY provider configured/)
+    for (const call of h.availableProviderFindFirst.mock.calls) {
+      expect(call[0].where.teamId).toBe(TEAM_ID)
+    }
   })
 })

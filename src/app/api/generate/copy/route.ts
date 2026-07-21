@@ -24,7 +24,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   }
 
   try {
-    const provider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
+    const provider = await resolveCopyProvider(brief.teamId, brief.copyProviderKey ?? undefined)
 
     // Brand voice for copy comes from the same kit precedence as design:
     // explicit brief kit → campaign → project → system default.

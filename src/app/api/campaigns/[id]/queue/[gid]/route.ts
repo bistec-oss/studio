@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner, hasRole } from '@/lib/auth'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { queueEntrySchema, requiresAdmin, validateTemplateSelection } from '@/lib/campaign/queue'
 
 type Params = { id: string; gid: string }
@@ -17,12 +17,16 @@ async function findEntry(campaignId: string, gid: string) {
 // Edit a planned entry. The modal sends the full entry, so this validates via
 // the same schema as create. Only PENDING entries are editable — a RUNNING
 // entry is claimed by the worker, and COMPLETED/FAILED/CANCELLED are history.
-export const PATCH = withAuth<Params>(async (req, { params }, user) => {
+// Team tenancy fix: withTeamAuth + canAccessContent (this used to be plain
+// withAuth with no teamId check at all — see the note in ../route.ts).
+export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
   const existing = await findEntry(params.id, params.gid)
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const forbidden = forbiddenIfNotOwner(user, existing.createdById)
-  if (forbidden) return forbidden
+  if (
+    !existing ||
+    !canAccessContent(user, { teamId: existing.teamId, ownerId: existing.createdById, campaignId: params.id })
+  ) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   if (existing.status !== 'PENDING') {
     return NextResponse.json(
@@ -37,7 +41,10 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
   // The gate applies to the current AND the requested action — an editor may
   // neither set auto-publish nor edit an entry that already has it.
-  if ((requiresAdmin(existing.postAction) || requiresAdmin(entry.postAction)) && !hasRole(user.role, 'admin')) {
+  if (
+    (requiresAdmin(existing.postAction) || requiresAdmin(entry.postAction)) &&
+    !(user.teamRole === 'ADMIN' || user.isSuperAdmin)
+  ) {
     return NextResponse.json(
       { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
       { status: 403 }
@@ -70,12 +77,14 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
 // Cancel a planned entry (PENDING → CANCELLED). Not a hard delete — the entry
 // stays visible in the queue history and can be re-armed via rerun.
-export const DELETE = withAuth<Params>(async (_req, { params }, user) => {
+export const DELETE = withTeamAuth<Params>(async (_req, { params }, user) => {
   const existing = await findEntry(params.id, params.gid)
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-  const forbidden = forbiddenIfNotOwner(user, existing.createdById)
-  if (forbidden) return forbidden
+  if (
+    !existing ||
+    !canAccessContent(user, { teamId: existing.teamId, ownerId: existing.createdById, campaignId: params.id })
+  ) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   if (existing.status !== 'PENDING') {
     return NextResponse.json(

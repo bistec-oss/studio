@@ -55,10 +55,24 @@ Banned patterns:
 - Fabricated social proof (e.g. "thousands of customers love us").
 - Inconsistent product naming — always use the exact registered product name.`
 
+// Team tenancy: BrandKit.teamId is required. This script seeds the baseline
+// "Bistec" brand kit, which belongs in the "Bistec" team — created
+// unconditionally by the team_tenancy_b migration's backfill (id
+// 'team_bistec_default'), so it always exists by the time this script runs.
+// Falls back to creating it here too, defensively, if run standalone.
+async function ensureBistecTeamId() {
+  const existing = await prisma.team.findFirst({ where: { name: "Bistec" } })
+  if (existing) return existing.id
+  const created = await prisma.team.create({ data: { name: "Bistec" } })
+  return created.id
+}
+
 async function main() {
-  // Idempotency: a non-deleted default kit already present → skip.
+  const teamId = await ensureBistecTeamId()
+
+  // Idempotency: a non-deleted default kit already present (in this team) → skip.
   const existingDefault = await prisma.brandKit.findFirst({
-    where: { isDefault: true, isDeleted: false },
+    where: { isDefault: true, isDeleted: false, teamId },
   })
   if (existingDefault) {
     console.log(
@@ -74,14 +88,15 @@ async function main() {
     (await prisma.user.findFirst({ orderBy: { createdAt: "asc" } }))
   const createdBy = owner?.id ?? "system-seed"
 
-  // Mirror the admin API: clear any other defaults so exactly one kit is default.
+  // Mirror the admin API: clear any other defaults so exactly one kit is default (within this team).
   await prisma.brandKit.updateMany({
-    where: { isDefault: true },
+    where: { isDefault: true, teamId },
     data: { isDefault: false },
   })
 
   const kit = await prisma.brandKit.create({
     data: {
+      teamId,
       name: "Bistec",
       isDefault: true,
       colors: COLORS,

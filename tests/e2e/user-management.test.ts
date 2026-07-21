@@ -1,5 +1,5 @@
 import { test, expect, request as pwRequest } from '@playwright/test'
-import { loginAs } from '../helpers/api'
+import { loginAs, findTeamIdByName, addTeamMember } from '../helpers/api'
 
 // §M — Super-admin user management (/api/admin/users).
 //
@@ -153,6 +153,13 @@ test.describe('Super-admin user management', () => {
         password: 'PlainAdmin1!',
       })
     ).json()
+    // Creating a platform user via /api/admin/users grants NO team membership
+    // (a deliberate separate step — team-tenancy) — team-scoped routes like
+    // /api/admin/brandkits (withTeamAdmin) 403 "not a member of any team"
+    // without one. Add this account to Bistec as a team ADMIN, mirroring how
+    // a real super admin provisions a new admin via /admin/teams.
+    const bistecId = await findTeamIdByName(sa, 'Bistec')
+    await addTeamMember(sa, bistecId, created.id, 'ADMIN')
 
     const plain = await loginAs(request, `${username.toLowerCase()}@users.bistec.internal`, 'PlainAdmin1!')
     // Sanity: this account IS an admin (reaches admin routes)…

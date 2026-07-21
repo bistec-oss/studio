@@ -31,8 +31,16 @@ export function buildMockCopy(topic: string): string {
 }
 
 // Per-caption record so a __FAIL_ONCE__ post fails the first publish attempt and
-// succeeds on retry — module-level state lives for the life of the serve process.
-const mockFailedOnce = new Set<string>()
+// succeeds on retry — state lives for the life of the serve process. Backed by
+// globalThis (not a plain module-scope `const`): Next.js/Turbopack can give
+// different API route bundles their own instance of this module in dev mode
+// (each route is compiled somewhat independently), which would silently
+// split this Set across the "first attempt" route and the "retry" route and
+// break the once-then-succeed contract (observed: retry.test flakiness where
+// __FAIL_ONCE__ failed on both the first attempt AND the retry). A
+// globalThis-backed singleton survives that split.
+const mockFailedOnce: Set<string> = ((globalThis as Record<string, unknown>).__mockFailedOnce ??=
+  new Set<string>()) as Set<string>
 
 /**
  * Decide whether a mocked publish should throw. Active only when MOCK_SOCIAL is
@@ -55,8 +63,13 @@ export function shouldMockPublishFail(caption: string): boolean {
 }
 
 // Per-prompt record so a __FAIL_GEN_ONCE__ generation fails its first attempt
-// and succeeds on retry — module-level state for the life of the serve process.
-const mockGenFailedOnce = new Set<string>()
+// and succeeds on retry — state for the life of the serve process. Same
+// globalThis-backed pattern as mockFailedOnce above, for the same reason: the
+// initial generation (assemble-a/b's route) and the retry (drafts/[id]/retry's
+// route) are different Next.js route files, which can end up as separate
+// Turbopack dev-mode module instances of this file.
+const mockGenFailedOnce: Set<string> = ((globalThis as Record<string, unknown>).__mockGenFailedOnce ??=
+  new Set<string>()) as Set<string>
 
 /**
  * Decide whether a mocked DESIGN generation should throw. Consulted only inside

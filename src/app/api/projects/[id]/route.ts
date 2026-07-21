@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
 type Params = { id: string }
 
-export const GET = withAuth<Params>(async (_req, { params }) => {
+// Team tenancy fix: this GET ran under plain withAuth with no teamId check at
+// all — any authenticated user of ANY team could fetch another team's full
+// project (default brand kit, linked campaigns) by id. PATCH/DELETE below
+// were already correctly team-scoped; this GET was missed by the same sweep.
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
   const project = await prisma.project.findUnique({
     where: { id: params.id },
     include: {
@@ -16,7 +20,9 @@ export const GET = withAuth<Params>(async (_req, { params }) => {
     },
   })
 
-  if (!project || project.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!project || project.isDeleted || project.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
   return NextResponse.json(project)
 })
 

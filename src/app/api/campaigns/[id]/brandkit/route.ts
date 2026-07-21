@@ -1,8 +1,20 @@
 import { NextResponse } from 'next/server'
-import { withAuth } from '@/lib/api/handler'
+import { prisma } from '@/lib/prisma'
+import { withTeamAuth } from '@/lib/api/handler'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 
-export const GET = withAuth<{ id: string }>(async (_req, { params }) => {
+// Team tenancy fix: this GET ran under plain withAuth with no teamId check at
+// all — any authenticated user of ANY team could resolve another team's
+// effective brand kit (colors, fonts, logo, voice prompt) by campaignId.
+export const GET = withTeamAuth<{ id: string }>(async (_req, { params }, user) => {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!campaign || campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
+
   const resolved = await resolveBrandKit(params.id)
   if (!resolved) return NextResponse.json({ kit: null, source: null })
 

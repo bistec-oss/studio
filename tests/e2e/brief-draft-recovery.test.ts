@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginAs, type ApiClient } from '../helpers/api'
+import { loginAs, findTeamIdByName, addTeamMember, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable, NO_DB_MSG } from '../helpers/db'
 
 // §P — Brief draft autosave & recovery (unfinished briefs).
@@ -170,6 +170,16 @@ test.describe('§P Brief draft autosave & recovery', () => {
       password: 'BdrAdminPass1!',
     })
     expect(created.status()).toBe(201)
+    // Creating a platform user via /api/admin/users grants NO team membership
+    // (a deliberate separate step — team-tenancy); the top-level
+    // GET/PUT /api/brief-drafts routes are withTeamAuth (Task 7), so this
+    // second admin needs a real Bistec membership to even reach the
+    // owner-scope 404 logic under test (otherwise it 403s "not a member of
+    // any team" before ever touching brief-drafts — a different code path
+    // than the "no admin override" this test is about).
+    const createdBody = await created.json()
+    const bistecId = await findTeamIdByName(api, 'Bistec')
+    await addTeamMember(api, bistecId, createdBody.id, 'ADMIN')
     const other = await loginAs(
       request,
       `${username}@users.bistec.internal`,

@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
@@ -170,7 +169,13 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
 // 'copyText is required' (asserted by tests).
 const patchSchema = z.object({}).passthrough()
 
-export const PATCH = withAuth<Params>(async (req, { params }, user) => {
+// Team tenancy fix: this handler used to run under plain withAuth +
+// forbiddenIfNotOwner (a platform-role-only check, no team dimension at
+// all) — since forbiddenIfNotOwner lets ANY admin/super-admin bypass
+// ownership, an admin of ANY team could edit ANY other team's draft copy.
+// Task 8/9's sweeps covered this file's GET and DELETE but missed PATCH.
+// Now withTeamAuth + canAccessContent, matching the GET handler above.
+export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
   const { copyText } = body.data as { copyText?: unknown }
@@ -180,11 +185,14 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
   const existing = await prisma.draft.findUnique({
     where: { id: params.id },
-    select: { status: true, brief: { select: { userId: true } } },
+    select: { status: true, teamId: true, brief: { select: { userId: true, campaignId: true } } },
   })
-  if (!existing) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, existing.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !existing ||
+    !canAccessContent(user, { teamId: existing.teamId, ownerId: existing.brief.userId, campaignId: existing.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // The published caption lives only on the draft — editing it after publish
   // would silently desynchronize the record from what was actually posted.

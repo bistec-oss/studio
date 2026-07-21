@@ -34,7 +34,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
   }
 
   try {
-    const provider = await resolveCopyProvider(draft.brief.copyProviderKey ?? undefined)
+    const provider = await resolveCopyProvider(draft.brief.teamId, draft.brief.copyProviderKey ?? undefined)
     // Brand voice follows the same kit precedence as design generation.
     const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
     const campaignBriefing = await getActiveCampaignBriefing(draft.brief.campaignId)

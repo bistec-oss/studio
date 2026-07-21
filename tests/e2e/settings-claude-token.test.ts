@@ -26,7 +26,19 @@ async function pageLogin(page: Page, email = EDITOR_EMAIL) {
   await page.getByPlaceholder('Username').fill(email)
   await page.getByPlaceholder('Password').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL(url => url.pathname === '/')
+  await page.waitForURL(url => url.pathname === '/' || url.pathname === '/choose-team')
+  // Defensive: a super admin (e.g. ADMIN_EMAIL) with no active-team cookie
+  // lands on /choose-team once a second team exists (team tenancy) — pick
+  // "Bistec" so this helper stays correct regardless of which account it's
+  // called with. EDITOR_EMAIL (the default) has a single membership and
+  // never hits this branch. The extra page.goto('/') forces a fresh SSR
+  // round-trip instead of trusting the client router's soft-nav landing
+  // spot, which can settle on a stale "/" before a server redirect lands.
+  await page.goto('/')
+  if (page.url().includes('/choose-team')) {
+    await page.getByRole('button', { name: 'Bistec' }).click()
+    await page.waitForURL(url => url.pathname === '/')
+  }
 }
 
 test.describe('Personal Claude token', () => {
@@ -138,7 +150,10 @@ test.describe('Personal Claude token', () => {
     await page.waitForURL(url => url.pathname === '/settings')
 
     await expect(page.getByRole('heading', { name: 'Claude account', exact: true })).toBeVisible()
-    await expect(page.getByText('Not connected')).toBeVisible()
+    // /settings also renders an OpenAiKeyCard (Task 17) with its own
+    // "Not connected" status pill, so this assertion is scoped to at least
+    // one match rather than requiring exact uniqueness.
+    await expect(page.getByText('Not connected').first()).toBeVisible()
     await expect(page.getByText('claude setup-token').first()).toBeVisible()
     // This env is API mode → the informational note shows, and the app-shell
     // connect banner must NOT render (it's CLI-mode-only).
@@ -154,8 +169,13 @@ test.describe('Personal Claude token', () => {
     await pageLogin(page)
     await page.goto('/settings')
 
-    await page.getByLabel('Claude OAuth token').fill(TOKEN_A)
-    await page.getByRole('button', { name: 'Connect' }).click()
+    // Scoped to the Claude card's own <form>: /settings also renders an
+    // OpenAiKeyCard with its own "Connect" button (Task 17), so an unscoped
+    // getByRole('button', { name: 'Connect' }) is ambiguous (strict-mode
+    // violation) on this page.
+    const claudeForm = page.locator('form', { has: page.getByLabel('Claude OAuth token') })
+    await claudeForm.getByLabel('Claude OAuth token').fill(TOKEN_A)
+    await claudeForm.getByRole('button', { name: 'Connect' }).click()
 
     await expect(page.getByText('Connected', { exact: true })).toBeVisible()
     await expect(page.getByText(`token …${TOKEN_A.slice(-4)}`)).toBeVisible()

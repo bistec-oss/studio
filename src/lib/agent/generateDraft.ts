@@ -139,7 +139,7 @@ export async function generateDraftForBrief(
 ): Promise<GenerateDraftResult> {
   const inputs = await resolveGenerationInputs(brief, opts?.templateId)
 
-  const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
+  const copyProvider = await resolveCopyProvider(brief.teamId, brief.copyProviderKey ?? undefined)
   const copyText = await copyProvider.generateCopy(buildBriefInput(brief, inputs.kit, inputs.campaignBriefing))
 
   const design = await produceDesign(brief, inputs, copyText, actor)
@@ -211,7 +211,7 @@ export async function runGenerationForDraft(draftId: string, actor: GenerationAc
   try {
     const inputs = await resolveGenerationInputs(draft.brief, draft.templateId)
 
-    const copyProvider = await resolveCopyProvider(draft.brief.copyProviderKey ?? undefined)
+    const copyProvider = await resolveCopyProvider(draft.brief.teamId, draft.brief.copyProviderKey ?? undefined)
     const copyText = await copyProvider.generateCopy(
       buildBriefInput(draft.brief, inputs.kit, inputs.campaignBriefing),
     )

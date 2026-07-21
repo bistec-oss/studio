@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withTeamAdmin } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin } from '@/lib/api/handler'
 import { BUCKET_DOCS, uploadObject, validateUpload } from '@/lib/storage/minio'
 import {
   MAX_DOCS_PER_CAMPAIGN,
@@ -20,7 +20,18 @@ const DOC_SELECT = {
   createdAt: true,
 } as const
 
-export const GET = withAuth<Params>(async (_req, { params }) => {
+// Team tenancy fix: this ran under plain withAuth with no teamId check at
+// all — any authenticated user of ANY team could list another team's
+// campaign-document metadata by campaignId.
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!campaign || campaign.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+  }
+
   const docs = await prisma.campaignDocument.findMany({
     where: { campaignId: params.id },
     orderBy: { createdAt: 'asc' },

@@ -38,7 +38,13 @@ function instantiateImageProvider(providerName: string, apiKey: string): ImagePr
   }
 }
 
-export async function resolveCopyProvider(providerKey?: string): Promise<CopyProvider> {
+// teamId is required (team-tenancy fix): both lookups below used to run with
+// no teamId filter at all, so a brief could resolve — via an explicit
+// providerKey OR the unfiltered "the" default lookup — to a DIFFERENT team's
+// registered COPY provider row, including that team's decrypted API key.
+// Every caller runs inside an already team-scoped request/generation context,
+// so the real team id is always available (mirrors resolveImageProvider).
+export async function resolveCopyProvider(teamId: string, providerKey?: string): Promise<CopyProvider> {
   // Test seam: deterministic copy with no provider API call. The brief's
   // copyProviderKey must still reference a real enabled COPY provider (validated
   // at brief creation) — only the generation call is stubbed here.
@@ -48,7 +54,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
 
   if (providerKey) {
     const record = await prisma.availableProvider.findFirst({
-      where: { slot: "COPY", providerKey, isEnabled: true },
+      where: { slot: "COPY", providerKey, teamId, isEnabled: true },
     })
     if (record) {
       return instantiateCopyProvider(record.providerName, providerApiKey(record))
@@ -56,7 +62,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
   }
 
   const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "COPY", isDefault: true, isEnabled: true },
+    where: { slot: "COPY", teamId, isDefault: true, isEnabled: true },
   })
   if (defaultRecord) {
     return instantiateCopyProvider(defaultRecord.providerName, providerApiKey(defaultRecord))
