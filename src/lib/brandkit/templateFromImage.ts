@@ -23,6 +23,7 @@ export async function generateTemplateFromImage(input: {
   imageDataUrl: string
   imageUrl: string
   aspectRatioOverride?: AspectRatio
+  teamId: string
 }): Promise<TemplateFromImageResult> {
   let aspectRatio = input.aspectRatioOverride
   if (!aspectRatio) {
@@ -47,6 +48,7 @@ export async function generateTemplateFromImage(input: {
     imageUrls: [input.imageUrl],
     maxTokens: 4096,
     label: 'image-template',
+    teamId: input.teamId,
   })
   return { html: stripCodeFences(reply).trim(), aspectRatio }
 }

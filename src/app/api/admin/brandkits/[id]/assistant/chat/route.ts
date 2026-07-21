@@ -38,6 +38,8 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
 
   // CLI mode bills the acting user's personal Claude token when connected
   // (the team token otherwise) — see src/lib/agent/userToken.ts.
-  const result = await withClaudeAuth(user.userId, user.teamId, () => runBrandKitChat(params.id, body.data.messages))
+  const result = await withClaudeAuth(user.userId, user.teamId, () =>
+    runBrandKitChat(params.id, body.data.messages, user.teamId)
+  )
   return NextResponse.json(result)
 })

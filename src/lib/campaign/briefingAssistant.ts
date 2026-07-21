@@ -25,8 +25,10 @@ export interface ChatMessage {
 const MAX_TOKENS = 2048
 const CLI_TIMEOUT_MS = 120_000
 
-// Exported for reuse by the brand-kit assistant (same mode-agnostic text call).
-export async function runBriefingModel(system: string, messages: ChatMessage[]): Promise<string> {
+// Exported for reuse by the brand-kit assistant (same mode-agnostic text
+// call). teamId is required (team-tenancy fix, Task 19b) — every caller runs
+// inside an already team-scoped request.
+export async function runBriefingModel(system: string, messages: ChatMessage[], teamId: string): Promise<string> {
   if (isCliMode()) {
     // One prompt per turn: the CLI is stateless, so the whole transcript rides
     // along. Doc context is capped (documents.ts) to keep this affordable.
@@ -47,7 +49,7 @@ export async function runBriefingModel(system: string, messages: ChatMessage[]):
     })
   }
 
-  const apiKey = await resolveAnthropicApiKey()
+  const apiKey = await resolveAnthropicApiKey(teamId)
   const client = new Anthropic({ apiKey: apiKey ?? undefined })
   const message = await client.messages.create({
     model: modelFor('B', 'api'),
@@ -143,7 +145,8 @@ export interface BriefingChatResult {
 
 export async function runBriefingChat(
   campaignId: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  teamId: string
 ): Promise<BriefingChatResult> {
   if (MOCK_AI) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
@@ -187,9 +190,9 @@ export async function runBriefingChat(
       '',
       `Write the Assistant's next reply to the latest user message: ${lastUser?.content ?? ''}`,
     ].join('\n')
-    reply = await runVisionModel({ system, userMessage, imageUrls, label: 'briefing' })
+    reply = await runVisionModel({ system, userMessage, imageUrls, label: 'briefing', teamId })
   } else {
-    reply = await runBriefingModel(system, messages)
+    reply = await runBriefingModel(system, messages, teamId)
   }
   return {
     reply,
@@ -198,7 +201,7 @@ export async function runBriefingChat(
   }
 }
 
-export async function enhanceBriefing(campaignId: string, content: string): Promise<string> {
+export async function enhanceBriefing(campaignId: string, content: string, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(content)
 
   const context = await buildCampaignContext(campaignId)
@@ -216,7 +219,7 @@ export async function enhanceBriefing(campaignId: string, content: string): Prom
     ? `Improve this campaign briefing:\n\n${content}`
     : 'Draft a campaign briefing from the campaign context.'
 
-  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
+  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId)
   return stripCodeFences(reply).trim()
 }
 
@@ -233,7 +236,7 @@ export interface EnhancePostBriefInput {
 // per-post twin of enhanceBriefing. Grounded in the same context the
 // generation itself will use: the resolved brand voice plus, when a campaign
 // is selected, its active briefing and source documents.
-export async function enhancePostBrief(input: EnhancePostBriefInput): Promise<string> {
+export async function enhancePostBrief(input: EnhancePostBriefInput, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(input.content)
 
   const context = await buildCampaignContext(input.campaignId, input.brandKitId)
@@ -260,6 +263,6 @@ export async function enhancePostBrief(input: EnhancePostBriefInput): Promise<st
     ? `${details}\n\nImprove this post brief:\n\n${input.content}`
     : `${details}\n\nDraft a post brief for this topic.`
 
-  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
+  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId)
   return stripCodeFences(reply).trim()
 }

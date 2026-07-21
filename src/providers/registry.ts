@@ -84,9 +84,16 @@ export async function resolveCopyProvider(teamId: string, providerKey?: string):
 // provider (when it is an anthropic registration, its decrypted key) → the
 // ANTHROPIC_API_KEY env fallback. Returns null when neither is configured —
 // callers decide how to fail.
-export async function resolveAnthropicApiKey(): Promise<string | null> {
+//
+// teamId is required (team-tenancy fix, Task 19b): this lookup used to run
+// with no teamId filter at all, so a team's vision/voice-draft/briefing-
+// assistant call could resolve — and bill — a DIFFERENT team's registered
+// Anthropic COPY provider key. Every caller runs inside an already
+// team-scoped request, so the real team id is always available (mirrors
+// resolveCopyProvider's identical fix).
+export async function resolveAnthropicApiKey(teamId: string): Promise<string | null> {
   const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "COPY", isDefault: true, isEnabled: true },
+    where: { slot: "COPY", teamId, isDefault: true, isEnabled: true },
   })
   if (defaultRecord && defaultRecord.providerName.toLowerCase() === "anthropic") {
     return decrypt(defaultRecord.encryptedApiKey)

@@ -169,12 +169,14 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
 // 'copyText is required' (asserted by tests).
 const patchSchema = z.object({}).passthrough()
 
-// Team tenancy fix: this handler used to run under plain withAuth +
-// forbiddenIfNotOwner (a platform-role-only check, no team dimension at
-// all) — since forbiddenIfNotOwner lets ANY admin/super-admin bypass
-// ownership, an admin of ANY team could edit ANY other team's draft copy.
-// Task 8/9's sweeps covered this file's GET and DELETE but missed PATCH.
-// Now withTeamAuth + canAccessContent, matching the GET handler above.
+// Team tenancy fix: this handler used to run under plain withAuth + the
+// old ownership helper (a platform-role-only check with no team dimension —
+// it let any admin/super-admin bypass ownership entirely), so an admin of
+// ANY team could edit ANY other team's draft copy. Task 8/9's sweeps
+// covered this file's GET and DELETE but missed PATCH. Now withTeamAuth +
+// canAccessContent, matching the GET handler above (the old helper,
+// forbiddenIfNotOwner, has since been deleted from src/lib/auth.ts — this
+// was its last real caller).
 export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response

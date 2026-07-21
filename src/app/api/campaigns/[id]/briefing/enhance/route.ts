@@ -27,7 +27,7 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   // CLI mode bills the acting user's personal Claude token when connected
   // (the team token otherwise) — see src/lib/agent/userToken.ts.
   const draft = await withClaudeAuth(user.userId, user.teamId, () =>
-    enhanceBriefing(params.id, body.data.content)
+    enhanceBriefing(params.id, body.data.content, user.teamId)
   )
   if (!draft) {
     return NextResponse.json({ error: 'The model returned an empty draft — try again' }, { status: 502 })

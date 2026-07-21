@@ -62,18 +62,6 @@ export async function requireRole(role: Role): Promise<{ userId: string } | Next
   return { userId: session.user.id }
 }
 
-// Returns a 403 response if the user is neither an admin nor the resource owner;
-// returns null when access is allowed. Centralises the ownership check used by
-// draft/brief/generation routes (IDOR guard).
-export function forbiddenIfNotOwner(
-  user: { userId: string; role: Role },
-  ownerId: string | null | undefined,
-): NextResponse | null {
-  if (hasRole(user.role, "admin")) return null
-  if (ownerId && ownerId === user.userId) return null
-  return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-}
-
 // Resolves the per-item access-check inputs for a draft (its own teamId, the
 // owning user's id via its brief, and the brief's campaignId — team-shared
 // per D6 when non-null). null if not found. Feeds canAccessContent()

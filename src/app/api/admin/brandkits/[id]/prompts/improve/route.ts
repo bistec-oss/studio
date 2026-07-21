@@ -22,6 +22,7 @@ export const POST = withTeamAdmin<Params>(async (_req, { params }, user) => {
   // Drafts via the shared helper: MOCK_AI test seam + provider-registry key
   // resolution live inside it (see src/lib/brandkit/voiceDraft.ts).
   const draft = await draftBrandVoice(
+    user.teamId,
     `You are a brand strategist. Improve the following brand voice prompt for an AI design agent.
 
 Current prompt:

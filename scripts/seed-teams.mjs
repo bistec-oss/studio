@@ -61,6 +61,33 @@ async function ensureMembership(teamId, userId, role) {
   })
 }
 
+// The keyless "cli" COPY provider (scripts/seed-cli-provider.mjs) is now
+// team-scoped (AvailableProvider.teamId + the teamId_slot_providerKey
+// composite unique — team-tenancy). This script's fixtures reference
+// copyProviderKey: 'cli' directly via Prisma (bypassing /api/briefs'
+// validation), so it works either way for the seeded rows themselves, but a
+// team with no 'cli' row of its own would fail real (non-MOCK_AI) generation
+// or brief-creation validation against that key. seed-cli-provider.mjs only
+// seeds Bistec's row — ensure ClientX has its own too, so the fixture isn't
+// a dangling reference and both teams have equal provider parity.
+async function ensureCliProvider(teamId) {
+  await prisma.availableProvider.upsert({
+    where: { teamId_slot_providerKey: { teamId, slot: "COPY", providerKey: "cli" } },
+    update: { isEnabled: true, isDefault: true },
+    create: {
+      teamId,
+      slot: "COPY",
+      providerKey: "cli",
+      providerName: "cli",
+      label: "Claude CLI (local, no API key)",
+      keyPrefix: "cli",
+      encryptedApiKey: "cli", // placeholder; the "cli" provider never decrypts this
+      isEnabled: true,
+      isDefault: true,
+    },
+  })
+}
+
 async function ensureClientXAdmin() {
   const existing = await prisma.user.findUnique({ where: { email: CLIENTX_ADMIN_EMAIL } })
   if (existing) return existing
@@ -172,6 +199,12 @@ async function main() {
 
   const clientxAdmin = await ensureClientXAdmin()
   await ensureMembership(clientx.id, clientxAdmin.id, "ADMIN")
+
+  // Bistec's "cli" row is seeded by scripts/seed-cli-provider.mjs (runs after
+  // this script) — ensure both explicitly here so this script alone leaves
+  // no dangling copyProviderKey: 'cli' reference regardless of run order.
+  await ensureCliProvider(bistec.id)
+  await ensureCliProvider(clientx.id)
 
   console.log("Bistec team fixtures:")
   await ensureTeamFixtures(bistec.id, "Bistec", editor.id)

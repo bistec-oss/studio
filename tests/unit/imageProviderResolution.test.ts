@@ -64,7 +64,7 @@ vi.mock('@/lib/env', async (importOriginal) => {
 process.env.TOKEN_ENCRYPTION_KEY = 'b'.repeat(64)
 
 const { encrypt } = await import('@/lib/crypto')
-const { resolveImageProvider, resolveCopyProvider } = await import('@/providers/registry')
+const { resolveImageProvider, resolveCopyProvider, resolveAnthropicApiKey } = await import('@/providers/registry')
 
 const TEAM_ID = 'team-1'
 const OTHER_TEAM_ID = 'team-2'
@@ -98,6 +98,23 @@ function providerRow(overrides: Record<string, unknown> = {}) {
     encryptedApiKey: encrypt(TEAM_DEFAULT_KEY),
     isEnabled: true,
     isDefault: true,
+    createdAt: new Date(),
+    ...overrides,
+  }
+}
+
+function copyProviderRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'ap-copy-1',
+    teamId: TEAM_ID,
+    slot: 'COPY',
+    providerKey: 'explicit-copy',
+    providerName: 'anthropic',
+    label: 'Anthropic',
+    keyPrefix: '…xxxx',
+    encryptedApiKey: encrypt(TEAM_EXPLICIT_KEY),
+    isEnabled: true,
+    isDefault: false,
     createdAt: new Date(),
     ...overrides,
   }
@@ -221,5 +238,71 @@ describe('resolveCopyProvider — env.OPENAI_API_KEY fallback removed', () => {
     for (const call of h.availableProviderFindFirst.mock.calls) {
       expect(call[0].where.teamId).toBe(TEAM_ID)
     }
+  })
+})
+
+describe('resolveCopyProvider — explicit providerKey (team-scoped)', () => {
+  it('an explicit providerKey scoped to the caller\'s team resolves that provider', async () => {
+    h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      if (where.slot === 'COPY' && where.providerKey === 'explicit-copy' && where.teamId === TEAM_ID) {
+        return copyProviderRow()
+      }
+      return null
+    })
+
+    const provider = await resolveCopyProvider(TEAM_ID, 'explicit-copy')
+    expect((provider as unknown as { apiKey: string }).apiKey).toBe(TEAM_EXPLICIT_KEY)
+  })
+
+  it('an explicit providerKey row belonging to a FOREIGN team is not found — never resolves to it (falls through and throws, no default configured)', async () => {
+    h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      // Simulate a real WHERE clause: a row scoped to OTHER_TEAM_ID never
+      // matches a query filtered by where.teamId === TEAM_ID — this is the
+      // exact cross-tenant leak the team-tenancy fix closed (registry.ts
+      // used to query with no teamId filter at all).
+      if (where.slot === 'COPY' && where.providerKey === 'explicit-copy' && where.teamId === OTHER_TEAM_ID) {
+        return copyProviderRow({ teamId: OTHER_TEAM_ID })
+      }
+      return null
+    })
+
+    await expect(resolveCopyProvider(TEAM_ID, 'explicit-copy')).rejects.toThrow(/No COPY provider configured/)
+  })
+})
+
+describe('resolveAnthropicApiKey — team-scoped default lookup (team-tenancy fix, Task 19b)', () => {
+  it('is team-scoped: the default-COPY lookup is filtered by teamId', async () => {
+    h.availableProviderFindFirst.mockResolvedValue(null)
+    await resolveAnthropicApiKey(TEAM_ID)
+    for (const call of h.availableProviderFindFirst.mock.calls) {
+      expect(call[0].where.teamId).toBe(TEAM_ID)
+    }
+  })
+
+  it("resolves the caller's team default anthropic-provider key", async () => {
+    h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      if (where.teamId === TEAM_ID && where.isDefault === true) {
+        return copyProviderRow({ providerName: 'anthropic', encryptedApiKey: encrypt(TEAM_DEFAULT_KEY) })
+      }
+      return null
+    })
+
+    const key = await resolveAnthropicApiKey(TEAM_ID)
+    expect(key).toBe(TEAM_DEFAULT_KEY)
+  })
+
+  it('a FOREIGN team default anthropic provider is never resolved — the exact cross-tenant credential leak this fixes', async () => {
+    h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
+      // Before the fix, this lookup had no teamId filter at all, so team A
+      // could resolve — and bill — team B's registered Anthropic key here.
+      if (where.teamId === OTHER_TEAM_ID && where.isDefault === true) {
+        return copyProviderRow({ teamId: OTHER_TEAM_ID, providerName: 'anthropic', encryptedApiKey: encrypt(TEAM_DEFAULT_KEY) })
+      }
+      return null
+    })
+
+    // No env fallback configured (mocked to undefined above) ⇒ null, not
+    // the foreign team's key.
+    await expect(resolveAnthropicApiKey(TEAM_ID)).resolves.toBeNull()
   })
 })
