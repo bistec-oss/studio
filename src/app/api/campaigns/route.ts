@@ -43,8 +43,13 @@ export const POST = withAuth(async (req: NextRequest) => {
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
   }
 
+  // No wrapper-supplied team yet (Task 7/8 flips withAuth → withTeamAuth and
+  // will pass the real value here).
+  const teamId: string | null = null
+
   const campaign = await prisma.campaign.create({
     data: {
+      teamId,
       name,
       brandKitId: brandKitId ?? null,
       defaultTone: defaultTone ?? null,

@@ -140,6 +140,7 @@ export async function generateDraftForBrief(
   const draft = await prisma.$transaction(async (tx) => {
     const created = await tx.draft.create({
       data: {
+        teamId: brief.teamId,
         briefId: brief.id,
         copyText,
         htmlContent: design.htmlContent,
@@ -183,6 +184,7 @@ export async function createPendingDraft(
   const inputs = await resolveGenerationInputs(brief, opts?.templateId)
   return prisma.draft.create({
     data: {
+      teamId: brief.teamId,
       briefId: brief.id,
       copyText: '',
       templateId: inputs.template?.id ?? null,

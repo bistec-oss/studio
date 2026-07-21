@@ -36,7 +36,7 @@ export const GET = withAdmin<Params>(async (_req, { params }) => {
 export const POST = withAdmin<Params>(async (req, { params }, user) => {
   const kit = await prisma.brandKit.findFirst({
     where: { id: params.id, isDeleted: false },
-    select: { id: true },
+    select: { id: true, teamId: true },
   })
   if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
 
@@ -97,6 +97,7 @@ export const POST = withAdmin<Params>(async (req, { params }, user) => {
 
   const doc = await prisma.brandKitDocument.create({
     data: {
+      teamId: kit.teamId,
       brandKitId: params.id,
       name: file.name,
       contentType,

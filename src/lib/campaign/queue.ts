@@ -61,8 +61,14 @@ export type QueueBatchInput = z.infer<typeof queueBatchSchema>
 // Map a validated entry to Prisma create data. One mapper for the single-create
 // and batch-create routes so the field handling (template/publishAt nulling)
 // can never drift between them.
-export function toEntryCreateData(campaignId: string, createdById: string, entry: QueueEntryInput) {
+export function toEntryCreateData(
+  campaignId: string,
+  createdById: string,
+  entry: QueueEntryInput,
+  teamId: string | null,
+) {
   return {
+    teamId,
     campaignId,
     createdById,
     topic: entry.topic,

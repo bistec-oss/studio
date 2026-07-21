@@ -86,6 +86,10 @@ export const POST = withAdmin(async (req: NextRequest) => {
   const keyPrefix = `…${apiKey.slice(-4)}`
   const encryptedApiKey = encrypt(apiKey)
 
+  // No wrapper-supplied team yet (Task 7/8 flips withAdmin → withTeamAdmin and
+  // will pass the real value here).
+  const teamId: string | null = null
+
   // Clearing the prior default + creating the new row must be atomic so a
   // failure can't leave the slot with zero (or two) defaults.
   const provider = await prisma.$transaction(async (tx) => {
@@ -93,7 +97,7 @@ export const POST = withAdmin(async (req: NextRequest) => {
       await tx.availableProvider.updateMany({ where: { slot }, data: { isDefault: false } })
     }
     return tx.availableProvider.create({
-      data: { slot, providerKey, providerName, label, keyPrefix, encryptedApiKey, isEnabled: true, isDefault: isDefault ?? false },
+      data: { teamId, slot, providerKey, providerName, label, keyPrefix, encryptedApiKey, isEnabled: true, isDefault: isDefault ?? false },
       select: { id: true, slot: true, providerKey: true, providerName: true, label: true, keyPrefix: true, isEnabled: true, isDefault: true, createdAt: true },
     })
   })

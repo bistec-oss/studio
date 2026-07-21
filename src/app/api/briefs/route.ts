@@ -145,6 +145,9 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
 
   const brief = await prisma.brief.create({
     data: {
+      // No wrapper-supplied team yet (Task 7/8) — derive from the explicit
+      // campaign/brand-kit so generated data is consistent even before the flip.
+      teamId: campaign?.teamId ?? brandKit?.teamId ?? null,
       userId: user.userId,
       topic: topic.trim(),
       description: description?.trim() ?? null,

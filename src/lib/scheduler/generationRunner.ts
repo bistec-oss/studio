@@ -51,6 +51,7 @@ async function ensureBrief(entry: ScheduledGeneration) {
   }
   const brief = await prisma.brief.create({
     data: {
+      teamId: entry.teamId,
       userId: entry.createdById,
       campaignId: entry.campaignId,
       topic: entry.topic,
@@ -79,7 +80,7 @@ async function ensureBrief(entry: ScheduledGeneration) {
 // instead of failing (and re-running) a generation that already succeeded.
 // Exported for unit tests.
 export async function executePostAction(
-  entry: Pick<ScheduledGeneration, "postAction" | "publishAt" | "channels" | "createdById">,
+  entry: Pick<ScheduledGeneration, "postAction" | "publishAt" | "channels" | "createdById" | "teamId">,
   draft: Pick<Draft, "id">,
 ): Promise<void> {
   if (entry.postAction === "HOLD") return
@@ -97,6 +98,7 @@ export async function executePostAction(
     }
     await prisma.post.create({
       data: {
+        teamId: entry.teamId,
         draftId: draft.id,
         userId: entry.createdById,
         channel,

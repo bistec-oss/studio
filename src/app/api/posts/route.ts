@@ -57,6 +57,7 @@ export const POST = withAdmin(async (req: NextRequest, _ctx, auth) => {
   if (!publishNow) {
     const post = await prisma.post.create({
       data: {
+        teamId: draft.teamId,
         draftId,
         userId: auth.userId,
         channel: channel as Channel,

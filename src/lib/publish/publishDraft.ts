@@ -50,8 +50,16 @@ export async function createAndPublishPost(opts: {
   userId: string
   scheduledAt?: Date | null
 }): Promise<{ post: Post; error?: PublishError }> {
+  // Loaded once, before the PENDING row, so the Post can be stamped with the
+  // draft's team at creation (draft.teamId is the source of truth here).
+  const draft = await prisma.draft.findUniqueOrThrow({
+    where: { id: opts.draftId },
+    select: { exportUrl: true, copyText: true, teamId: true },
+  })
+
   const post = await prisma.post.create({
     data: {
+      teamId: draft.teamId,
       draftId: opts.draftId,
       userId: opts.userId,
       channel: opts.channel,
@@ -61,10 +69,6 @@ export async function createAndPublishPost(opts: {
   })
 
   try {
-    const draft = await prisma.draft.findUniqueOrThrow({
-      where: { id: opts.draftId },
-      select: { exportUrl: true, copyText: true },
-    })
     const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '')
     const updated = await prisma.post.update({
       where: { id: post.id },

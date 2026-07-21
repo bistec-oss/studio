@@ -26,10 +26,17 @@ export async function generatePost(args: GeneratePostArgs) {
     )
   }
 
+  // MCP/ACP has no team wrapper yet (Task 13) — derive from the explicit
+  // campaign when the caller passed one, same rule as POST /api/briefs.
+  const campaign = args.campaignId
+    ? await prisma.campaign.findFirst({ where: { id: args.campaignId, isDeleted: false }, select: { teamId: true } })
+    : null
+
   // Create the Brief row first so copy + design run off the same record the
   // web pipeline would use.
   const brief = await prisma.brief.create({
     data: {
+      teamId: campaign?.teamId ?? null,
       userId: await getSystemUserId(),
       topic: args.topic,
       description: args.description,

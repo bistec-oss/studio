@@ -21,7 +21,7 @@ const ENTRY_INCLUDE = { template: { select: { id: true, name: true } } } as cons
 export const POST = withAuth<Params>(async (req, { params }, user) => {
   const campaign = await prisma.campaign.findFirst({
     where: { id: params.id, isDeleted: false },
-    select: { id: true },
+    select: { id: true, teamId: true },
   })
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
@@ -47,7 +47,7 @@ export const POST = withAuth<Params>(async (req, { params }, user) => {
   const created = await prisma.$transaction(
     entries.map((entry) =>
       prisma.scheduledGeneration.create({
-        data: toEntryCreateData(params.id, user.userId, entry),
+        data: toEntryCreateData(params.id, user.userId, entry, campaign.teamId),
         include: ENTRY_INCLUDE,
       })
     )

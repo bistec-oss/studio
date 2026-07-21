@@ -9,7 +9,7 @@ type Params = { id: string }
 const ENTRY_INCLUDE = { template: { select: { id: true, name: true } } } as const
 
 async function findCampaign(id: string) {
-  return prisma.campaign.findFirst({ where: { id, isDeleted: false }, select: { id: true } })
+  return prisma.campaign.findFirst({ where: { id, isDeleted: false }, select: { id: true, teamId: true } })
 }
 
 export const GET = withAuth<Params>(async (_req, { params }) => {
@@ -28,7 +28,8 @@ export const GET = withAuth<Params>(async (_req, { params }) => {
 })
 
 export const POST = withAuth<Params>(async (req, { params }, user) => {
-  if (!(await findCampaign(params.id))) {
+  const campaign = await findCampaign(params.id)
+  if (!campaign) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
 
@@ -48,7 +49,7 @@ export const POST = withAuth<Params>(async (req, { params }, user) => {
   if (templateError) return templateError
 
   const created = await prisma.scheduledGeneration.create({
-    data: toEntryCreateData(params.id, user.userId, entry),
+    data: toEntryCreateData(params.id, user.userId, entry, campaign.teamId),
     include: ENTRY_INCLUDE,
   })
 

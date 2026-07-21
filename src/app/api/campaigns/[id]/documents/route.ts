@@ -32,7 +32,7 @@ export const GET = withAuth<Params>(async (_req, { params }) => {
 export const POST = withAdmin<Params>(async (req, { params }, user) => {
   const campaign = await prisma.campaign.findFirst({
     where: { id: params.id, isDeleted: false },
-    select: { id: true },
+    select: { id: true, teamId: true },
   })
   if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
@@ -93,6 +93,7 @@ export const POST = withAdmin<Params>(async (req, { params }, user) => {
 
   const doc = await prisma.campaignDocument.create({
     data: {
+      teamId: campaign.teamId,
       campaignId: params.id,
       name: file.name,
       contentType,

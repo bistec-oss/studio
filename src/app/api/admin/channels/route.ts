@@ -31,9 +31,14 @@ export const POST = withAdmin(async (req: NextRequest) => {
   if (body.response) return body.response
   const { channel, token, metadata } = body.data
 
+  // No wrapper-supplied team yet (Task 7/8 flips withAdmin → withTeamAdmin and
+  // will pass the real value here). Only the create branch stamps teamId — an
+  // existing row's team association is never touched by a token refresh.
+  const teamId: string | null = null
+
   await prisma.channelToken.upsert({
     where: { channel },
-    create: { channel, encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
+    create: { channel, teamId, encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
     update: { encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
   })
 

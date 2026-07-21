@@ -29,8 +29,12 @@ export const POST = withAuth(async (req: NextRequest) => {
   if (body.response) return body.response
   const { name, defaultBrandKitId, defaultTone } = body.data
 
+  // No wrapper-supplied team yet (Task 7/8 flips withAuth → withTeamAuth and
+  // will pass the real value here).
+  const teamId: string | null = null
+
   const project = await prisma.project.create({
-    data: { name, defaultBrandKitId: defaultBrandKitId ?? null, defaultTone: defaultTone ?? null },
+    data: { teamId, name, defaultBrandKitId: defaultBrandKitId ?? null, defaultTone: defaultTone ?? null },
     include: { defaultBrandKit: { select: { id: true, name: true } } },
   })
 

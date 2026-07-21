@@ -13,6 +13,8 @@ export async function createBrandKit(args: {
   }
   const kit = await prisma.brandKit.create({
     data: {
+      // No team wrapper on the MCP surface yet (Task 13).
+      teamId: null,
       name: args.name,
       colors: args.colors ?? [],
       fonts: args.fonts ?? [],

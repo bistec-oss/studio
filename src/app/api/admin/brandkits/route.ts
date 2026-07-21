@@ -29,6 +29,10 @@ export const POST = withAdmin(async (req: NextRequest) => {
   if (body.response) return body.response
   const { name, colors, fonts, logoUrl, isDefault } = body.data
 
+  // No wrapper-supplied team yet (Task 7/8 flips withAdmin → withTeamAdmin and
+  // will pass the real value here).
+  const teamId: string | null = null
+
   // Only one kit can be the system default — clear + create atomically.
   const kit = await prisma.$transaction(async (tx) => {
     if (isDefault) {
@@ -36,6 +40,7 @@ export const POST = withAdmin(async (req: NextRequest) => {
     }
     return tx.brandKit.create({
       data: {
+        teamId,
         name,
         colors: colors ?? [],
         fonts: fonts ?? [],

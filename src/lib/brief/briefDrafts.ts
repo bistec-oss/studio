@@ -110,6 +110,10 @@ export async function saveBriefDraft(
   userId: string,
   id: string | undefined,
   payload: BriefDraftPayload,
+  // No wrapper-supplied team yet (Task 7/8 flips withAuth → withTeamAuth and
+  // will pass the real value here). Only used on the create path below — an
+  // existing row's team association is never touched by an autosave update.
+  teamId: string | null = null,
 ): Promise<SaveBriefDraftResult> {
   if (isTrivialBriefDraft(payload)) return { ok: false, reason: 'trivial' }
   if (briefDraftPayloadTooLarge(payload)) return { ok: false, reason: 'too_large' }
@@ -134,7 +138,7 @@ export async function saveBriefDraft(
   }
 
   const created = await prisma.briefDraft.create({
-    data: { userId, topic, payload },
+    data: { userId, topic, payload, teamId },
   })
   return { ok: true, id: created.id }
 }
