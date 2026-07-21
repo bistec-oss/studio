@@ -1,10 +1,37 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { Brief } from '@prisma/client'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
-import { parseBackgroundDecision, imageSizeFor } from '@/lib/agent/background'
 import {
   buildBackgroundDecisionPrompt,
   buildRefineBackgroundDecisionPrompt,
 } from '@/lib/agent/prompts/background'
+
+// resolveImageProvider is resolved FIRST inside decideAndGenerate, before any
+// model call — a null resolution (no personal/team OpenAI key configured)
+// must short-circuit the whole background step without ever reaching the
+// decision model. Guard the model-calling seams so a wiring regression fails
+// loudly (assertion) instead of silently making a real network call.
+const h = vi.hoisted(() => ({
+  resolveImageProvider: vi.fn(),
+  runClaudeCli: vi.fn(() => {
+    throw new Error('runClaudeCli should not be called when the image provider is null')
+  }),
+  anthropicCreate: vi.fn(() => {
+    throw new Error('Anthropic.messages.create should not be called when the image provider is null')
+  }),
+}))
+
+vi.mock('@/providers/registry', () => ({ resolveImageProvider: h.resolveImageProvider }))
+vi.mock('@/lib/agent/claudeCli', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/agent/claudeCli')>()
+  return { ...actual, runClaudeCli: h.runClaudeCli }
+})
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: vi.fn().mockImplementation(() => ({ messages: { create: h.anthropicCreate } })),
+}))
+
+const { parseBackgroundDecision, imageSizeFor, generateBackgroundForBrief, generateBackgroundForRefine } =
+  await import('@/lib/agent/background')
 
 const kit: ResolvedBrandKit = {
   id: 'kit-1',
@@ -83,5 +110,50 @@ describe('background decision prompts', () => {
   it('builders are pure — same input, same output', () => {
     const opts = { kit, topic: 't', instruction: 'i' }
     expect(buildRefineBackgroundDecisionPrompt(opts)).toEqual(buildRefineBackgroundDecisionPrompt(opts))
+  })
+})
+
+const brief = {
+  id: 'brief-1',
+  teamId: 'team-1',
+  userId: 'user-1',
+  topic: 'Q3 launch',
+  description: 'Announce the launch',
+  goal: 'awareness',
+  tone: 'professional',
+  aspectRatio: 'SQUARE',
+  imageProviderKey: null,
+} as unknown as Brief
+
+describe('generateBackgroundForBrief / generateBackgroundForRefine — null provider resolution', () => {
+  beforeEach(() => {
+    h.resolveImageProvider.mockReset().mockResolvedValue(null)
+    h.runClaudeCli.mockClear()
+    h.anthropicCreate.mockClear()
+  })
+
+  it('generateBackgroundForBrief: no provider configured (personal+team both absent) ⇒ null, decision model never called, no throw', async () => {
+    await expect(generateBackgroundForBrief(brief, kit, 'Big news!')).resolves.toBeNull()
+    expect(h.resolveImageProvider).toHaveBeenCalledWith(
+      { teamId: 'team-1', userId: 'user-1' },
+      undefined
+    )
+    expect(h.runClaudeCli).not.toHaveBeenCalled()
+    expect(h.anthropicCreate).not.toHaveBeenCalled()
+  })
+
+  it('generateBackgroundForRefine: no provider configured ⇒ null, decision model never called, no throw', async () => {
+    await expect(generateBackgroundForRefine(brief, kit, 'add a background')).resolves.toBeNull()
+    expect(h.resolveImageProvider).toHaveBeenCalledWith(
+      { teamId: 'team-1', userId: 'user-1' },
+      undefined
+    )
+    expect(h.runClaudeCli).not.toHaveBeenCalled()
+    expect(h.anthropicCreate).not.toHaveBeenCalled()
+  })
+
+  it('a rejected provider resolution is swallowed the same way (never fails the pipeline)', async () => {
+    h.resolveImageProvider.mockReset().mockRejectedValue(new Error('db unreachable'))
+    await expect(generateBackgroundForBrief(brief, kit, 'Big news!')).resolves.toBeNull()
   })
 })

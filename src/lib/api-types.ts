@@ -30,6 +30,16 @@ export type ClaudeTokenInfo =
 // a rejected team token is simply cleared, not flagged INVALID.
 export type TeamClaudeTokenInfo = { connected: true; keyPrefix: string } | { connected: false }
 
+// GET/PUT/DELETE /api/me/openai-key — the user's personal OpenAI API key,
+// used for image generation ahead of the team's configured IMAGE provider.
+// Only the masked suffix ever leaves the server. Unlike the Claude token
+// there is no live validation ping at save time (OpenAI has no free
+// validation endpoint) — status flips to INVALID only after an observed
+// generation failure.
+export type OpenAiKeyInfo =
+  | { connected: true; status: 'ACTIVE' | 'INVALID'; keyPrefix: string }
+  | { connected: false }
+
 // GET /api/me
 export interface MeResponse {
   userId: string

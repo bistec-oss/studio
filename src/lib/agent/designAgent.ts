@@ -68,7 +68,7 @@ async function executeTool(
 ): Promise<unknown> {
   switch (name) {
     case "generateImage":
-      return toolGenerateImage(input.prompt as string, input.brandKitId as string)
+      return toolGenerateImage(input.prompt as string, input.brandKitId as string, briefId)
     case "renderHtml":
       return toolRenderHtml(
         input.html as string,

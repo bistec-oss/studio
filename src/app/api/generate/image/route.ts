@@ -22,7 +22,16 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   }
 
   try {
-    const provider = await resolveImageProvider(brief.imageProviderKey ?? undefined)
+    const provider = await resolveImageProvider(
+      { teamId: user.teamId, userId: user.userId },
+      brief.imageProviderKey ?? undefined
+    )
+    if (!provider) {
+      return NextResponse.json(
+        { error: 'No image provider configured for this team' },
+        { status: 422 }
+      )
+    }
 
     const result = await provider.generateImage(prompt)
     const rawUrl: string = result.url

@@ -6,9 +6,20 @@ import type { BrandKitContext } from "./types"
 
 export async function toolGenerateImage(
   prompt: string,
-  brandKitId: string
+  brandKitId: string,
+  briefId: string
 ): Promise<{ url: string }> {
-  const provider = await resolveImageProvider()
+  // The tool loop only carries briefId in its closure (see designAgent.ts's
+  // executeTool) — look up the owning team/user so resolution can consider a
+  // personal OpenAI key ahead of the team's.
+  const brief = await prisma.brief.findUnique({
+    where: { id: briefId },
+    select: { teamId: true, userId: true },
+  })
+  const provider = await resolveImageProvider({ teamId: brief?.teamId ?? '', userId: brief?.userId ?? null })
+  if (!provider) {
+    throw new Error('No image provider configured for this team')
+  }
   const result = await provider.generateImage(prompt, brandKitId)
 
   if (result.url.startsWith("data:")) {

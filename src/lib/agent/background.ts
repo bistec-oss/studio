@@ -19,6 +19,7 @@ import { env } from '@/lib/env'
 import { MOCK_AI } from '@/lib/testHooks'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
 import { resolveImageProvider } from '@/providers/registry'
+import type { ImageProvider } from '@/providers/interfaces/ImageProvider'
 import { persistDataUrlImage } from '@/lib/storage/minio'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
 import { isCliMode, modelForBackground } from '@/lib/agent/config'
@@ -86,15 +87,30 @@ async function runDecision(prompt: BackgroundDecisionPrompt): Promise<Background
 // imageProviderKey is the brief's optional per-brief override.
 async function decideAndGenerate(
   prompt: BackgroundDecisionPrompt,
-  opts: { brandKitId: string; aspectRatio: string; imageProviderKey?: string | null },
+  opts: {
+    teamId: string
+    userId: string
+    brandKitId: string
+    aspectRatio: string
+    imageProviderKey?: string | null
+  },
 ): Promise<string | null> {
-  // Resolve the image provider FIRST — if none is configured there is no point
-  // spending a Claude call on the decision.
-  let provider
+  // Resolve the image provider FIRST — if none is configured (no personal key,
+  // no team key) there is no point spending a Claude call on the decision.
+  // resolveImageProvider never throws (returns null), but keep the guard: a DB
+  // hiccup here must still degrade gracefully, not fail the whole generation.
+  let provider: ImageProvider | null
   try {
-    provider = await resolveImageProvider(opts.imageProviderKey ?? undefined)
+    provider = await resolveImageProvider(
+      { teamId: opts.teamId, userId: opts.userId },
+      opts.imageProviderKey ?? undefined
+    )
   } catch (err) {
-    log(`skipped — no image provider available (${err instanceof Error ? err.message : err})`)
+    log(`skipped — image provider resolution failed (${err instanceof Error ? err.message : err})`)
+    return null
+  }
+  if (!provider) {
+    log('skipped — no image provider configured (no personal or team OpenAI key)')
     return null
   }
 
@@ -110,6 +126,12 @@ async function decideAndGenerate(
 
   log(`generating background · size=${imageSizeFor(opts.aspectRatio)} · prompt="${decision.prompt.slice(0, 120)}..."`)
   const startedAt = Date.now()
+  // TODO(team-tenancy): if a personal UserOpenAiKey was resolved above and this
+  // call fails with an auth error, flip it INVALID here (markUserOpenAiKeyInvalid,
+  // src/lib/agent/openAiKey.ts) — mirroring markUserTokenInvalid for Claude. Not
+  // wired yet: there is no existing OpenAI-error auth-classification helper to
+  // hang this off (unlike isClaudeAuthFailure for the CLI), and inventing one is
+  // out of scope here.
   const result = await provider.generateImage(decision.prompt, opts.brandKitId, imageSizeFor(opts.aspectRatio))
   // persistDataUrlImage enforces the raster allow-list and returns a stable
   // public URL; a provider that already returns an http(s) URL passes through.
@@ -143,6 +165,8 @@ export async function generateBackgroundForBrief(
       campaignBriefing,
     })
     return await decideAndGenerate(prompt, {
+      teamId: brief.teamId ?? '',
+      userId: brief.userId,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,
@@ -167,6 +191,8 @@ export async function generateBackgroundForRefine(
   try {
     const prompt = buildRefineBackgroundDecisionPrompt({ kit, topic: brief.topic, instruction })
     return await decideAndGenerate(prompt, {
+      teamId: brief.teamId ?? '',
+      userId: brief.userId,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,
