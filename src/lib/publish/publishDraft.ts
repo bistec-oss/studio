@@ -73,11 +73,9 @@ export async function createAndPublishPost(opts: {
   })
 
   try {
-    // TODO(Task 15): teamId is nullable until Migration B backfills/constrains
-    // it — a null here (pre-tenancy row) simply fails credential lookup below,
-    // which is the correct failure mode rather than silently using someone
-    // else's channel token.
-    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '', draft.teamId ?? '')
+    // draft.teamId is NOT NULL as of Task 15 (Migration B) — no more
+    // pre-tenancy null rows to coerce.
+    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '', draft.teamId)
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: { status: 'PUBLISHED', publishedAt: new Date(), platformId },

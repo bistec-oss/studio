@@ -65,7 +65,7 @@ export function toEntryCreateData(
   campaignId: string,
   createdById: string,
   entry: QueueEntryInput,
-  teamId: string | null,
+  teamId: string,
 ) {
   return {
     teamId,

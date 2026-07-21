@@ -5,6 +5,13 @@ export async function createBrandKit(args: {
   colors?: string[]
   fonts?: Array<{ name: string; url: string }>
   logoUrl?: string
+  // Caller's team (the ApiKey's teamId — same pattern as generatePost/getDraft/
+  // publishPost in server.ts). BrandKit.teamId is NOT NULL as of Task 15 — a
+  // brand kit created via MCP is attributed to the calling key's team, even
+  // though the read tools below (list/get) still run with no team scoping
+  // (brand kits are still a cross-team/system-default concept for reads;
+  // revisit if/when brand kits become fully per-team resources).
+  teamId: string
 }) {
   // data: URIs in logoUrl blow up AI prompt sizes (136k-char incident 2026-07-17);
   // only http(s) URLs (or no logo) are storable.
@@ -13,13 +20,7 @@ export async function createBrandKit(args: {
   }
   const kit = await prisma.brandKit.create({
     data: {
-      // Deliberately team-less: Task 13 (DB-backed MCP/ACP auth) scoped
-      // generate/publish to the caller's team but left brand-kit MCP tools
-      // (this file) untouched — brand kits are a cross-team/system-default
-      // concept today, and every tool here still runs with no team scoping
-      // at all (server.ts gates on "any valid key", not the key's team).
-      // Revisit if/when brand kits become per-team resources.
-      teamId: null,
+      teamId: args.teamId,
       name: args.name,
       colors: args.colors ?? [],
       fonts: args.fonts ?? [],

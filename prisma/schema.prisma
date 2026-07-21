@@ -139,7 +139,7 @@ model User {
 // users' unfinished briefs (private working state, unlike generated drafts).
 model BriefDraft {
   id        String   @id @default(cuid())
-  teamId    String?
+  teamId    String
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   topic     String   @default("") // denormalized from payload for dashboard rows
@@ -272,7 +272,7 @@ model ApiKey {
 
 model Project {
   id                String            @id @default(cuid())
-  teamId            String?
+  teamId            String
   name              String
   defaultBrandKitId String?
   defaultBrandKit   BrandKit?         @relation("ProjectBrandKit", fields: [defaultBrandKitId], references: [id])
@@ -287,7 +287,7 @@ model Project {
 
 model Campaign {
   id           String             @id @default(cuid())
-  teamId       String?
+  teamId       String
   name         String
   brandKitId   String?
   brandKit     BrandKit?          @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
@@ -310,7 +310,7 @@ model Campaign {
 // (capped — `truncated` marks a cut) injected into briefing chat/enhance prompts.
 model CampaignDocument {
   id          String   @id @default(cuid())
-  teamId      String?
+  teamId      String
   campaignId  String
   campaign    Campaign @relation(fields: [campaignId], references: [id])
   name        String
@@ -332,7 +332,7 @@ model CampaignDocument {
 // executes postAction. Retries with backoff on failure; FAILED is re-runnable.
 model ScheduledGeneration {
   id          String               @id @default(cuid())
-  teamId      String?
+  teamId      String
   campaignId  String
   campaign    Campaign             @relation(fields: [campaignId], references: [id])
   createdById String
@@ -399,7 +399,7 @@ model ProjectCampaign {
 
 model Brief {
   id                  String             @id @default(cuid())
-  teamId              String?
+  teamId              String
   userId              String
   user                User               @relation(fields: [userId], references: [id])
   campaignId          String?
@@ -431,7 +431,7 @@ model Brief {
 
 model Draft {
   id              String          @id @default(cuid())
-  teamId          String?
+  teamId          String
   briefId         String
   brief           Brief           @relation(fields: [briefId], references: [id])
   copyText        String
@@ -471,7 +471,7 @@ model Draft {
 
 model Post {
   id          String     @id @default(cuid())
-  teamId      String?
+  teamId      String
   draftId     String
   draft       Draft      @relation(fields: [draftId], references: [id])
   userId      String
@@ -497,7 +497,7 @@ model Post {
 
 model BrandKit {
   id        String              @id @default(cuid())
-  teamId    String?
+  teamId    String
   name      String
   colors    Json?
   fonts     Json?
@@ -523,7 +523,7 @@ model BrandKit {
 // generation prompts (Path B reads only feedToAI artifacts).
 model BrandKitDocument {
   id          String   @id @default(cuid())
-  teamId      String?
+  teamId      String
   brandKitId  String
   brandKit    BrandKit @relation(fields: [brandKitId], references: [id])
   name        String
@@ -585,7 +585,7 @@ model BrandKitArtifact {
 
 model AvailableProvider {
   id              String       @id @default(cuid())
-  teamId          String?
+  teamId          String
   slot            ProviderSlot
   providerKey     String
   providerName    String
@@ -596,19 +596,20 @@ model AvailableProvider {
   isDefault       Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
-  @@unique([slot, providerKey])
+  @@unique([teamId, slot, providerKey])
   @@index([teamId])
 }
 
 model ChannelToken {
   id                String   @id @default(cuid())
-  teamId            String?
-  channel           Channel  @unique
+  teamId            String
+  channel           Channel
   encryptedToken    String
   encryptedMetadata String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  @@unique([teamId, channel])
   @@index([teamId])
 }
 

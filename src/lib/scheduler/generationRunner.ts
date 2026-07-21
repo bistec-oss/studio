@@ -130,11 +130,8 @@ export async function runGenerationJobs(): Promise<void> {
     try {
       const brief = await ensureBrief(entry)
 
-      // TODO(Task 15): entry.teamId is nullable until the Task 15 backfill —
-      // ?? '' is the established placeholder (same pattern as the other
-      // team-tenancy call sites); a credential-less '' team resolves to no
-      // token, same effect as a real team with none.
-      const teamId = entry.teamId ?? ''
+      // entry.teamId is NOT NULL as of Task 15 (Migration B).
+      const teamId = entry.teamId
 
       // userId: null — an unattended scheduled run has no acting teammate, so
       // both the Claude-CLI credential and the IMAGE-provider resolution skip

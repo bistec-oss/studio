@@ -131,7 +131,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     switch (name) {
       case 'create_brand_kit':
-        return { content: [{ type: 'text', text: JSON.stringify(await createBrandKit(args as Parameters<typeof createBrandKit>[0])) }] }
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(
+              await createBrandKit({ ...(args as unknown as Omit<Parameters<typeof createBrandKit>[0], 'teamId'>), teamId: key.teamId })
+            ),
+          }],
+        }
 
       case 'set_brand_kit_prompt':
         return { content: [{ type: 'text', text: JSON.stringify(await setBrandKitPrompt(args as Parameters<typeof setBrandKitPrompt>[0])) }] }

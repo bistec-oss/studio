@@ -33,24 +33,15 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
 
   const teamId = user.teamId
 
-  // ChannelToken.channel is a schema-global @unique column (not yet
-  // per-team), so the upsert below can only ever touch one row per channel
-  // across the whole installation. Without this guard, Team B connecting the
-  // same channel would silently overwrite Team A's stored credential while
-  // GET kept reporting it as "theirs". A null teamId is a pre-tenancy legacy
-  // row — it stays claimable (and gets adopted below); any other team's row
-  // is a hard conflict. Task 12/15 replaces this with a composite
-  // @@unique([teamId, channel]) so each team gets its own row.
-  const existing = await prisma.channelToken.findUnique({ where: { channel } })
-  if (existing && existing.teamId !== null && existing.teamId !== teamId) {
-    return NextResponse.json({ error: 'Channel already connected' }, { status: 409 })
-  }
-
+  // ChannelToken now has a real per-team composite unique
+  // (@@unique([teamId, channel]), Task 15 migration) — each team gets its
+  // own row for a channel, so there is no cross-team conflict to guard
+  // against here (the old schema-global `channel @unique` needed the guard
+  // this replaced; see git history for that interim workaround).
   await prisma.channelToken.upsert({
-    where: { channel },
+    where: { teamId_channel: { teamId, channel } },
     create: { channel, teamId, encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
-    // A legacy null-teamId row is adopted by whichever team claims it first.
-    update: { teamId, encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
+    update: { encryptedToken: encrypt(token), encryptedMetadata: encrypt(metadata) },
   })
 
   return NextResponse.json({ connected: true }, { status: 201 })
