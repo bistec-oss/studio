@@ -3,8 +3,8 @@ import { randomUUID } from 'crypto'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
@@ -62,7 +62,7 @@ const refineSchema = z.object({}).passthrough()
 // pattern — see draftActions.ts) and the route returns 202. The draft page
 // polls pendingAction/pendingActionError — and, for an API-mode brand-kit
 // conflict, the conflict surfaced from pendingConflict — to completion.
-export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
+export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) => {
   const body = await parseBody(req, refineSchema)
   if (body.response) return body.response
   const { instruction, overrideConflictId } = body.data as {
@@ -77,9 +77,12 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
     where: { id: params.id },
     include: { brief: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // Output canvas for this draft's brief (1080×1080 square or 1080×1350 portrait).
   const { width, height } = dimensionsFor(draft.brief.aspectRatio)
@@ -95,7 +98,7 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   }
 
   // Explicit brief kit → campaign → project → system default.
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
+  const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
   if (!kit) {
     return NextResponse.json(
       { code: 'NO_BRAND_KIT', message: 'No brand kit found for this draft.' },
@@ -121,15 +124,20 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
   }
 
   // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise) — startDraftAction resolves it before the
+  // (the team token otherwise) — startDraftAction resolves it before the
   // request unwinds and runs the whole closure inside that auth context, so the
   // background decision and the refine agent call can't observe different
   // tokens. A throw below is recorded on Draft.pendingActionError.
-  await startDraftAction(draft.id, user.userId, async () => {
+  await startDraftAction(draft.id, user.userId, user.teamId, async () => {
     // Background pre-step: generates a new background ONLY when the instruction
     // asks for one (e.g. "change the background to a city skyline"); null
-    // otherwise, and on any failure. See agent/background.ts.
-    const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction)
+    // otherwise, and on any failure. See agent/background.ts. actor is the
+    // acting teammate (NOT the brief owner) — image-provider resolution must
+    // follow whoever is running this refine.
+    const backgroundImageUrl = await generateBackgroundForRefine(draft.brief, kit, instruction, {
+      userId: user.userId,
+      teamId: user.teamId,
+    })
 
     const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
     const userMessage = buildRefineUserMessage({
@@ -166,6 +174,7 @@ export const POST = withAuth<{ id: string }>(async (req, { params }, user) => {
       inlineAssets,
       width,
       height,
+      actor: { userId: user.userId, teamId: user.teamId },
     })
 
     const conflict = parseConflict(result.htmlContent)

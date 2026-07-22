@@ -1,6 +1,6 @@
 import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { resolveClaudeAuthForUser } from '@/lib/agent/userToken'
+import { resolveClaudeAuth } from '@/lib/agent/userToken'
 import { runWithClaudeAuth } from '@/lib/agent/claudeAuth'
 
 // Lifecycle of an async draft action (regenerate copy/design, refine) — the
@@ -31,10 +31,12 @@ export async function releaseDraftAction(draftId: string, error?: string): Promi
 }
 
 // Run a claimed action's model work WITHOUT blocking the request, mirroring
-// startBackgroundGeneration: the user's personal Claude CLI token is resolved
-// to a concrete value HERE (before the request's async context unwinds) and
-// pinned onto the background run via runWithClaudeAuth, so CLI-mode billing is
-// correct even though the work outlives the request. null ⇒ shared credential.
+// startBackgroundGeneration: the acting credential (personal token, falling
+// back to the team token) is resolved to a concrete value HERE (before the
+// request's async context unwinds) and pinned onto the background run via
+// runWithClaudeAuth, so CLI-mode billing/scoping is correct even though the
+// work outlives the request. null ⇒ no credential (CLI-mode calls inside work
+// will then hard-fail — see claudeCli.ts).
 //
 // startDraftAction always releases the claim when the work settles — success
 // releases clean, a throw releases with the error message. The work closure
@@ -42,9 +44,10 @@ export async function releaseDraftAction(draftId: string, error?: string): Promi
 export async function startDraftAction(
   draftId: string,
   userId: string,
+  teamId: string,
   work: () => Promise<void>
 ): Promise<void> {
-  const auth = await resolveClaudeAuthForUser(userId)
+  const auth = await resolveClaudeAuth(userId, teamId)
   void runWithClaudeAuth(auth, work)
     .then(() => releaseDraftAction(draftId))
     .catch((err) =>

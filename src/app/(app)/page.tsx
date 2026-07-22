@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import {
   FileCheck2,
   Send,
@@ -8,10 +9,13 @@ import {
   BookOpen,
   Palette,
   Activity,
+  Users,
 } from 'lucide-react'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUser } from '@/lib/auth'
 import { listBriefDrafts } from '@/lib/brief/briefDrafts'
+import { resolveTeamForServerComponent } from '@/lib/authz/serverTeam'
+import { draftVisibilityWhere, postVisibilityWhere } from '@/lib/authz/visibility'
+import type { TeamAuthedUser } from '@/lib/api/handler'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { RecentDraftsCard } from '@/components/dashboard/RecentDraftsCard'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
@@ -29,7 +33,8 @@ function channelLabel(channels: string[]): string {
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
-async function getDashboardData() {
+async function getDashboardData(user: TeamAuthedUser) {
+  const teamId = user.teamId
   const [
     draftsReady,
     postsPublished,
@@ -39,11 +44,17 @@ async function getDashboardData() {
     recentPublished,
     recentProviders,
   ] = await Promise.all([
-    prisma.draft.count({ where: { status: 'EXPORTED' } }),
-    prisma.post.count({ where: { status: 'PUBLISHED' } }),
-    prisma.campaign.count({ where: { isDeleted: false } }),
-    prisma.availableProvider.count({ where: { isEnabled: true } }),
+    // KPI counts use the same D6 visibility as the library/posts listings —
+    // a bare { teamId } count shows an editor team-wide numbers their own
+    // list pages then contradict ("13 drafts ready", library shows 2).
+    prisma.draft.count({ where: { ...draftVisibilityWhere(user), status: 'EXPORTED' } }),
+    prisma.post.count({ where: { ...postVisibilityWhere(user), status: 'PUBLISHED' } }),
+    prisma.campaign.count({ where: { isDeleted: false, teamId } }),
+    prisma.availableProvider.count({ where: { isEnabled: true, teamId } }),
+    // D6 visibility (fixes the prior leak: this used to show every team's
+    // drafts to every signed-in user, no scoping at all).
     prisma.draft.findMany({
+      where: draftVisibilityWhere(user),
       // 25, not 8: the Recent Drafts card shows 8 collapsed and the full list
       // when expanded (RecentDraftsCard) — one query serves both states.
       take: 25,
@@ -60,18 +71,20 @@ async function getDashboardData() {
       },
     }),
     prisma.post.findMany({
-      where: { status: 'PUBLISHED' },
+      where: { ...postVisibilityWhere(user), status: 'PUBLISHED' },
       take: 5,
       orderBy: { publishedAt: 'desc' },
       include: { draft: { include: { brief: { select: { topic: true } } } } },
     }),
-    prisma.availableProvider.findMany({ take: 5, orderBy: { createdAt: 'desc' } }),
+    // AvailableProvider is team-wide (no personal ownership concept).
+    prisma.availableProvider.findMany({ where: { teamId }, take: 5, orderBy: { createdAt: 'desc' } }),
   ])
 
-  // The viewer's own unfinished (autosaved) briefs — owner-scoped, so resolved
-  // from the session; listBriefDrafts also runs the lazy 7-day TTL sweep.
-  const currentUser = await getCurrentUser()
-  const unfinishedBriefs = currentUser ? await listBriefDrafts(currentUser.userId) : []
+  // The viewer's own unfinished (autosaved) briefs, scoped to the active team
+  // (a multi-team user's other-team drafts must not surface here — Resume
+  // would otherwise dead-end on the briefs POST route's cross-team 404).
+  // listBriefDrafts also runs the lazy 7-day TTL sweep.
+  const unfinishedBriefs = await listBriefDrafts(user.userId, user.teamId)
 
   // Build a merged, chronological activity feed from the available signals.
   type Event = { id: string; at: Date; text: string; kind: 'draft' | 'post' | 'provider' }
@@ -156,7 +169,33 @@ function QuickAction({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  const data = await getDashboardData()
+  const resolution = await resolveTeamForServerComponent()
+
+  if (resolution?.team.kind === 'choice-required') {
+    redirect('/choose-team')
+  }
+
+  if (!resolution || resolution.team.kind === 'no-team') {
+    return (
+      <GlassPanel className="mx-auto mt-12 max-w-md p-8 text-center">
+        <Users size={28} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
+        <h2 className="text-lg font-semibold text-light-text dark:text-dark-text">
+          You&rsquo;re not in a team yet
+        </h2>
+        <p className="mt-2 text-sm text-light-text-muted dark:text-dark-text-muted">
+          Ask a super admin to add you to a team before you can create or view posts.
+        </p>
+      </GlassPanel>
+    )
+  }
+
+  const teamUser: TeamAuthedUser = {
+    userId: resolution.userId,
+    teamId: resolution.team.teamId,
+    teamRole: resolution.team.teamRole,
+    isSuperAdmin: resolution.isSuperAdmin,
+  }
+  const data = await getDashboardData(teamUser)
 
   return (
     <>

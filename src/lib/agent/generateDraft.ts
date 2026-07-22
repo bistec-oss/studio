@@ -7,11 +7,12 @@ import { buildBriefInput } from '@/lib/agent/briefInput'
 import { runPathADesign, assertTemplateMatchesBrief } from '@/lib/agent/pathA'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import type { GenerationActor } from '@/lib/agent/types'
 
 // Path B needs a resolvable brand kit; thrown before any model call is paid for.
 export class NoBrandKitError extends Error {
   constructor() {
-    super('No brand kit found — configure a brand kit for this campaign, project, or set a system default.')
+    super('No brand kit found — configure a brand kit for this campaign, project, or ask a team admin to set a team default.')
     this.name = 'NoBrandKitError'
   }
 }
@@ -43,8 +44,8 @@ async function resolveGenerationInputs(
   brief: Brief,
   templateId: string | null | undefined,
 ): Promise<ResolvedInputs> {
-  // Brand kit precedence: explicit brief kit → campaign → project → system default.
-  const kit = await resolveBrandKit(brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
+  // Brand kit precedence: explicit brief kit → campaign → project → team default.
+  const kit = await resolveBrandKit(brief.teamId, brief.campaignId ?? undefined, brief.brandKitId ?? undefined)
   // Campaign-level briefing (when the brief's campaign has an active one) —
   // injected into copy and design prompts alongside the brand voice.
   const campaignBriefing = await getActiveCampaignBriefing(brief.campaignId)
@@ -52,7 +53,13 @@ async function resolveGenerationInputs(
   let template = null
   if (brief.designMode === 'TEMPLATE') {
     if (!templateId) throw new TemplateNotFoundError()
-    template = await prisma.brandKitTemplate.findUnique({ where: { id: templateId } })
+    // I1 (final review): scope the template lookup to the brief's own team via
+    // its parent brand kit — an unscoped findUnique let any signed-in user
+    // render another team's full template HTML (a cross-tenant read where the
+    // rendered PNG is the exfiltration channel) by passing a foreign templateId.
+    template = await prisma.brandKitTemplate.findFirst({
+      where: { id: templateId, brandKit: { teamId: brief.teamId, isDeleted: false } },
+    })
     if (!template) throw new TemplateNotFoundError()
     assertTemplateMatchesBrief(brief, template)
   } else if (!kit) {
@@ -73,12 +80,13 @@ async function produceDesign(
   brief: Brief,
   { kit, campaignBriefing, template }: ResolvedInputs,
   copyText: string,
+  actor: GenerationActor,
 ): Promise<ProducedDesign> {
   if (template) {
-    const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing)
+    const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing, actor)
     return { htmlContent: result.htmlContent, exportUrl: result.exportUrl, backgroundImageUrl: null }
   }
-  const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing)
+  const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing, actor)
   return {
     htmlContent: result.htmlContent,
     exportUrl: result.exportUrl,
@@ -128,18 +136,24 @@ async function finalizeDraftV1(
 // interactive brief wizard uses createPendingDraft + runGenerationForDraft instead.
 export async function generateDraftForBrief(
   brief: Brief,
+  // The MCP/ACP surface and the scheduler have no signed-in actor (Task 13/14
+  // territory) — callers there must pass an explicit { userId: null, teamId }
+  // rather than let this default to the brief's owner, which would incorrectly
+  // consult the OWNER's personal OpenAI key for a machine-triggered run.
+  actor: GenerationActor,
   opts?: { templateId?: string | null },
 ): Promise<GenerateDraftResult> {
   const inputs = await resolveGenerationInputs(brief, opts?.templateId)
 
-  const copyProvider = await resolveCopyProvider(brief.copyProviderKey ?? undefined)
+  const copyProvider = await resolveCopyProvider(brief.teamId, brief.copyProviderKey ?? undefined)
   const copyText = await copyProvider.generateCopy(buildBriefInput(brief, inputs.kit, inputs.campaignBriefing))
 
-  const design = await produceDesign(brief, inputs, copyText)
+  const design = await produceDesign(brief, inputs, copyText, actor)
 
   const draft = await prisma.$transaction(async (tx) => {
     const created = await tx.draft.create({
       data: {
+        teamId: brief.teamId,
         briefId: brief.id,
         copyText,
         htmlContent: design.htmlContent,
@@ -183,6 +197,7 @@ export async function createPendingDraft(
   const inputs = await resolveGenerationInputs(brief, opts?.templateId)
   return prisma.draft.create({
     data: {
+      teamId: brief.teamId,
       briefId: brief.id,
       copyText: '',
       templateId: inputs.template?.id ?? null,
@@ -196,13 +211,13 @@ export async function createPendingDraft(
 // image) → design + render → finalize as EXPORTED with a v1 revision. On any
 // failure the draft is marked FAILED with the reason for the inline error card.
 // Designed to be fire-and-forget from the route; also reused by the retry route.
-export async function runGenerationForDraft(draftId: string): Promise<void> {
+export async function runGenerationForDraft(draftId: string, actor: GenerationActor): Promise<void> {
   const draft = await prisma.draft.findUnique({ where: { id: draftId }, include: { brief: true } })
   if (!draft) return
   try {
     const inputs = await resolveGenerationInputs(draft.brief, draft.templateId)
 
-    const copyProvider = await resolveCopyProvider(draft.brief.copyProviderKey ?? undefined)
+    const copyProvider = await resolveCopyProvider(draft.brief.teamId, draft.brief.copyProviderKey ?? undefined)
     const copyText = await copyProvider.generateCopy(
       buildBriefInput(draft.brief, inputs.kit, inputs.campaignBriefing),
     )
@@ -210,7 +225,7 @@ export async function runGenerationForDraft(draftId: string): Promise<void> {
     // resolves now while the image skeleton keeps animating.
     await prisma.draft.update({ where: { id: draftId }, data: { copyText } })
 
-    const design = await produceDesign(draft.brief, inputs, copyText)
+    const design = await produceDesign(draft.brief, inputs, copyText, actor)
     await finalizeDraftV1(draftId, design)
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)

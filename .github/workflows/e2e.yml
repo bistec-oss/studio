@@ -61,8 +61,8 @@ jobs:
       MOCK_AI: "true"
       MOCK_PUPPETEER: "true"
       MOCK_SOCIAL: "true"
-      BISTEC_API_KEYS: e2e-test-key
-      BISTEC_ADMIN_API_KEYS: e2e-admin-key
+      # BISTEC_API_KEYS / BISTEC_ADMIN_API_KEYS removed 2026-07-21 (team tenancy):
+      # the §J ACP-auth cases mint real hashed ApiKey rows via POST /api/team/api-keys.
       TEST_BASE_URL: http://localhost:3001
 
     steps:
@@ -92,10 +92,21 @@ jobs:
           npx prisma generate
           npx prisma migrate deploy
 
-      - name: Seed baseline (admin, editor, kits, cli provider)
+      - name: Seed baseline (admin, editor, teams, kits, cli provider)
+        # ORDER MATTERS — mirrors scripts/setup-test-db.mjs exactly:
+        #   seed-teams runs AFTER admin+editor (it looks both up by email and
+        #   grants their Bistec memberships — admin=ADMIN, editor=EDITOR — plus
+        #   creates the ClientX + NoKitCo teams the §R/§S suites need), and
+        #   BEFORE seed-brandkit/hearts-talk/cli-provider (which stamp their
+        #   rows onto the Bistec team). Without seed-teams the editor has no
+        #   team membership, so every team-scoped route 403s for it (breaking
+        #   the D6 editor-visibility cases across agui-refinement, briefing-
+        #   assistant, campaign-scheduling, library), and clientx.admin does
+        #   not exist, so the team-isolation suite's login fails outright.
         run: |
           node scripts/seed-admin.mjs
           node scripts/seed-editor.mjs
+          node scripts/seed-teams.mjs
           node scripts/seed-brandkit.mjs
           node scripts/seed-hearts-talk.mjs
           node scripts/seed-cli-provider.mjs

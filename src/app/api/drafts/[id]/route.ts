@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import type { DraftAction } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 
@@ -114,10 +114,12 @@ async function loadDraft(id: string) {
     explanation: string
   } | null
 
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
+  const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
   return {
     ownerId: draft.brief.userId,
+    teamId: draft.teamId,
+    campaignId: draft.brief.campaignId,
     data: {
     id: draft.id,
     briefId: draft.briefId,
@@ -151,11 +153,14 @@ async function loadDraft(id: string) {
   }
 }
 
-export const GET = withAuth<Params>(async (_req, { params }, user) => {
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
   const result = await loadDraft(params.id)
-  if (!result) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, result.ownerId)
-  if (forbidden) return forbidden
+  if (
+    !result ||
+    !canAccessContent(user, { teamId: result.teamId, ownerId: result.ownerId, campaignId: result.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   return NextResponse.json(result.data)
 })
@@ -164,7 +169,15 @@ export const GET = withAuth<Params>(async (_req, { params }, user) => {
 // 'copyText is required' (asserted by tests).
 const patchSchema = z.object({}).passthrough()
 
-export const PATCH = withAuth<Params>(async (req, { params }, user) => {
+// Team tenancy fix: this handler used to run under plain withAuth + the
+// old ownership helper (a platform-role-only check with no team dimension —
+// it let any admin/super-admin bypass ownership entirely), so an admin of
+// ANY team could edit ANY other team's draft copy. Task 8/9's sweeps
+// covered this file's GET and DELETE but missed PATCH. Now withTeamAuth +
+// canAccessContent, matching the GET handler above (the old helper,
+// forbiddenIfNotOwner, has since been deleted from src/lib/auth.ts — this
+// was its last real caller).
+export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
   const { copyText } = body.data as { copyText?: unknown }
@@ -174,11 +187,14 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 
   const existing = await prisma.draft.findUnique({
     where: { id: params.id },
-    select: { status: true, brief: { select: { userId: true } } },
+    select: { status: true, teamId: true, brief: { select: { userId: true, campaignId: true } } },
   })
-  if (!existing) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, existing.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !existing ||
+    !canAccessContent(user, { teamId: existing.teamId, ownerId: existing.brief.userId, campaignId: existing.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   // The published caption lives only on the draft — editing it after publish
   // would silently desynchronize the record from what was actually posted.
@@ -206,12 +222,14 @@ export const PATCH = withAuth<Params>(async (req, { params }, user) => {
 // a SCHEDULED post is thereby cancelled), revisions, and the parent Brief when no
 // other draft references it. No cascades exist on these relations, so children
 // are deleted first, all in one transaction.
-export const DELETE = withAdmin<Params>(async (_req, { params }) => {
+export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
-    select: { id: true, briefId: true },
+    select: { id: true, briefId: true, teamId: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  if (!draft || draft.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   const briefDeleted = await prisma.$transaction(async (tx) => {
     await tx.post.deleteMany({ where: { draftId: draft.id } })

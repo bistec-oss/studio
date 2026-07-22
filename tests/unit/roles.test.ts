@@ -1,6 +1,6 @@
 // Role hierarchy: super_admin ≥ admin ≥ editor. Every server-side gate
-// (withAuth/withAdmin/withSuperAdmin, forbiddenIfNotOwner, page layouts)
-// routes through hasRole, so the matrix here is the RBAC source of truth.
+// (withAuth/withTeamAuth/withTeamAdmin/withSuperAdmin, page layouts) routes
+// through hasRole, so the matrix here is the RBAC source of truth.
 
 import { describe, it, expect } from 'vitest'
 import { hasRole, normalizeRole, type Role } from '@/lib/roles'

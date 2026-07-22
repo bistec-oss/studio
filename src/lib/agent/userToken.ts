@@ -5,46 +5,83 @@ import { runClaudeCli } from '@/lib/agent/claudeCli'
 import { runWithClaudeAuth, type ClaudeCliAuth } from '@/lib/agent/claudeAuth'
 import { MOCK_AI, mockClaudeTokenValidation } from '@/lib/testHooks'
 
-// Resolver layer for per-user Claude OAuth tokens (UserClaudeToken rows).
-// Routes wrap their model-calling span in withUserClaudeAuth(); everything
-// below runClaudeCli then bills the acting user's Claude subscription, with
-// the shared server token as the fallback tier. See claudeAuth.ts for the
+// Resolver layer for Claude CLI auth: personal UserClaudeToken → team
+// Team.encryptedClaudeToken → no credential (the old shared-env-token and
+// dev-logged-in-session tiers are deleted). Routes wrap their model-calling
+// span in withClaudeAuth(); everything below runClaudeCli then bills whichever
+// tier resolved, with the team token as the one fallback tier (retried once on
+// an observed auth failure — see claudeCli.ts). See claudeAuth.ts for the
 // AsyncLocalStorage design note.
 
 /**
- * The acting user's CLI auth, or null ⇒ caller falls through to the shared
- * credential. Null when: not CLI mode (tokens are CLI-only), no row, the row
- * is INVALID (awaiting reconnect), or the account is deactivated.
+ * The credential for this call: the personal token when userId is given, CLI
+ * mode is on, the row is ACTIVE, and the account isn't disabled; otherwise the
+ * team's token; otherwise null (no credential — a CLI-mode call will then hard
+ * -fail in claudeCli.ts). Not CLI mode ⇒ always null, without any DB query
+ * (tokens are CLI-only).
  */
-export async function resolveClaudeAuthForUser(userId: string): Promise<ClaudeCliAuth | null> {
+export async function resolveClaudeAuth(
+  userId: string | null,
+  teamId: string
+): Promise<ClaudeCliAuth | null> {
   if (!isCliMode()) return null
-  const row = await prisma.userClaudeToken.findUnique({
-    where: { userId },
-    include: { user: { select: { disabled: true } } },
+
+  if (userId) {
+    const row = await prisma.userClaudeToken.findUnique({
+      where: { userId },
+      include: { user: { select: { disabled: true } } },
+    })
+    if (row && row.status === 'ACTIVE' && !row.user.disabled) {
+      return {
+        token: decrypt(row.encryptedToken),
+        userId,
+        teamId,
+        onAuthFailure: () => markUserTokenInvalid(userId),
+        // Resolved lazily — only queried if the personal token is rejected.
+        resolveFallback: () => resolveTeamClaudeAuth(teamId),
+      }
+    }
+  }
+
+  return resolveTeamClaudeAuth(teamId)
+}
+
+async function resolveTeamClaudeAuth(teamId: string): Promise<ClaudeCliAuth | null> {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { encryptedClaudeToken: true },
   })
-  if (!row || row.status !== 'ACTIVE' || row.user.disabled) return null
+  if (!team?.encryptedClaudeToken) return null
   return {
-    token: decrypt(row.encryptedToken),
-    userId,
-    onAuthFailure: () => markUserTokenInvalid(userId),
+    token: decrypt(team.encryptedClaudeToken),
+    userId: null,
+    teamId,
+    onAuthFailure: () => markTeamClaudeTokenInvalid(teamId),
+    // No tier below the team token.
   }
 }
 
 /**
- * Route-facing wrapper: resolve the user's token and run fn with it in scope.
- * Fast no-op (no DB query) outside CLI mode. Wrap the whole model-calling span
- * so every `claude -p` the span spawns shares one resolved token.
+ * Route-facing wrapper: resolve the credential (personal → team) and run fn
+ * with it in scope. Fast no-op (no DB query) outside CLI mode. Wrap the whole
+ * model-calling span so every `claude -p` the span spawns shares one resolved
+ * credential.
  */
-export async function withUserClaudeAuth<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+export async function withClaudeAuth<T>(
+  userId: string | null,
+  teamId: string,
+  fn: () => Promise<T>
+): Promise<T> {
   if (!isCliMode()) return fn()
-  const auth = await resolveClaudeAuthForUser(userId)
+  const auth = await resolveClaudeAuth(userId, teamId)
   return runWithClaudeAuth(auth, fn)
 }
 
 /**
- * Flags the stored token after an observed auth failure so the UI prompts a
- * reconnect and later calls skip it. updateMany ⇒ idempotent and a no-op when
- * the row was deleted mid-flight or a concurrent failure already flipped it.
+ * Flags the stored personal token after an observed auth failure so the UI
+ * prompts a reconnect and later calls skip it. updateMany ⇒ idempotent and a
+ * no-op when the row was deleted mid-flight or a concurrent failure already
+ * flipped it.
  */
 export async function markUserTokenInvalid(userId: string): Promise<void> {
   await prisma.userClaudeToken.updateMany({
@@ -53,10 +90,25 @@ export async function markUserTokenInvalid(userId: string): Promise<void> {
   })
 }
 
+/**
+ * Clears the team's Claude token after an observed auth failure. The Team
+ * model has no status column (unlike UserClaudeToken) — the credential is
+ * simply removed, same effect as a team admin disconnecting it; a team admin
+ * must paste a fresh one in Team Settings. updateMany ⇒ idempotent.
+ */
+export async function markTeamClaudeTokenInvalid(teamId: string): Promise<void> {
+  await prisma.team.updateMany({
+    where: { id: teamId },
+    data: { encryptedClaudeToken: null, claudeKeyPrefix: null },
+  })
+  console.warn(`[userToken] team ${teamId} Claude token rejected — cleared, a team admin must reconnect`)
+}
+
 export type TokenValidationResult = { ok: true; skipped?: boolean } | { ok: false; error: string }
 
 /**
- * Save-time validation for a pasted token (PUT /api/me/claude-token).
+ * Save-time validation for a pasted token (PUT /api/me/claude-token or
+ * PUT /api/team/claude-token — both routes share this contract).
  *   MOCK_AI    → deterministic seam (E2E runs claude-html and can't spawn the CLI)
  *   CLI mode   → live `claude -p` ping under the candidate token; ANY failure
  *                rejects (fail closed) — an expired token and a broken CLI both

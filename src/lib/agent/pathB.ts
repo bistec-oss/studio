@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { Brief } from '@prisma/client'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
-import type { DesignAgentResult } from '@/lib/agent/types'
+import type { DesignAgentResult, GenerationActor } from '@/lib/agent/types'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
@@ -28,7 +28,8 @@ export async function runPathBDesign(
   brief: Brief,
   kit: ResolvedBrandKit,
   copyText: string,
-  campaignBriefing?: string | null,
+  campaignBriefing: string | null | undefined,
+  actor: GenerationActor,
 ): Promise<PathBDesignResult> {
   // Feed-to-AI artifact URLs (brand reference imagery).
   const artifacts = await prisma.brandKitArtifact.findMany({
@@ -40,11 +41,15 @@ export async function runPathBDesign(
   // Output canvas for this brief (1080×1080 square or 1080×1350 portrait).
   const { width, height } = dimensionsFor(brief.aspectRatio)
 
-  // Optional reference template for style inspiration.
+  // Optional reference template for style inspiration. Scoped to the brief's
+  // own team via its parent brand kit (I2, final review — defense-in-depth;
+  // briefs/route.ts already rejects a foreign referenceTemplateId at create
+  // time, but a pre-fix row or a direct DB write must not leak another team's
+  // template HTML into the design prompt as "style inspiration").
   let referenceTemplate: { htmlTemplate: string } | null = null
   if (brief.referenceTemplateId) {
-    referenceTemplate = await prisma.brandKitTemplate.findUnique({
-      where: { id: brief.referenceTemplateId },
+    referenceTemplate = await prisma.brandKitTemplate.findFirst({
+      where: { id: brief.referenceTemplateId, brandKit: { teamId: brief.teamId } },
       select: { htmlTemplate: true },
     })
   }
@@ -65,7 +70,7 @@ export async function runPathBDesign(
   // Background pre-step: Claude (Haiku) decides + gpt-image generates a
   // full-bleed background before the design call. Null on skip/failure — the
   // design proceeds with CSS/SVG visuals as before. See agent/background.ts.
-  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing)
+  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing, actor)
 
   const systemPrompt = buildPathBSystemPrompt({
     kit,
@@ -100,6 +105,7 @@ export async function runPathBDesign(
         maxToolCalls: 15,
         width,
         height,
+        actor,
       })
 
   return { ...result, backgroundImageUrl }

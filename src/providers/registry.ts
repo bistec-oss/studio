@@ -38,7 +38,13 @@ function instantiateImageProvider(providerName: string, apiKey: string): ImagePr
   }
 }
 
-export async function resolveCopyProvider(providerKey?: string): Promise<CopyProvider> {
+// teamId is required (team-tenancy fix): both lookups below used to run with
+// no teamId filter at all, so a brief could resolve — via an explicit
+// providerKey OR the unfiltered "the" default lookup — to a DIFFERENT team's
+// registered COPY provider row, including that team's decrypted API key.
+// Every caller runs inside an already team-scoped request/generation context,
+// so the real team id is always available (mirrors resolveImageProvider).
+export async function resolveCopyProvider(teamId: string, providerKey?: string): Promise<CopyProvider> {
   // Test seam: deterministic copy with no provider API call. The brief's
   // copyProviderKey must still reference a real enabled COPY provider (validated
   // at brief creation) — only the generation call is stubbed here.
@@ -48,7 +54,7 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
 
   if (providerKey) {
     const record = await prisma.availableProvider.findFirst({
-      where: { slot: "COPY", providerKey, isEnabled: true },
+      where: { slot: "COPY", providerKey, teamId, isEnabled: true },
     })
     if (record) {
       return instantiateCopyProvider(record.providerName, providerApiKey(record))
@@ -56,19 +62,20 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
   }
 
   const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "COPY", isDefault: true, isEnabled: true },
+    where: { slot: "COPY", teamId, isDefault: true, isEnabled: true },
   })
   if (defaultRecord) {
     return instantiateCopyProvider(defaultRecord.providerName, providerApiKey(defaultRecord))
   }
 
+  // The env.OPENAI_API_KEY fallback tier was removed (team-tenancy Task 11) —
+  // COPY provider config lives entirely in AvailableProvider rows now. The
+  // ANTHROPIC_API_KEY fallback stays: it's the shared server credential, not a
+  // per-team secret, and the CLI-mode fallback chain still expects it.
   const anthropicKey = env.ANTHROPIC_API_KEY
   if (anthropicKey) return new AnthropicCopyProvider(anthropicKey)
 
-  const openaiKey = env.OPENAI_API_KEY
-  if (openaiKey) return new OpenAICopyProvider(openaiKey)
-
-  throw new Error("No COPY provider configured — set ANTHROPIC_API_KEY or OPENAI_API_KEY")
+  throw new Error("No COPY provider configured — set ANTHROPIC_API_KEY or add a default COPY AvailableProvider")
 }
 
 // Resolve a raw Anthropic API key for direct SDK calls that bypass the
@@ -77,9 +84,16 @@ export async function resolveCopyProvider(providerKey?: string): Promise<CopyPro
 // provider (when it is an anthropic registration, its decrypted key) → the
 // ANTHROPIC_API_KEY env fallback. Returns null when neither is configured —
 // callers decide how to fail.
-export async function resolveAnthropicApiKey(): Promise<string | null> {
+//
+// teamId is required (team-tenancy fix, Task 19b): this lookup used to run
+// with no teamId filter at all, so a team's vision/voice-draft/briefing-
+// assistant call could resolve — and bill — a DIFFERENT team's registered
+// Anthropic COPY provider key. Every caller runs inside an already
+// team-scoped request, so the real team id is always available (mirrors
+// resolveCopyProvider's identical fix).
+export async function resolveAnthropicApiKey(teamId: string): Promise<string | null> {
   const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "COPY", isDefault: true, isEnabled: true },
+    where: { slot: "COPY", teamId, isDefault: true, isEnabled: true },
   })
   if (defaultRecord && defaultRecord.providerName.toLowerCase() === "anthropic") {
     return decrypt(defaultRecord.encryptedApiKey)
@@ -87,10 +101,26 @@ export async function resolveAnthropicApiKey(): Promise<string | null> {
   return env.ANTHROPIC_API_KEY ?? null
 }
 
-export async function resolveImageProvider(providerKey?: string): Promise<ImageProvider> {
+// Resolution order: personal UserOpenAiKey (ACTIVE, only when userId is
+// given) → an explicit providerKey row scoped to ctx.teamId → the team's
+// default IMAGE row → null. No throw, no env fallback — callers (background.ts,
+// the generate/image route) treat null as "skip, no image provider configured".
+// Personal wins even over an explicit providerKey: a user who connected their
+// own OpenAI key wants THEIR key used for every image call, team config or not.
+export async function resolveImageProvider(
+  ctx: { teamId: string; userId?: string | null },
+  providerKey?: string
+): Promise<ImageProvider | null> {
+  if (ctx.userId) {
+    const personal = await prisma.userOpenAiKey.findUnique({ where: { userId: ctx.userId } })
+    if (personal && personal.status === "ACTIVE") {
+      return instantiateImageProvider("openai", decrypt(personal.encryptedKey))
+    }
+  }
+
   if (providerKey) {
     const record = await prisma.availableProvider.findFirst({
-      where: { slot: "IMAGE", providerKey, isEnabled: true },
+      where: { slot: "IMAGE", providerKey, teamId: ctx.teamId, isEnabled: true },
     })
     if (record) {
       return instantiateImageProvider(record.providerName, decrypt(record.encryptedApiKey))
@@ -98,7 +128,7 @@ export async function resolveImageProvider(providerKey?: string): Promise<ImageP
   }
 
   const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "IMAGE", isDefault: true, isEnabled: true },
+    where: { slot: "IMAGE", teamId: ctx.teamId, isDefault: true, isEnabled: true },
   })
   if (defaultRecord) {
     return instantiateImageProvider(
@@ -107,9 +137,5 @@ export async function resolveImageProvider(providerKey?: string): Promise<ImageP
     )
   }
 
-  const envKey = env.OPENAI_API_KEY
-  if (!envKey) {
-    throw new Error("No IMAGE provider found and OPENAI_API_KEY env var is not set")
-  }
-  return new OpenAIImageProvider(envKey)
+  return null
 }

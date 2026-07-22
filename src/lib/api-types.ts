@@ -5,7 +5,7 @@
 // in sync with the routes it documents; when a route's `select`/`include`
 // changes, update the matching type here rather than re-declaring an
 // inline interface in a page.
-import type { AspectRatio, Channel, DesignMode } from '@prisma/client'
+import type { AspectRatio, Channel, DesignMode, TeamRole } from '@prisma/client'
 import type { Role } from '@/lib/auth'
 
 // ── Auth ─────────────────────────────────────────────────────────────────
@@ -24,6 +24,36 @@ export type ClaudeTokenInfo =
     }
   | { connected: false }
 
+// GET/PUT/DELETE /api/team/claude-token — the team's shared Claude OAuth
+// token (the fallback tier below each member's personal token). The Team
+// model has no status/timestamp columns for it, unlike the personal token —
+// a rejected team token is simply cleared, not flagged INVALID.
+export type TeamClaudeTokenInfo = { connected: true; keyPrefix: string } | { connected: false }
+
+// GET /api/team/api-keys — machine credentials for MCP/ACP (src/mcp/auth.ts).
+// Only keyPrefix is ever returned here; the plaintext appears exactly once,
+// in the POST response below.
+export type TeamApiKeySummary = {
+  id: string
+  label: string
+  keyPrefix: string
+  createdAt: string
+  revokedAt: string | null
+}
+
+// POST /api/team/api-keys — the only response that ever carries a plaintext key.
+export type TeamApiKeyCreated = { id: string; label: string; plaintext: string }
+
+// GET/PUT/DELETE /api/me/openai-key — the user's personal OpenAI API key,
+// used for image generation ahead of the team's configured IMAGE provider.
+// Only the masked suffix ever leaves the server. Unlike the Claude token
+// there is no live validation ping at save time (OpenAI has no free
+// validation endpoint) — status flips to INVALID only after an observed
+// generation failure.
+export type OpenAiKeyInfo =
+  | { connected: true; status: 'ACTIVE' | 'INVALID'; keyPrefix: string }
+  | { connected: false }
+
 // GET /api/me
 export interface MeResponse {
   userId: string
@@ -36,6 +66,13 @@ export interface MeResponse {
     keyPrefix: string
     connectedAt: string
   } | null
+  // Team membership + active-team resolution (see resolveActiveTeam) — lets
+  // the client show a team switcher or force /choose-team without a second
+  // request.
+  teams: Array<{ id: string; name: string; role: TeamRole }>
+  activeTeamId: string | null
+  teamRole: TeamRole | null
+  teamChoiceRequired: boolean
 }
 
 // ── Shared reference shapes ─────────────────────────────────────────────
@@ -278,6 +315,24 @@ export interface BriefDraftSummary {
 // PUT /api/brief-drafts
 export interface SaveBriefDraftResponse {
   id: string
+}
+
+// ── Admin: teams (super-admin platform management) ──────────────────────
+
+// GET/POST /api/admin/teams
+export interface AdminTeamSummary {
+  id: string
+  name: string
+  memberCount: number
+  createdAt: string
+}
+
+// GET/POST /api/admin/teams/[id]/members — POST upsert response mirrors GET's shape.
+export interface AdminTeamMember {
+  userId: string
+  name: string
+  loginLabel: string
+  role: TeamRole
 }
 
 // ── Admin: AI providers ──────────────────────────────────────────────────

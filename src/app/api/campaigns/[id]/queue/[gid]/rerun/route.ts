@@ -1,24 +1,28 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner, hasRole } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { requiresAdmin } from '@/lib/campaign/queue'
 
 type Params = { id: string; gid: string }
 
 // Re-arm a FAILED or CANCELLED entry: back to PENDING, retry bookkeeping
 // reset, due immediately (generateAt: now — the next worker tick picks it up).
-export const POST = withAuth<Params>(async (_req, { params }, user) => {
+// Team tenancy fix: withTeamAuth + canAccessContent (this used to be plain
+// withAuth with no teamId check at all — see the note in ../../route.ts).
+export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
   const existing = await prisma.scheduledGeneration.findFirst({
     where: { id: params.gid, campaignId: params.id },
   })
-  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (
+    !existing ||
+    !canAccessContent(user, { teamId: existing.teamId, ownerId: existing.createdById, campaignId: params.id })
+  ) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
-  const forbidden = forbiddenIfNotOwner(user, existing.createdById)
-  if (forbidden) return forbidden
-
-  // Re-arming an auto-publish entry re-arms a deferred publish — admin-only.
-  if (requiresAdmin(existing.postAction) && !hasRole(user.role, 'admin')) {
+  // Re-arming an auto-publish entry re-arms a deferred publish — team-admin-only.
+  if (requiresAdmin(existing.postAction) && !(user.teamRole === 'ADMIN' || user.isSuperAdmin)) {
     return NextResponse.json(
       { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
       { status: 403 }

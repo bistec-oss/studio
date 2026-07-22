@@ -16,7 +16,19 @@ async function pageLogin(page: Page) {
   await page.getByPlaceholder('Username').fill(ADMIN_EMAIL)
   await page.getByPlaceholder('Password').fill(ADMIN_PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await page.waitForURL(url => url.pathname === '/') // lands on the dashboard "/"
+  await page.waitForURL(url => url.pathname === '/' || url.pathname === '/choose-team')
+  // ADMIN_EMAIL is a super admin, whose active-team auto-select depends on
+  // exactly one team existing platform-wide (team tenancy) — with a second
+  // team (ClientX) seeded, a session with no active-team cookie should land
+  // on /choose-team instead of the dashboard. A fresh full navigation (not
+  // the client router's soft nav, which can settle on a stale/optimistic "/"
+  // before the server-evaluated redirect lands) forces a real SSR round-trip
+  // so team resolution is evaluated against the cookie set moments ago by sign-in.
+  await page.goto('/')
+  if (page.url().includes('/choose-team')) {
+    await page.getByRole('button', { name: 'Bistec' }).click()
+    await page.waitForURL(url => url.pathname === '/')
+  }
 }
 
 // Mint an EXPORTED draft via the API (owned by the admin, so the logged-in

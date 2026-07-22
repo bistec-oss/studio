@@ -1,14 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Menu, X, LogOut } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Building2, Menu, X, LogOut } from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { ClaudeTokenPrompt } from '@/components/settings/ClaudeTokenPrompt'
+import { TeamSwitcher } from '@/components/layout/TeamSwitcher'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { authClient } from '@/lib/auth-client'
 
@@ -43,8 +44,10 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Admin',
     items: [
-      { label: 'Brandkits', href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
-      { label: 'Users',     href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
+      { label: 'Brandkits',     href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
+      { label: 'Team Settings', href: '/team',            icon: <Building2 size={18} />, adminOnly: true },
+      { label: 'Users',         href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
+      { label: 'Teams',         href: '/admin/teams',     icon: <Building2 size={18} />, superAdminOnly: true },
     ],
   },
 ]
@@ -76,14 +79,17 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
 
 function Sidebar({ onClose }: { onClose?: () => void }) {
   // Hide admin-only entries from non-admins (server-side enforcement lives in
-  // the /admin layout — this is just honest navigation).
-  const { isAdmin, isSuperAdmin } = useCurrentUser()
+  // the /admin layout — this is just honest navigation). `adminOnly` now
+  // gates on team-admin (per-team role, super admins pass every gate too);
+  // `superAdminOnly` is unchanged — those items are platform-wide (Users,
+  // and the Task 17 Teams admin screen), not team-scoped.
+  const { isTeamAdmin, isSuperAdmin } = useCurrentUser()
   const [signingOut, setSigningOut] = useState(false)
   const sections = NAV_SECTIONS
     .map(section => ({
       ...section,
       items: section.items.filter(
-        item => (!item.adminOnly || isAdmin) && (!item.superAdminOnly || isSuperAdmin)
+        item => (!item.adminOnly || isTeamAdmin) && (!item.superAdminOnly || isSuperAdmin)
       ),
     }))
     .filter(section => section.items.length > 0)
@@ -111,6 +117,8 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           </button>
         </div>
       )}
+
+      <TeamSwitcher />
 
       <nav className="flex flex-col gap-4">
         {sections.map(section => (
@@ -146,6 +154,18 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { teamChoiceRequired } = useCurrentUser()
+  const pathname = usePathname()
+  const router = useRouter()
+
+  // Bounce to the chooser when /api/me reports no resolved active team —
+  // but never from the chooser itself, or picking a team there would
+  // instantly redirect back before the click's POST even lands.
+  useEffect(() => {
+    if (teamChoiceRequired && pathname !== '/choose-team') {
+      router.replace('/choose-team')
+    }
+  }, [teamChoiceRequired, pathname, router])
 
   return (
     <ConfirmProvider>

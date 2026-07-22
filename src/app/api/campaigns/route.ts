@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
-export const GET = withAuth(async () => {
+export const GET = withTeamAuth(async (_req, _ctx, user) => {
   const campaigns = await prisma.campaign.findMany({
-    where: { isDeleted: false },
+    where: { isDeleted: false, teamId: user.teamId },
     include: {
       brandKit: { select: { id: true, name: true } },
       // Project membership lets the brief wizard group campaigns by project.
@@ -28,23 +28,29 @@ const createSchema = z.object({
   projectId: z.string().nullish(),
 })
 
-export const POST = withAuth(async (req: NextRequest) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { name, brandKitId, defaultTone, projectId } = body.data
 
-  // Verify referenced records so a bogus id is a 400, not a P2003 500.
+  // Verify referenced records so a bogus id is a 400, not a P2003 500. Both
+  // are team-scoped (I3, final review) — an unscoped findFirst let a team
+  // admin link in ANOTHER team's brand kit or project; via resolveBrandKit's
+  // campaign/project tiers the whole team would then generate with the
+  // foreign kit, and a foreign project would surface this campaign inside
+  // that other team's /api/projects/[id] GET.
   if (brandKitId) {
-    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
+    const kit = await prisma.brandKit.findFirst({ where: { id: brandKitId, teamId: user.teamId, isDeleted: false } })
     if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
   }
   if (projectId) {
-    const project = await prisma.project.findFirst({ where: { id: projectId, isDeleted: false } })
+    const project = await prisma.project.findFirst({ where: { id: projectId, teamId: user.teamId, isDeleted: false } })
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 400 })
   }
 
   const campaign = await prisma.campaign.create({
     data: {
+      teamId: user.teamId,
       name,
       brandKitId: brandKitId ?? null,
       defaultTone: defaultTone ?? null,

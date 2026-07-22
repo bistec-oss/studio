@@ -3,6 +3,7 @@ import type { Channel } from '@prisma/client'
 import { generateDraftForBrief, NoBrandKitError } from '@/lib/agent/generateDraft'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { getSystemUserId } from '@/mcp/systemUser'
+import { withClaudeAuth } from '@/lib/agent/userToken'
 
 interface GeneratePostArgs {
   topic: string
@@ -13,6 +14,8 @@ interface GeneratePostArgs {
   copyProviderKey?: string
   campaignId?: string
   description?: string
+  /** The calling ApiKey's team (resolved by the ACP route / MCP server via resolveApiKey). */
+  teamId: string
 }
 
 // ACP entry point for post generation — a thin adapter over the same Path B
@@ -26,11 +29,26 @@ export async function generatePost(args: GeneratePostArgs) {
     )
   }
 
+  // Task 13: the caller's team now comes from its resolved ApiKey, not a
+  // campaign lookup. An explicit campaignId still must belong to that same
+  // team — otherwise the new Brief would reference a campaign (and inherit
+  // its brand-kit precedence) the caller has no claim to.
+  if (args.campaignId) {
+    const campaign = await prisma.campaign.findFirst({
+      where: { id: args.campaignId, isDeleted: false },
+      select: { teamId: true },
+    })
+    if (!campaign || campaign.teamId !== args.teamId) {
+      throw new Error(`Campaign ${args.campaignId} not found`)
+    }
+  }
+
   // Create the Brief row first so copy + design run off the same record the
   // web pipeline would use.
   const brief = await prisma.brief.create({
     data: {
-      userId: await getSystemUserId(),
+      teamId: args.teamId,
+      userId: await getSystemUserId(args.teamId),
       topic: args.topic,
       description: args.description,
       goal: args.goal,
@@ -45,29 +63,44 @@ export async function generatePost(args: GeneratePostArgs) {
 
   // Shared brief→draft orchestrator: kit precedence (campaign → project →
   // system default; no explicit kit on this surface), campaign briefing, copy,
-  // Path B design, Draft persistence — identical to the web routes.
-  // Deliberately NOT wrapped in withUserClaudeAuth: MCP/ACP callers hold
-  // server API keys (M2M trust boundary), not app-user sessions — CLI-mode
-  // calls here always use the shared server credential.
+  // Path B design, Draft persistence — identical to the web routes. MCP/ACP
+  // callers hold server API keys (M2M trust boundary), not app-user sessions,
+  // so there is no personal-token tier here — userId: null skips straight to
+  // the caller's TEAM Claude credential (and, for the IMAGE provider, the
+  // team's default — see resolveImageProvider). The whole model-calling span
+  // (copy → background image → design) runs inside withClaudeAuth so every
+  // `claude -p` it spawns shares that one resolved team credential, mirroring
+  // generationRunner.ts; a team with none throws the usual no-credential
+  // ClaudeCliError, caught below like any other generation failure.
+  // args.teamId ?? '' guards a malformed/legacy caller the same way the
+  // scheduler guards a pre-Task-15 null ScheduledGeneration.teamId — the
+  // GeneratePostArgs type already requires teamId, so this is defense in depth.
+  const teamId = args.teamId ?? ''
   try {
-    const { draft } = await generateDraftForBrief(brief)
+    const { draft } = await withClaudeAuth(null, teamId, () =>
+      generateDraftForBrief(brief, { userId: null, teamId })
+    )
     return { draftId: draft.id, exportUrl: await resolveExportUrl(draft.exportUrl), htmlContent: draft.htmlContent }
   } catch (err) {
     if (err instanceof NoBrandKitError) {
       throw new Error(
-        'No brand kit found — configure a brand kit for this campaign, or set a system default.'
+        'No brand kit found — configure a brand kit for this campaign, or ask a team admin to set a team default.'
       )
     }
     throw err
   }
 }
 
-export async function getDraft(args: { id: string }) {
+export async function getDraft(args: { id: string; teamId: string }) {
   const draft = await prisma.draft.findUnique({
     where: { id: args.id },
-    select: { copyText: true, imageUrl: true, exportUrl: true, status: true },
+    select: { copyText: true, imageUrl: true, exportUrl: true, status: true, teamId: true },
   })
-  if (!draft) throw new Error(`Draft ${args.id} not found`)
+  // Task 13 (reviewer follow-up): same team-bound guard as publishPost — a
+  // draft belonging to a different team (or the pre-tenancy null) reads as
+  // "not found" rather than leaking its existence/content across tenants.
+  if (!draft || draft.teamId !== args.teamId) throw new Error(`Draft ${args.id} not found`)
   // exportUrl is stored as an EXPORTS object key — sign it for the caller.
-  return { ...draft, exportUrl: await resolveExportUrl(draft.exportUrl) }
+  const { teamId: _teamId, ...rest } = draft
+  return { ...rest, exportUrl: await resolveExportUrl(draft.exportUrl) }
 }

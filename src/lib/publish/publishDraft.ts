@@ -11,7 +11,10 @@ import type { Channel, Post } from '@prisma/client'
 export const publishers = {
   INSTAGRAM: instagramPublisher,
   LINKEDIN: linkedinPublisher,
-} as const satisfies Record<Channel, { publish(url: string, caption: string): Promise<{ platformId: string }> }>
+} as const satisfies Record<
+  Channel,
+  { publish(url: string, caption: string, teamId: string): Promise<{ platformId: string }> }
+>
 
 // Statuses that count as "live" for duplicate detection: a second publish of the
 // same (draft, channel) while one of these exists would double-post. FAILED and
@@ -30,13 +33,14 @@ export async function findLivePost(draftId: string, channel: Channel): Promise<P
 export async function publishToChannel(
   channel: Channel,
   exportKey: string | null | undefined,
-  copyText: string
+  copyText: string,
+  teamId: string
 ): Promise<{ platformId: string }> {
   const signedExportUrl = await resolveExportUrl(exportKey)
   if (!signedExportUrl) {
     throw new PublishError(channel, 'draft export missing')
   }
-  return publishers[channel].publish(signedExportUrl, copyText)
+  return publishers[channel].publish(signedExportUrl, copyText, teamId)
 }
 
 // Immediate-publish state machine shared by the API POST /api/posts path and
@@ -50,8 +54,16 @@ export async function createAndPublishPost(opts: {
   userId: string
   scheduledAt?: Date | null
 }): Promise<{ post: Post; error?: PublishError }> {
+  // Loaded once, before the PENDING row, so the Post can be stamped with the
+  // draft's team at creation (draft.teamId is the source of truth here).
+  const draft = await prisma.draft.findUniqueOrThrow({
+    where: { id: opts.draftId },
+    select: { exportUrl: true, copyText: true, teamId: true },
+  })
+
   const post = await prisma.post.create({
     data: {
+      teamId: draft.teamId,
       draftId: opts.draftId,
       userId: opts.userId,
       channel: opts.channel,
@@ -61,11 +73,9 @@ export async function createAndPublishPost(opts: {
   })
 
   try {
-    const draft = await prisma.draft.findUniqueOrThrow({
-      where: { id: opts.draftId },
-      select: { exportUrl: true, copyText: true },
-    })
-    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '')
+    // draft.teamId is NOT NULL as of Task 15 (Migration B) — no more
+    // pre-tenancy null rows to coerce.
+    const { platformId } = await publishToChannel(opts.channel, draft.exportUrl, draft.copyText ?? '', draft.teamId)
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: { status: 'PUBLISHED', publishedAt: new Date(), platformId },

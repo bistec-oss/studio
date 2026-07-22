@@ -53,6 +53,10 @@ export interface VisionRequest {
   imageUrls: string[]
   maxTokens?: number
   label?: string
+  // Required for API-mode Anthropic key resolution (team-tenancy fix,
+  // Task 19b) — ignored in CLI mode, which never touches the provider
+  // registry. Every caller runs inside an already team-scoped request.
+  teamId: string
 }
 
 export async function runVisionModel(req: VisionRequest): Promise<string> {
@@ -60,7 +64,7 @@ export async function runVisionModel(req: VisionRequest): Promise<string> {
 
   if (isCliMode()) return runVisionCli(req, images)
 
-  const apiKey = await resolveAnthropicApiKey()
+  const apiKey = await resolveAnthropicApiKey(req.teamId)
   const client = new Anthropic({ apiKey: apiKey ?? undefined })
   const content: Anthropic.MessageParam['content'] = [
     ...images.map((img) => ({

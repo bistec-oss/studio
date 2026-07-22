@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isValidKey } from '@/mcp/auth'
+import { resolveApiKey } from '@/mcp/auth'
 import { generatePost } from '@/mcp/tools/generate'
 import { publishPost } from '@/mcp/tools/publish'
 
@@ -8,7 +8,8 @@ export const maxDuration = 120
 export async function POST(req: NextRequest) {
   try {
     const apiKey = req.headers.get('x-bistec-api-key')
-    if (!isValidKey(apiKey)) {
+    const key = await resolveApiKey(apiKey)
+    if (!key) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
@@ -32,13 +33,19 @@ export async function POST(req: NextRequest) {
         case 'generate_post': {
           const err = validateGenerateInput(input)
           if (err) return NextResponse.json({ error: err }, { status: 400 })
-          const result = await generatePost(input)
+          const result = await generatePost({
+            ...(input as Parameters<typeof generatePost>[0]),
+            teamId: key.teamId,
+          })
           return NextResponse.json({ output: result })
         }
         case 'publish_post': {
           const err = validatePublishInput(input)
           if (err) return NextResponse.json({ error: err }, { status: 400 })
-          const result = await publishPost(input as Parameters<typeof publishPost>[0])
+          const result = await publishPost({
+            ...(input as Parameters<typeof publishPost>[0]),
+            teamId: key.teamId,
+          })
           return NextResponse.json({ output: result })
         }
         default:

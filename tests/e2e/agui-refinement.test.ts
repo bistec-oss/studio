@@ -185,16 +185,55 @@ test.describe('AGUI design refinement', () => {
     numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1))
   })
 
-  // TC-AGUI-06 — Refining another user's draft is forbidden. Guards H2 (IDOR).
-  test('an editor cannot refine a draft owned by the admin', async ({ request }) => {
+  // TC-AGUI-06 — team tenancy D6: "team-shared" is precisely "the brief has a
+  // non-null campaignId" — createExportedDraft's fixture is campaign-scoped,
+  // so an in-team editor CAN refine it (canAccessContent allows own OR
+  // under-a-campaign). Rewritten from the pre-team-tenancy "always 403" to
+  // match D6, plus a second case with a non-campaign (private, uncategorized)
+  // fixture proving the boundary still holds for in-team-but-private drafts.
+  test('an in-team editor CAN refine a campaign-shared draft owned by the admin (D6)', async ({ request }) => {
     if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
-    const draft = await createExportedDraft(api) // owned by the admin (beforeEach loginAs)
+    const draft = await createExportedDraft(api) // owned by the admin, under a campaign (beforeEach loginAs)
     if (!draft) { test.skip(); return }
 
     const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
     try {
       const res = await editor.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Make it pop' })
-      expect(res.status()).toBe(403)
+      expect(res.status()).toBe(202)
+      await waitForAction(editor, draft.id as string)
+    } finally {
+      await editor.dispose()
+    }
+  })
+
+  // TC-AGUI-06b — the D6 boundary still holds for a PRIVATE (uncategorized,
+  // no campaign) draft: an in-team editor gets 404 (not 403 — cross-boundary
+  // access must not leak existence, per canAccessContent/Task 9), same as
+  // any other by-id route.
+  test('an in-team editor cannot refine a PRIVATE (uncategorized) draft owned by the admin', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const kitRes = await api.post('/api/admin/brandkits', { name: 'AGUI Private Kit', colors: ['#0284c7'] })
+    const kit = await kitRes.json()
+    const briefRes = await api.post('/api/briefs', {
+      topic: 'AGUI Private Post',
+      goal: 'Test AGUI private',
+      tone: 'casual',
+      channels: ['INSTAGRAM'],
+      designMode: 'GENERATE',
+      copyProviderKey: 'cli',
+      brandKitId: kit.id, // no campaignId — private, uncategorized
+    })
+    const brief = await briefRes.json()
+    const assembleRes = await api.post('/api/generate/assemble-b', { briefId: brief.id })
+    if (assembleRes.status() !== 202) { test.skip(); return }
+    const { draftId } = await assembleRes.json()
+    const draft = await waitForDraft(api, draftId)
+    if (!draft) { test.skip(); return }
+
+    const editor = await loginAs(request, EDITOR_EMAIL, EDITOR_PASSWORD)
+    try {
+      const res = await editor.post(`/api/drafts/${draft.id}/refine`, { instruction: 'Make it pop' })
+      expect(res.status()).toBe(404)
     } finally {
       await editor.dispose()
     }

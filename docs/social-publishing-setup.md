@@ -20,9 +20,10 @@ in CLI mode and the Cloudflare-tunnel image path was proven with a real external
   - Both claims are `FOR UPDATE SKIP LOCKED` + lease, so multiple worker replicas are safe.
 - **One publish service** (`src/lib/publish/publishDraft.ts`) owns the channel map. Every
   surface (publish dialog, scheduler tick, ACP) goes through it.
-- **Credential resolution, per publish:** encrypted `ChannelToken` DB row (set in
-  Admin → Settings) → env-var fallback. The DB row **always wins**; no restart needed
-  after changing it (read per publish).
+- **Credential resolution, per publish:** the **post's team's** encrypted `ChannelToken`
+  DB row (set at `/team` → Social Channels), read per publish — no restart needed after
+  changing it. No env-var fallback exists (deleted 2026-07-21); a team without a row
+  fails with `No <channel> credentials configured for this team`.
 - **The image handoff differs per channel — this drives the whole setup below:**
 
   | Channel       | How the platform gets the image                                                                                               | Local-dev implication                                                                         |
@@ -158,10 +159,12 @@ Options, in order of preference:
 
 ## 5. Wiring credentials into the app
 
-Two options — the DB row wins over env if both exist:
+> **Updated 2026-07-21 (team tenancy):** channel credentials are **per team** and live
+> only in the DB — the env-var fallback is gone (the 4 `LINKEDIN_*`/`INSTAGRAM_*` vars
+> were deleted from the app entirely).
 
-**Option A — Admin UI (preferred: encrypted at rest, no restarts):**
-`npm run dev` → log in as an admin → **`/admin/settings`** → **Social Channels** tab →
+**Team Settings UI (the only path):**
+`npm run dev` → log in as a **team admin** → **`/team`** → **Social Channels** section →
 fill the channel card → Save.
 
 | Card      | Field 1 (`token`) | Field 2 (`metadata`)          |
@@ -169,17 +172,10 @@ fill the channel card → Save.
 | LinkedIn  | Access token      | Organization ID (number only) |
 | Instagram | Access token      | Business Account ID           |
 
-Stored AES-256-GCM encrypted in `ChannelToken` (one row per channel, upserted).
-Disconnect via the card's remove button (`DELETE /api/admin/channels/[channel]`).
-
-**Option B — env fallback** (`.env`, requires worker/app restart):
-
-```bash
-INSTAGRAM_ACCESS_TOKEN=…
-INSTAGRAM_BUSINESS_ACCOUNT_ID=…
-LINKEDIN_ACCESS_TOKEN=…
-LINKEDIN_ORGANIZATION_ID=…
-```
+Stored AES-256-GCM encrypted in `ChannelToken` (one row per **(team, channel)**, upserted).
+Disconnect via the card's remove button (`DELETE /api/team/channels/[channel]`).
+A team with no row for a channel gets a clear "No <channel> credentials configured for
+this team" failure at publish time — there is no shared fallback.
 
 ---
 
@@ -235,12 +231,12 @@ A FAILED post can be re-published from the UI; a FAILED queue entry has a rerun 
 
 ## 7. Troubleshooting
 
-| Symptom                                                                         | Cause / fix                                                                                                                                  |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Instagram/LinkedIn credentials not configured — set them in Admin → Settings…` | No `ChannelToken` row and env vars empty. Wire §5.                                                                                           |
-| Instagram: `Failed to create media container` mentioning the image URL          | Meta couldn't fetch the export — tunnel dead, `.env` pointing at an old tunnel URL, or `MINIO_ENDPOINT` still `localhost`. Re-run §4 step 5. |
-| `530` fetching through the tunnel                                               | The `cloudflared` process is gone (terminal closed). Restart it — and remember the URL changes.                                              |
-| `draft export missing` as errorReason                                           | The draft lost its export between scheduling and the tick (e.g. deleted). Regenerate/re-export.                                              |
-| Publishes fail ~60 days after setup                                             | Token expired (both platforms). Regenerate (§2 step 4 / §3 step 4) and re-save in `/admin/settings`.                                         |
-| Worker logs `P1001` tick errors                                                 | DB unreachable (containers down). The loops survive and self-recover; fix the containers.                                                    |
-| Everything 500s incl. login (prod server)                                       | `minioadmin` MinIO creds rejected by the prod env gate — see `docs/cold-start.md` §2.                                                        |
+| Symptom                                                                | Cause / fix                                                                                                                                  |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `No Instagram/LinkedIn credentials configured for this team`           | No `ChannelToken` row for the post's team. Wire §5 (as a team admin of that team).                                                           |
+| Instagram: `Failed to create media container` mentioning the image URL | Meta couldn't fetch the export — tunnel dead, `.env` pointing at an old tunnel URL, or `MINIO_ENDPOINT` still `localhost`. Re-run §4 step 5. |
+| `530` fetching through the tunnel                                      | The `cloudflared` process is gone (terminal closed). Restart it — and remember the URL changes.                                              |
+| `draft export missing` as errorReason                                  | The draft lost its export between scheduling and the tick (e.g. deleted). Regenerate/re-export.                                              |
+| Publishes fail ~60 days after setup                                    | Token expired (both platforms). Regenerate (§2 step 4 / §3 step 4) and re-save in `/team` → Social Channels.                                 |
+| Worker logs `P1001` tick errors                                        | DB unreachable (containers down). The loops survive and self-recover; fix the containers.                                                    |
+| Everything 500s incl. login (prod server)                              | `minioadmin` MinIO creds rejected by the prod env gate — see `docs/cold-start.md` §2.                                                        |

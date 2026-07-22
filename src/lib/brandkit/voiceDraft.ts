@@ -21,7 +21,10 @@ export interface DraftBrandVoiceOptions {
 // API key through the encrypted provider registry (default enabled anthropic
 // COPY provider → ANTHROPIC_API_KEY env fallback) instead of reading the env
 // var directly, and honors the MOCK_AI test seam with no Anthropic call.
+// teamId is required (team-tenancy fix, Task 19b) — both admin routes that
+// call this already run under withTeamAdmin and have it.
 export async function draftBrandVoice(
+  teamId: string,
   promptText: string,
   options: DraftBrandVoiceOptions = {},
 ): Promise<string> {
@@ -30,7 +33,7 @@ export async function draftBrandVoice(
     return options.mockDraft ?? DEFAULT_MOCK_DRAFT
   }
 
-  const apiKey = await resolveAnthropicApiKey()
+  const apiKey = await resolveAnthropicApiKey(teamId)
   const client = new Anthropic({ apiKey: apiKey ?? undefined })
 
   const message = await client.messages.create({

@@ -121,9 +121,22 @@ async function uploadLogo(kitId, fileName) {
   return `${publicEndpoint}/${BUCKET}/${key}`
 }
 
+// Team tenancy: BrandKit.teamId is required. This kit belongs in the
+// "Bistec" team — created unconditionally by the team_tenancy_b migration's
+// backfill (id 'team_bistec_default'), so it always exists by the time this
+// script runs. Falls back to creating it here too, defensively.
+async function ensureBistecTeamId() {
+  const existing = await prisma.team.findFirst({ where: { name: "Bistec" } })
+  if (existing) return existing.id
+  const created = await prisma.team.create({ data: { name: "Bistec" } })
+  return created.id
+}
+
 async function main() {
+  const teamId = await ensureBistecTeamId()
+
   const existing = await prisma.brandKit.findFirst({
-    where: { name: "Hearts Talk", isDeleted: false },
+    where: { name: "Hearts Talk", isDeleted: false, teamId },
   })
   if (existing) {
     console.log(`"Hearts Talk" brand kit already exists (${existing.id}) — skipping`)
@@ -154,6 +167,7 @@ async function main() {
   // upload the logos and attach logoUrl + LOGO artifacts.
   const kit = await prisma.brandKit.create({
     data: {
+      teamId,
       name: "Hearts Talk",
       isDefault: false,
       colors: COLORS,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { Prisma, Channel, DesignMode, type AspectRatio } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
@@ -10,7 +10,7 @@ import { isAspectRatio } from '@/lib/aspectRatio'
 // validation below (exact error messages + channel normalization) is kept as-is.
 const createSchema = z.object({}).passthrough()
 
-export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
+export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const parsed = await parseBody(req, createSchema)
   if (parsed.response) return parsed.response
   // Untrusted request body — every field is validated at runtime below; the cast
@@ -106,21 +106,31 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
     }
   }
 
-  // Verify referenced records in parallel (independent lookups).
+  // Verify referenced records in parallel (independent lookups). Provider
+  // lookups are team-scoped (team-tenancy fix — these used to validate
+  // against ANY team's provider row, which would let a brief reference, and
+  // then at generation time resolve to, a different team's registered
+  // provider/API key; see the matching fix in resolveCopyProvider).
   const [copyProvider, imageProvider, campaign, template, brandKit] = await Promise.all([
     prisma.availableProvider.findFirst({
-      where: { providerKey: copyProviderKey, slot: 'COPY', isEnabled: true },
+      where: { providerKey: copyProviderKey, slot: 'COPY', teamId: user.teamId, isEnabled: true },
     }),
     imageProviderKey
       ? prisma.availableProvider.findFirst({
-          where: { providerKey: imageProviderKey, slot: 'IMAGE', isEnabled: true },
+          where: { providerKey: imageProviderKey, slot: 'IMAGE', teamId: user.teamId, isEnabled: true },
         })
       : Promise.resolve(null),
     campaignId
       ? prisma.campaign.findFirst({ where: { id: campaignId, isDeleted: false } })
       : Promise.resolve(null),
+    // I2 (final review): include the template's brand kit so its team can be
+    // checked below — an unscoped findUnique let a foreign team's template
+    // HTML enter the design prompt as "style inspiration" (see pathB.ts).
     referenceTemplateId
-      ? prisma.brandKitTemplate.findUnique({ where: { id: referenceTemplateId } })
+      ? prisma.brandKitTemplate.findUnique({
+          where: { id: referenceTemplateId },
+          include: { brandKit: { select: { teamId: true } } },
+        })
       : Promise.resolve(null),
     brandKitId
       ? prisma.brandKit.findFirst({ where: { id: brandKitId, isDeleted: false } })
@@ -133,18 +143,24 @@ export const POST = withAuth(async (req: NextRequest, _ctx, user) => {
   if (imageProviderKey && !imageProvider) {
     return NextResponse.json({ error: 'Invalid or disabled imageProviderKey' }, { status: 400 })
   }
-  if (campaignId && !campaign) {
-    return NextResponse.json({ error: 'Campaign not found' }, { status: 400 })
+  // M1 (final review): "doesn't exist" and "exists in another team" now share
+  // ONE status/message (404, the pre-existing not-found text) for every
+  // referenced record. The old 400-vs-404 split let a caller distinguish "bad
+  // id" from "id exists in some other tenant" — a cross-tenant existence
+  // oracle — by watching the status code alone.
+  if (campaignId && (!campaign || campaign.teamId !== user.teamId)) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
-  if (referenceTemplateId && !template) {
-    return NextResponse.json({ error: 'Reference template not found' }, { status: 400 })
+  if (referenceTemplateId && (!template || template.brandKit.teamId !== user.teamId)) {
+    return NextResponse.json({ error: 'Reference template not found' }, { status: 404 })
   }
-  if (brandKitId && !brandKit) {
-    return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  if (brandKitId && (!brandKit || brandKit.teamId !== user.teamId)) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
   }
 
   const brief = await prisma.brief.create({
     data: {
+      teamId: user.teamId,
       userId: user.userId,
       topic: topic.trim(),
       description: description?.trim() ?? null,

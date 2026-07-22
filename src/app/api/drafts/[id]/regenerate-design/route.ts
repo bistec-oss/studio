@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { runPathBDesign } from '@/lib/agent/pathB'
@@ -17,14 +17,17 @@ import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 // polls pendingAction/pendingActionError to completion. Before overwriting,
 // the CURRENT design is snapshotted as a DraftRevision so the user can return
 // to it via the revision history. Path B only — Path A is a template fill.
-export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
+export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
     include: { brief: true },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   if (draft.brief.designMode !== 'GENERATE') {
     return NextResponse.json(
@@ -33,7 +36,7 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
     )
   }
 
-  const kit = await resolveBrandKit(draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
+  const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
   if (!kit) {
     return NextResponse.json(
       { code: 'NO_BRAND_KIT', message: 'No brand kit found for this draft.' },
@@ -49,12 +52,17 @@ export const POST = withAuth<{ id: string }>(async (_req, { params }, user) => {
   }
 
   // CLI mode bills the acting user's personal Claude token when connected
-  // (shared server token otherwise) — startDraftAction resolves it before the
+  // (the team token otherwise) — startDraftAction resolves it before the
   // request unwinds and pins it onto the background run. A throw below is
   // recorded on Draft.pendingActionError; the draft itself is left untouched.
-  await startDraftAction(draft.id, user.userId, async () => {
+  await startDraftAction(draft.id, user.userId, user.teamId, async () => {
     // Run the new design first — if it fails, the draft is left untouched.
-    const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing)
+    // actor is the acting teammate (NOT the brief owner) — the image-provider
+    // resolution must follow whoever clicked Regenerate.
+    const result = await runPathBDesign(draft.brief, kit, draft.copyText, campaignBriefing, {
+      userId: user.userId,
+      teamId: user.teamId,
+    })
 
     // The Undo target is whatever revision is currently live. The design history
     // is an append-only log, so the live state is already the current revision —

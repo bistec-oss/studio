@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { AGENT_MANIFEST } from '@/acp/agent'
-import { isValidKey } from '@/mcp/auth'
+import { resolveApiKey } from '@/mcp/auth'
 
 export async function GET(req: NextRequest) {
   try {
     const apiKey = req.headers.get('x-bistec-api-key')
-    if (!isValidKey(apiKey)) {
+    const key = await resolveApiKey(apiKey)
+    if (!key) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
     return NextResponse.json(AGENT_MANIFEST)

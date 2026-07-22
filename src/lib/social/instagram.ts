@@ -2,24 +2,21 @@ import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
 import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
-import { env } from "@/lib/env"
 
-async function resolveCredentials(): Promise<{ accessToken: string; businessAccountId: string }> {
-  const row = await prisma.channelToken.findUnique({ where: { channel: "INSTAGRAM" } })
-  if (row) {
-    return { accessToken: decrypt(row.encryptedToken), businessAccountId: decrypt(row.encryptedMetadata) }
+// Team-scoped lookup — no env-var fallback. A team with no connected
+// Instagram channel simply can't publish; there is no shared/global credential.
+async function resolveCredentials(teamId: string): Promise<{ accessToken: string; businessAccountId: string }> {
+  const row = await prisma.channelToken.findFirst({ where: { teamId, channel: "INSTAGRAM" } })
+  if (!row) {
+    throw new Error("No Instagram credentials configured for this team")
   }
-  const accessToken = env.INSTAGRAM_ACCESS_TOKEN
-  const businessAccountId = env.INSTAGRAM_BUSINESS_ACCOUNT_ID
-  if (!accessToken || !businessAccountId) {
-    throw new Error("Instagram credentials not configured — set them in Admin → Settings → Social Channels or via env vars")
-  }
-  return { accessToken, businessAccountId }
+  return { accessToken: decrypt(row.encryptedToken), businessAccountId: decrypt(row.encryptedMetadata) }
 }
 
 export async function publish(
   exportUrl: string,
   copyText: string,
+  teamId: string,
 ): Promise<{ platformId: string }> {
   // Test seam: skip the Graph API round-trip. The failure path (MOCK_SOCIAL_FAIL
   // global, or a __FAIL_ALWAYS__/__FAIL_ONCE__ sentinel in the caption) drives
@@ -29,7 +26,7 @@ export async function publish(
     return { platformId: `mock-instagram-${Date.now()}` }
   }
 
-  const { accessToken, businessAccountId } = await resolveCredentials()
+  const { accessToken, businessAccountId } = await resolveCredentials(teamId)
 
   const baseUrl = `https://graph.facebook.com/v19.0/${businessAccountId}`
 

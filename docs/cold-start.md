@@ -101,8 +101,9 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
 
-**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; Claude auth comes from `CLAUDE_CODE_OAUTH_TOKEN` (or the logged-in `claude` session), see §7. `OPENAI_API_KEY` is still required for AI background images in either mode. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
-Social tokens (`INSTAGRAM_*`, `LINKEDIN_*`) can stay blank until you test publishing — when you do, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence).
+**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; Claude auth comes from the logged-in `claude` session by default, see §7. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
+
+**Credentials no longer live in `.env`.** Personal Claude/OpenAI credentials are connected at **`/settings`**; a team's shared credentials (Claude, OpenAI, Instagram/LinkedIn social channels, and MCP/ACP API keys) are set at **`/team`** by a team admin, in-app, once you're signed in. For social channel setup specifically, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence) — just enter the resulting tokens at `/team` instead of `.env`.
 
 ---
 
@@ -211,10 +212,10 @@ draft pages all work; Puppeteer rendering, `generateImage`, and MinIO upload are
 
 > **Whose Claude account pays?** In CLI mode a user who has connected a personal token
 > at `/settings` (from `claude setup-token`) bills their OWN subscription; everyone else
-> — plus the scheduler worker and MCP/ACP — uses the shared `CLAUDE_CODE_OAUTH_TOKEN`
-> from `.env` (or, unset, your logged-in session). `TOKEN_ENCRYPTION_KEY` also protects
-> these stored user tokens. The Docker image ships the Claude CLI, so `DESIGN_PROVIDER=cli`
-> works in the container too.
+> — plus the scheduler worker and MCP/ACP — falls back to the team's shared token (set at
+> `/team` by a team admin), or, if that's unset too, your logged-in session. `TOKEN_ENCRYPTION_KEY`
+> also protects these stored personal/team tokens. The Docker image ships the Claude CLI,
+> so `DESIGN_PROVIDER=cli` works in the container too.
 
 > **MinIO image pin:** the compose pins `minio/minio:RELEASE.2025-09-07T16-13-09Z`. Do
 > NOT pin back to a pre-2025 release — the volume's on-disk format ("xl meta version 3")

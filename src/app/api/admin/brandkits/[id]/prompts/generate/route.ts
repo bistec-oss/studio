@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireRole } from '@/lib/auth'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await requireRole('admin')
-  if (auth instanceof NextResponse) return auth
-  const params = await ctx.params
+type Params = { id: string }
 
+export const POST = withTeamAdmin<Params>(async (req: NextRequest, { params }, user) => {
   const body = await req.json()
   const { description } = body
 
@@ -19,7 +17,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     where: { id: params.id },
     include: { artifacts: { where: { feedToAI: true }, select: { name: true, type: true } } },
   })
-  if (!kit || kit.isDeleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const colors = Array.isArray(kit.colors) ? (kit.colors as string[]).join(', ') : 'none specified'
   const fonts = Array.isArray(kit.fonts)
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // Drafts via the shared helper: MOCK_AI test seam + provider-registry key
   // resolution live inside it (see src/lib/brandkit/voiceDraft.ts).
   const draft = await draftBrandVoice(
+    user.teamId,
     `You are a brand strategist. Write a brand voice prompt for an AI design agent.
 
 Brand name: ${kit.name}
@@ -47,4 +48,4 @@ Write a detailed system prompt (2–4 paragraphs) that instructs an AI design ag
 
   // Return the draft — admin must explicitly save it as a new version
   return NextResponse.json({ draft })
-}
+})

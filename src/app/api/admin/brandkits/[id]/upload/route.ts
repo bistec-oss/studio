@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
-import { withAdmin } from '@/lib/api/handler'
+import { prisma } from '@/lib/prisma'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload } from '@/lib/storage/minio'
 
 // Accepts a multipart file upload and returns a stable public MinIO URL.
 // Used by the admin UI to upload logos and fonts before PATCHing the kit.
-export const POST = withAdmin<{ id: string }>(async (req, { params }) => {
+export const POST = withTeamAdmin<{ id: string }>(async (req, { params }, user) => {
+  const kit = await prisma.brandKit.findUnique({ where: { id: params.id }, select: { id: true, teamId: true, isDeleted: true } })
+  if (!kit || kit.isDeleted || kit.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Brand kit not found' }, { status: 404 })
+  }
+
   const formData = await req.formData()
   const file = formData.get('file') as File | null
 

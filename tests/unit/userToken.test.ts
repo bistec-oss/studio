@@ -1,19 +1,25 @@
-// Per-user Claude token resolver layer: resolution precedence, the
-// mark-invalid write, withUserClaudeAuth context wiring, and save-time
-// validation across its three branches (MOCK_AI seam / CLI live ping / API
-// mode skip). Prisma and the CLI runner are mocked; crypto is real.
+// Claude credential resolver layer: resolution precedence (personal → team →
+// null), the mark-invalid writes for both tiers, withClaudeAuth context
+// wiring, and save-time validation across its three branches (MOCK_AI seam /
+// CLI live ping / API mode skip). Prisma and the CLI runner are mocked;
+// crypto is real.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   findUnique: vi.fn(),
   updateMany: vi.fn(),
+  teamFindUnique: vi.fn(),
+  teamUpdateMany: vi.fn(),
   isCliMode: vi.fn(() => true),
   runClaudeCli: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { userClaudeToken: { findUnique: h.findUnique, updateMany: h.updateMany } },
+  prisma: {
+    userClaudeToken: { findUnique: h.findUnique, updateMany: h.updateMany },
+    team: { findUnique: h.teamFindUnique, updateMany: h.teamUpdateMany },
+  },
 }))
 vi.mock('@/lib/agent/config', () => ({ isCliMode: h.isCliMode }))
 vi.mock('@/lib/agent/claudeCli', () => ({ runClaudeCli: h.runClaudeCli }))
@@ -25,13 +31,16 @@ process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64)
 const { encrypt } = await import('@/lib/crypto')
 const { currentClaudeAuth } = await import('@/lib/agent/claudeAuth')
 const {
-  resolveClaudeAuthForUser,
-  withUserClaudeAuth,
+  resolveClaudeAuth,
+  withClaudeAuth,
   markUserTokenInvalid,
+  markTeamClaudeTokenInvalid,
   validateClaudeToken,
 } = await import('@/lib/agent/userToken')
 
 const PLAINTEXT = 'sk-ant-oat01-USER-personal-token-abc123'
+const TEAM_PLAINTEXT = 'sk-ant-oat01-TEAM-shared-token-xyz789'
+const TEAM_ID = 'team-1'
 
 function tokenRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -48,50 +57,128 @@ function tokenRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function teamRow(overrides: Record<string, unknown> = {}) {
+  return {
+    encryptedClaudeToken: encrypt(TEAM_PLAINTEXT),
+    ...overrides,
+  }
+}
+
 beforeEach(() => {
   h.findUnique.mockReset()
   h.updateMany.mockReset().mockResolvedValue({ count: 1 })
+  h.teamFindUnique.mockReset().mockResolvedValue(null)
+  h.teamUpdateMany.mockReset().mockResolvedValue({ count: 1 })
   h.isCliMode.mockReset().mockReturnValue(true)
   h.runClaudeCli.mockReset().mockResolvedValue('pong')
 })
 
-describe('resolveClaudeAuthForUser', () => {
-  it('CLI mode + ACTIVE row → auth with the decrypted token', async () => {
+describe('resolveClaudeAuth — personal tier', () => {
+  it('CLI mode + ACTIVE row (userId given) → auth with the decrypted personal token', async () => {
     h.findUnique.mockResolvedValue(tokenRow())
-    const auth = await resolveClaudeAuthForUser('user-1')
+    const auth = await resolveClaudeAuth('user-1', TEAM_ID)
     expect(auth).not.toBeNull()
     expect(auth!.token).toBe(PLAINTEXT)
     expect(auth!.userId).toBe('user-1')
+    expect(auth!.teamId).toBe(TEAM_ID)
   })
 
-  it('INVALID row → null (awaiting reconnect)', async () => {
+  it('personal token wins over an existing team token, without eagerly querying the team', async () => {
+    h.findUnique.mockResolvedValue(tokenRow())
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth('user-1', TEAM_ID)
+    expect(auth!.token).toBe(PLAINTEXT)
+    expect(h.teamFindUnique).not.toHaveBeenCalled()
+  })
+
+  it("the personal auth's resolveFallback lazily resolves the team tier", async () => {
+    h.findUnique.mockResolvedValue(tokenRow())
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth('user-1', TEAM_ID)
+    const fallback = await auth!.resolveFallback!()
+    expect(fallback).not.toBeNull()
+    expect(fallback!.token).toBe(TEAM_PLAINTEXT)
+    expect(fallback!.userId).toBeNull()
+    expect(fallback!.teamId).toBe(TEAM_ID)
+  })
+
+  it('INVALID row → falls through to the team tier (null when the team has none)', async () => {
     h.findUnique.mockResolvedValue(tokenRow({ status: 'INVALID' }))
-    expect(await resolveClaudeAuthForUser('user-1')).toBeNull()
+    expect(await resolveClaudeAuth('user-1', TEAM_ID)).toBeNull()
+    expect(h.teamFindUnique).toHaveBeenCalled()
   })
 
-  it('deactivated account → null even with an ACTIVE row', async () => {
+  it('deactivated account → falls through to the team tier', async () => {
     h.findUnique.mockResolvedValue(tokenRow({ user: { disabled: true } }))
-    expect(await resolveClaudeAuthForUser('user-1')).toBeNull()
+    expect(await resolveClaudeAuth('user-1', TEAM_ID)).toBeNull()
   })
 
-  it('no row → null', async () => {
+  it('no personal row → falls through to the team tier', async () => {
     h.findUnique.mockResolvedValue(null)
-    expect(await resolveClaudeAuthForUser('user-1')).toBeNull()
+    expect(await resolveClaudeAuth('user-1', TEAM_ID)).toBeNull()
   })
 
   it('API mode → null WITHOUT touching the DB', async () => {
     h.isCliMode.mockReturnValue(false)
-    expect(await resolveClaudeAuthForUser('user-1')).toBeNull()
+    expect(await resolveClaudeAuth('user-1', TEAM_ID)).toBeNull()
     expect(h.findUnique).not.toHaveBeenCalled()
+    expect(h.teamFindUnique).not.toHaveBeenCalled()
   })
 
-  it('auth.onAuthFailure flips the stored row to INVALID (idempotent updateMany)', async () => {
+  it('auth.onAuthFailure flips the stored personal row to INVALID (idempotent updateMany)', async () => {
     h.findUnique.mockResolvedValue(tokenRow())
-    const auth = await resolveClaudeAuthForUser('user-1')
+    const auth = await resolveClaudeAuth('user-1', TEAM_ID)
     await auth!.onAuthFailure()
     expect(h.updateMany).toHaveBeenCalledWith({
       where: { userId: 'user-1' },
       data: { status: 'INVALID' },
+    })
+  })
+})
+
+describe('resolveClaudeAuth — team tier', () => {
+  it('resolveClaudeAuth(null, teamId) → the team token when the team row has one', async () => {
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth(null, TEAM_ID)
+    expect(auth).not.toBeNull()
+    expect(auth!.token).toBe(TEAM_PLAINTEXT)
+    expect(auth!.userId).toBeNull()
+    expect(auth!.teamId).toBe(TEAM_ID)
+    // No personal user given ⇒ never queries the personal-token table.
+    expect(h.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('resolveClaudeAuth(null, teamId) → null when the team has no token', async () => {
+    h.teamFindUnique.mockResolvedValue(teamRow({ encryptedClaudeToken: null }))
+    expect(await resolveClaudeAuth(null, TEAM_ID)).toBeNull()
+  })
+
+  it('resolveClaudeAuth(null, teamId) → null when neither tier exists (no team row)', async () => {
+    h.teamFindUnique.mockResolvedValue(null)
+    expect(await resolveClaudeAuth(null, TEAM_ID)).toBeNull()
+  })
+
+  it('personal over team: given both a personal AND a team token, resolveClaudeAuth returns personal', async () => {
+    h.findUnique.mockResolvedValue(tokenRow())
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth('user-1', TEAM_ID)
+    expect(auth!.userId).toBe('user-1')
+    expect(auth!.token).toBe(PLAINTEXT)
+  })
+
+  it("the team auth has no further resolveFallback (it's the last tier)", async () => {
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth(null, TEAM_ID)
+    expect(auth!.resolveFallback).toBeUndefined()
+  })
+
+  it('team onAuthFailure clears both Team columns (idempotent updateMany)', async () => {
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const auth = await resolveClaudeAuth(null, TEAM_ID)
+    await auth!.onAuthFailure()
+    expect(h.teamUpdateMany).toHaveBeenCalledWith({
+      where: { id: TEAM_ID },
+      data: { encryptedClaudeToken: null, claudeKeyPrefix: null },
     })
   })
 })
@@ -103,24 +190,52 @@ describe('markUserTokenInvalid', () => {
   })
 })
 
-describe('withUserClaudeAuth', () => {
-  it('CLI mode + ACTIVE row → fn sees the auth context', async () => {
+describe('markTeamClaudeTokenInvalid', () => {
+  it('clears both token columns via updateMany (idempotent)', async () => {
+    h.teamUpdateMany.mockResolvedValue({ count: 0 })
+    await expect(markTeamClaudeTokenInvalid(TEAM_ID)).resolves.toBeUndefined()
+    expect(h.teamUpdateMany).toHaveBeenCalledWith({
+      where: { id: TEAM_ID },
+      data: { encryptedClaudeToken: null, claudeKeyPrefix: null },
+    })
+  })
+})
+
+describe('withClaudeAuth', () => {
+  it('CLI mode + ACTIVE personal row → fn sees the personal auth context', async () => {
     h.findUnique.mockResolvedValue(tokenRow())
-    const seen = await withUserClaudeAuth('user-1', async () => currentClaudeAuth())
+    const seen = await withClaudeAuth('user-1', TEAM_ID, async () => currentClaudeAuth())
     expect(seen?.token).toBe(PLAINTEXT)
+    expect(seen?.userId).toBe('user-1')
   })
 
-  it('no row → fn runs with no context (shared credential)', async () => {
+  it('no personal row, team has a token → fn sees the team auth context', async () => {
     h.findUnique.mockResolvedValue(null)
-    const seen = await withUserClaudeAuth('user-1', async () => currentClaudeAuth())
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const seen = await withClaudeAuth('user-1', TEAM_ID, async () => currentClaudeAuth())
+    expect(seen?.token).toBe(TEAM_PLAINTEXT)
+    expect(seen?.userId).toBeNull()
+  })
+
+  it('userId null (e.g. no acting user) resolves straight to the team tier', async () => {
+    h.teamFindUnique.mockResolvedValue(teamRow())
+    const seen = await withClaudeAuth(null, TEAM_ID, async () => currentClaudeAuth())
+    expect(seen?.token).toBe(TEAM_PLAINTEXT)
+  })
+
+  it('neither tier → fn runs with no context', async () => {
+    h.findUnique.mockResolvedValue(null)
+    h.teamFindUnique.mockResolvedValue(null)
+    const seen = await withClaudeAuth('user-1', TEAM_ID, async () => currentClaudeAuth())
     expect(seen).toBeUndefined()
   })
 
   it('API mode → fast no-op: fn runs, DB never queried', async () => {
     h.isCliMode.mockReturnValue(false)
-    const seen = await withUserClaudeAuth('user-1', async () => currentClaudeAuth())
+    const seen = await withClaudeAuth('user-1', TEAM_ID, async () => currentClaudeAuth())
     expect(seen).toBeUndefined()
     expect(h.findUnique).not.toHaveBeenCalled()
+    expect(h.teamFindUnique).not.toHaveBeenCalled()
   })
 })
 

@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { withAuth, withAdmin, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
 type Params = { id: string }
 
-async function campaignExists(id: string): Promise<boolean> {
+async function campaignInTeam(id: string, teamId: string): Promise<boolean> {
   const campaign = await prisma.campaign.findFirst({
-    where: { id, isDeleted: false },
+    where: { id, isDeleted: false, teamId },
     select: { id: true },
   })
   return Boolean(campaign)
@@ -17,8 +17,11 @@ async function campaignExists(id: string): Promise<boolean> {
 // Versions are readable by any signed-in user — editors see the active briefing
 // for context in the wizard and on the campaign page; writes are admin-only
 // (the briefing steers every post in the campaign, like the brand voice).
-export const GET = withAuth<Params>(async (_req, { params }) => {
-  if (!(await campaignExists(params.id))) {
+// Team tenancy fix: this ran under plain withAuth + a teamId-less
+// campaignExists() check — any authenticated user of ANY team could read
+// another team's full briefing content (every version) by campaignId.
+export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
+  if (!(await campaignInTeam(params.id, user.teamId))) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
 
@@ -34,10 +37,14 @@ const createSchema = z.object({
   content: z.string().trim().min(1, 'content is required'),
 })
 
-export const POST = withAdmin<Params>(async (req, { params }, user) => {
+export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const { userId } = user
 
-  if (!(await campaignExists(params.id))) {
+  const campaign = await prisma.campaign.findFirst({
+    where: { id: params.id, isDeleted: false },
+    select: { id: true, teamId: true },
+  })
+  if (!campaign || campaign.teamId !== user.teamId) {
     return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
   }
 

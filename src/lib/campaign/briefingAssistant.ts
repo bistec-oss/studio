@@ -25,8 +25,10 @@ export interface ChatMessage {
 const MAX_TOKENS = 2048
 const CLI_TIMEOUT_MS = 120_000
 
-// Exported for reuse by the brand-kit assistant (same mode-agnostic text call).
-export async function runBriefingModel(system: string, messages: ChatMessage[]): Promise<string> {
+// Exported for reuse by the brand-kit assistant (same mode-agnostic text
+// call). teamId is required (team-tenancy fix, Task 19b) — every caller runs
+// inside an already team-scoped request.
+export async function runBriefingModel(system: string, messages: ChatMessage[], teamId: string): Promise<string> {
   if (isCliMode()) {
     // One prompt per turn: the CLI is stateless, so the whole transcript rides
     // along. Doc context is capped (documents.ts) to keep this affordable.
@@ -47,7 +49,7 @@ export async function runBriefingModel(system: string, messages: ChatMessage[]):
     })
   }
 
-  const apiKey = await resolveAnthropicApiKey()
+  const apiKey = await resolveAnthropicApiKey(teamId)
   const client = new Anthropic({ apiKey: apiKey ?? undefined })
   const message = await client.messages.create({
     model: modelFor('B', 'api'),
@@ -61,10 +63,12 @@ export async function runBriefingModel(system: string, messages: ChatMessage[]):
 
 // Shared campaign context (brand voice + source documents + current briefing)
 // for both assistant prompts. `brandKitId` (the brief's own kit selection)
-// overrides the campaign chain, matching generation-time precedence.
-async function buildCampaignContext(campaignId?: string, brandKitId?: string): Promise<string> {
+// overrides the campaign chain, matching generation-time precedence. `teamId`
+// is required (team-tenancy fix, final review C1) — resolveBrandKit needs it
+// to scope every tier, including its team-default fallback.
+async function buildCampaignContext(teamId: string, campaignId?: string, brandKitId?: string): Promise<string> {
   const [kit, docs, activeBriefing] = await Promise.all([
-    resolveBrandKit(campaignId, brandKitId),
+    resolveBrandKit(teamId, campaignId, brandKitId),
     campaignId ? collectCampaignDocsContext(campaignId) : Promise.resolve({ text: '', truncated: false }),
     campaignId ? getActiveCampaignBriefing(campaignId) : Promise.resolve(null),
   ])
@@ -143,7 +147,8 @@ export interface BriefingChatResult {
 
 export async function runBriefingChat(
   campaignId: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  teamId: string
 ): Promise<BriefingChatResult> {
   if (MOCK_AI) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
@@ -156,7 +161,7 @@ export async function runBriefingChat(
   }
 
   const [context, imageUrls] = await Promise.all([
-    buildCampaignContext(campaignId),
+    buildCampaignContext(teamId, campaignId),
     collectCampaignDocImageUrls(campaignId),
   ])
   const system = [
@@ -187,9 +192,9 @@ export async function runBriefingChat(
       '',
       `Write the Assistant's next reply to the latest user message: ${lastUser?.content ?? ''}`,
     ].join('\n')
-    reply = await runVisionModel({ system, userMessage, imageUrls, label: 'briefing' })
+    reply = await runVisionModel({ system, userMessage, imageUrls, label: 'briefing', teamId })
   } else {
-    reply = await runBriefingModel(system, messages)
+    reply = await runBriefingModel(system, messages, teamId)
   }
   return {
     reply,
@@ -198,10 +203,10 @@ export async function runBriefingChat(
   }
 }
 
-export async function enhanceBriefing(campaignId: string, content: string): Promise<string> {
+export async function enhanceBriefing(campaignId: string, content: string, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(content)
 
-  const context = await buildCampaignContext(campaignId)
+  const context = await buildCampaignContext(teamId, campaignId)
   const system = [
     'You improve campaign briefings for bistec-studio. The briefing is free-text context injected into every AI post generation under the campaign, on top of the brand voice.',
     'Rewrite the briefing the user provides: keep every concrete fact, sharpen vague statements, fill obvious gaps from the campaign context, and structure it so a copywriter and a designer can act on it (goal, audience, key messages, offers/CTAs, tone, do/don\'t rules).',
@@ -216,7 +221,7 @@ export async function enhanceBriefing(campaignId: string, content: string): Prom
     ? `Improve this campaign briefing:\n\n${content}`
     : 'Draft a campaign briefing from the campaign context.'
 
-  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
+  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId)
   return stripCodeFences(reply).trim()
 }
 
@@ -233,10 +238,10 @@ export interface EnhancePostBriefInput {
 // per-post twin of enhanceBriefing. Grounded in the same context the
 // generation itself will use: the resolved brand voice plus, when a campaign
 // is selected, its active briefing and source documents.
-export async function enhancePostBrief(input: EnhancePostBriefInput): Promise<string> {
+export async function enhancePostBrief(input: EnhancePostBriefInput, teamId: string): Promise<string> {
   if (MOCK_AI) return buildMockBriefingEnhance(input.content)
 
-  const context = await buildCampaignContext(input.campaignId, input.brandKitId)
+  const context = await buildCampaignContext(teamId, input.campaignId, input.brandKitId)
   const system = [
     'You improve briefs for single social media posts in bistec-studio. The brief is the prompt an AI copywriter and an AI designer act on to produce ONE Instagram/LinkedIn image post.',
     'Rewrite the brief the user provides: keep every concrete fact, sharpen vague statements, make the key message and call-to-action explicit, and add helpful specifics from the campaign context when they clearly apply to this post.',
@@ -260,6 +265,6 @@ export async function enhancePostBrief(input: EnhancePostBriefInput): Promise<st
     ? `${details}\n\nImprove this post brief:\n\n${input.content}`
     : `${details}\n\nDraft a post brief for this topic.`
 
-  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }])
+  const reply = await runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId)
   return stripCodeFences(reply).trim()
 }

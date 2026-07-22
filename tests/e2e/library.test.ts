@@ -16,12 +16,17 @@ const EDITOR_EMAIL = 'editor@bisteccare.lk'
 const EDITOR_PASSWORD = 'BistecStudio2026!'
 
 // Mint an EXPORTED (READY) draft as the admin, returning the draftId.
+// UNCATEGORIZED (no campaignId) — team tenancy's D6 rule makes a
+// campaign-linked brief team-shared (visible to every in-team editor), so a
+// campaign-linked admin fixture would no longer prove "an editor never sees
+// the admin's draft" (it did, pre-tenancy, since there was no sharing
+// concept at all). Uses an explicit brandKitId instead of a campaign so
+// resolveBrandKit still has something concrete to resolve.
 async function adminDraft(admin: ApiClient, topic: string): Promise<string> {
   const kit = await (await admin.post('/api/admin/brandkits', { name: `Lib Kit ${topic}`, colors: ['#0284c7'] })).json()
-  const camp = await (await admin.post('/api/campaigns', { name: `Lib Camp ${topic}`, brandKitId: kit.id })).json()
   const brief = await (await admin.post('/api/briefs', {
     topic, goal: 'g', tone: 'professional', channels: ['INSTAGRAM'],
-    designMode: 'GENERATE', copyProviderKey: 'cli', campaignId: camp.id,
+    designMode: 'GENERATE', copyProviderKey: 'cli', brandKitId: kit.id,
   })).json()
   const assembled = await (await admin.post('/api/generate/assemble-b', { briefId: brief.id })).json()
   await waitForDraft(admin, assembled.draftId)

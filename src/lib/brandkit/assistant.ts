@@ -165,7 +165,11 @@ function mergeColors(docColors: string[], sampled: string[]): string[] {
   return merged
 }
 
-export async function runBrandKitChat(kitId: string, messages: ChatMessage[]): Promise<BrandKitChatResult> {
+export async function runBrandKitChat(
+  kitId: string,
+  messages: ChatMessage[],
+  teamId: string
+): Promise<BrandKitChatResult> {
   const { imageUrls: urls, docs } = await collectBrandKitGrounding(kitId)
 
   if (MOCK_AI) {
@@ -212,8 +216,8 @@ export async function runBrandKitChat(kitId: string, messages: ChatMessage[]): P
   // mode-agnostic text call the campaign briefing assistant uses.
   const [reply, sampled] = await Promise.all([
     urls.length > 0
-      ? runVisionModel({ system, userMessage, imageUrls: urls, label: 'brandkit' })
-      : runBriefingModel(system, [{ role: 'user', content: userMessage }]),
+      ? runVisionModel({ system, userMessage, imageUrls: urls, label: 'brandkit', teamId })
+      : runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId),
     samplePalette(urls),
   ])
   const block = extractBrandKitBlock(reply)

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { withAuth, parseBody } from '@/lib/api/handler'
+import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 
-export const GET = withAuth(async () => {
+export const GET = withTeamAuth(async (_req, _ctx, user) => {
   const projects = await prisma.project.findMany({
-    where: { isDeleted: false },
+    where: { isDeleted: false, teamId: user.teamId },
     include: {
       defaultBrandKit: { select: { id: true, name: true } },
       _count: { select: { campaigns: true } },
@@ -24,13 +24,29 @@ const createSchema = z.object({
   defaultTone: z.string().nullish(),
 })
 
-export const POST = withAuth(async (req: NextRequest) => {
+export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { name, defaultBrandKitId, defaultTone } = body.data
 
+  // I3 (final review): this validation was MISSING entirely — a bogus id was
+  // a P2003 500, and a foreign team's id was accepted silently, becoming the
+  // project's default brand kit (and thus, via resolveBrandKit's project
+  // tier, the whole team's fallback branding).
+  if (defaultBrandKitId) {
+    const kit = await prisma.brandKit.findFirst({
+      where: { id: defaultBrandKitId, teamId: user.teamId, isDeleted: false },
+    })
+    if (!kit) return NextResponse.json({ error: 'Brand kit not found' }, { status: 400 })
+  }
+
   const project = await prisma.project.create({
-    data: { name, defaultBrandKitId: defaultBrandKitId ?? null, defaultTone: defaultTone ?? null },
+    data: {
+      teamId: user.teamId,
+      name,
+      defaultBrandKitId: defaultBrandKitId ?? null,
+      defaultTone: defaultTone ?? null,
+    },
     include: { defaultBrandKit: { select: { id: true, name: true } } },
   })
 

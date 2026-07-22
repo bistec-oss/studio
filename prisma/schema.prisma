@@ -127,6 +127,8 @@ model User {
   scheduledGenerations ScheduledGeneration[]
   claudeToken   UserClaudeToken?
   briefDrafts   BriefDraft[]
+  teamMemberships TeamMembership[]
+  openAiKey     UserOpenAiKey?
 }
 
 // An UNFINISHED brief-wizard session (autosaved working state), NOT a Brief:
@@ -137,6 +139,7 @@ model User {
 // users' unfinished briefs (private working state, unlike generated drafts).
 model BriefDraft {
   id        String   @id @default(cuid())
+  teamId    String
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   topic     String   @default("") // denormalized from payload for dashboard rows
@@ -145,6 +148,7 @@ model BriefDraft {
   updatedAt DateTime @updatedAt
 
   @@index([userId, updatedAt])
+  @@index([teamId])
 }
 
 // A user's personal Claude Code OAuth token (pasted from `claude setup-token`).
@@ -207,10 +211,68 @@ model Verification {
   updatedAt  DateTime? @updatedAt
 }
 
+// ── Team tenancy ──────────────────────────────────────────────────────────
+
+enum TeamRole {
+  ADMIN
+  EDITOR
+}
+
+model Team {
+  id                   String           @id @default(cuid())
+  name                 String           @unique
+  isDeleted            Boolean          @default(false)
+  deletedAt            DateTime?
+  createdAt            DateTime         @default(now())
+  // Team Claude token (scheduler + member fallback), AES-256-GCM via src/lib/crypto.ts
+  encryptedClaudeToken String?
+  claudeKeyPrefix      String?
+  memberships          TeamMembership[]
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      TeamRole
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+// Personal OpenAI key, mirrors UserClaudeToken (encrypted + masked prefix, 1 row/user)
+model UserOpenAiKey {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedKey String
+  keyPrefix    String
+  status       String   @default("ACTIVE") // ACTIVE | INVALID
+  createdAt    DateTime @default(now())
+}
+
+// Machine-caller keys for MCP/ACP, replaces env BISTEC_API_KEYS.
+// Stored hashed (never read back); the plaintext is shown once at creation.
+model ApiKey {
+  id        String    @id @default(cuid())
+  teamId    String
+  label     String
+  keyHash   String    @unique
+  keyPrefix String
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([teamId])
+}
+
 // ── App models ────────────────────────────────────────────────────────────
 
 model Project {
   id                String            @id @default(cuid())
+  teamId            String
   name              String
   defaultBrandKitId String?
   defaultBrandKit   BrandKit?         @relation("ProjectBrandKit", fields: [defaultBrandKitId], references: [id])
@@ -219,10 +281,13 @@ model Project {
   deletedAt         DateTime?
   createdAt         DateTime          @default(now())
   campaigns         ProjectCampaign[]
+
+  @@index([teamId])
 }
 
 model Campaign {
   id           String             @id @default(cuid())
+  teamId       String
   name         String
   brandKitId   String?
   brandKit     BrandKit?          @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
@@ -235,6 +300,8 @@ model Campaign {
   briefings    CampaignBriefing[]
   scheduledGenerations ScheduledGeneration[]
   documents    CampaignDocument[]
+
+  @@index([teamId])
 }
 
 // A source document (strategy deck, product one-pager, …) handed in by an
@@ -243,6 +310,7 @@ model Campaign {
 // (capped — `truncated` marks a cut) injected into briefing chat/enhance prompts.
 model CampaignDocument {
   id          String   @id @default(cuid())
+  teamId      String
   campaignId  String
   campaign    Campaign @relation(fields: [campaignId], references: [id])
   name        String
@@ -255,6 +323,7 @@ model CampaignDocument {
   createdAt   DateTime @default(now())
 
   @@index([campaignId])
+  @@index([teamId])
 }
 
 // A planned post under a campaign: per-post brief specifics + a generation
@@ -263,6 +332,7 @@ model CampaignDocument {
 // executes postAction. Retries with backoff on failure; FAILED is re-runnable.
 model ScheduledGeneration {
   id          String               @id @default(cuid())
+  teamId      String
   campaignId  String
   campaign    Campaign             @relation(fields: [campaignId], references: [id])
   createdById String
@@ -298,6 +368,7 @@ model ScheduledGeneration {
   @@index([status, generateAt])
   @@index([status, nextRetryAt])
   @@index([campaignId])
+  @@index([teamId])
 }
 
 // Versioned free-text campaign briefing — the campaign-level "80% of the brief"
@@ -328,6 +399,7 @@ model ProjectCampaign {
 
 model Brief {
   id                  String             @id @default(cuid())
+  teamId              String
   userId              String
   user                User               @relation(fields: [userId], references: [id])
   campaignId          String?
@@ -354,10 +426,12 @@ model Brief {
   @@index([userId])
   @@index([campaignId])
   @@index([brandKitId])
+  @@index([teamId])
 }
 
 model Draft {
   id              String          @id @default(cuid())
+  teamId          String
   briefId         String
   brief           Brief           @relation(fields: [briefId], references: [id])
   copyText        String
@@ -392,10 +466,12 @@ model Draft {
   scheduledGenerations ScheduledGeneration[]
 
   @@index([briefId])
+  @@index([teamId])
 }
 
 model Post {
   id          String     @id @default(cuid())
+  teamId      String
   draftId     String
   draft       Draft      @relation(fields: [draftId], references: [id])
   userId      String
@@ -416,10 +492,12 @@ model Post {
   @@index([status, nextRetryAt])
   @@index([draftId])
   @@index([userId])
+  @@index([teamId])
 }
 
 model BrandKit {
   id        String              @id @default(cuid())
+  teamId    String
   name      String
   colors    Json?
   fonts     Json?
@@ -437,6 +515,7 @@ model BrandKit {
   briefs    Brief[]             @relation("BriefBrandKit")
 
   @@index([isDefault, isDeleted])
+  @@index([teamId])
 }
 
 // Source documents/images grounding the brand-kit assistant chat — mirrors
@@ -444,6 +523,7 @@ model BrandKit {
 // generation prompts (Path B reads only feedToAI artifacts).
 model BrandKitDocument {
   id          String   @id @default(cuid())
+  teamId      String
   brandKitId  String
   brandKit    BrandKit @relation(fields: [brandKitId], references: [id])
   name        String
@@ -456,6 +536,7 @@ model BrandKitDocument {
   createdAt   DateTime @default(now())
 
   @@index([brandKitId])
+  @@index([teamId])
 }
 
 model BrandKitTemplate {
@@ -504,6 +585,7 @@ model BrandKitArtifact {
 
 model AvailableProvider {
   id              String       @id @default(cuid())
+  teamId          String
   slot            ProviderSlot
   providerKey     String
   providerName    String
@@ -514,16 +596,21 @@ model AvailableProvider {
   isDefault       Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
-  @@unique([slot, providerKey])
+  @@unique([teamId, slot, providerKey])
+  @@index([teamId])
 }
 
 model ChannelToken {
   id                String   @id @default(cuid())
-  channel           Channel  @unique
+  teamId            String
+  channel           Channel
   encryptedToken    String
   encryptedMetadata String
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  @@unique([teamId, channel])
+  @@index([teamId])
 }
 
 model DraftRevision {

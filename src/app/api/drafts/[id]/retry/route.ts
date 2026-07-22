@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { forbiddenIfNotOwner } from '@/lib/auth'
-import { withAuth } from '@/lib/api/handler'
+import { withTeamAuth } from '@/lib/api/handler'
+import { canAccessContent } from '@/lib/authz/visibility'
 import { startBackgroundGeneration } from '@/lib/agent/backgroundGeneration'
 
 type Params = { id: string }
@@ -11,14 +11,17 @@ type Params = { id: string }
 // background again; the page's poll resumes and skeletons re-appear. Only a
 // FAILED draft can be retried — a live (EXPORTED/PUBLISHED) draft is left alone,
 // and an already-IN_PROGRESS one is presumed still running.
-export const POST = withAuth<Params>(async (_req, { params }, user) => {
+export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
   const draft = await prisma.draft.findUnique({
     where: { id: params.id },
-    select: { id: true, status: true, brief: { select: { userId: true } } },
+    select: { id: true, status: true, teamId: true, brief: { select: { userId: true, campaignId: true } } },
   })
-  if (!draft) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
-  const forbidden = forbiddenIfNotOwner(user, draft.brief.userId)
-  if (forbidden) return forbidden
+  if (
+    !draft ||
+    !canAccessContent(user, { teamId: draft.teamId, ownerId: draft.brief.userId, campaignId: draft.brief.campaignId })
+  ) {
+    return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
+  }
 
   if (draft.status !== 'FAILED') {
     return NextResponse.json(
@@ -31,7 +34,7 @@ export const POST = withAuth<Params>(async (_req, { params }, user) => {
     where: { id: params.id },
     data: { status: 'IN_PROGRESS', failureReason: null },
   })
-  await startBackgroundGeneration(params.id, user.userId)
+  await startBackgroundGeneration(params.id, user.userId, user.teamId)
 
   return NextResponse.json({ ok: true }, { status: 202 })
 })

@@ -109,7 +109,7 @@ describe('runBrandKitChat grounding', () => {
 
   it('returns the canned reply ONLY when there are no artifacts AND no documents', async () => {
     stubGrounding({})
-    const result = await runBrandKitChat('k1', messages)
+    const result = await runBrandKitChat('k1', messages, 'team-1')
     expect(result.reply).toContain('Add at least one reference')
     expect(result.suggestion).toBeNull()
     expect(h.runVisionModel).not.toHaveBeenCalled()
@@ -120,7 +120,7 @@ describe('runBrandKitChat grounding', () => {
     stubGrounding({
       docTexts: [{ name: 'guidelines.pdf', parsedText: 'DOCUMENT BODY', truncated: false }],
     })
-    const result = await runBrandKitChat('k1', messages)
+    const result = await runBrandKitChat('k1', messages, 'team-1')
     expect(result.reply).toBe('text reply — no block')
     expect(h.runVisionModel).not.toHaveBeenCalled()
     expect(h.runBriefingModel).toHaveBeenCalledTimes(1)
@@ -130,7 +130,7 @@ describe('runBrandKitChat grounding', () => {
 
   it('a document IMAGE alone lifts the guard and routes to the vision model', async () => {
     stubGrounding({ docImageKeys: ['brandkits/k1/ref.png'] })
-    const result = await runBrandKitChat('k1', messages)
+    const result = await runBrandKitChat('k1', messages, 'team-1')
     expect(result.reply).toBe('vision reply — no block')
     expect(h.runBriefingModel).not.toHaveBeenCalled()
     expect(h.runVisionModel).toHaveBeenCalledTimes(1)

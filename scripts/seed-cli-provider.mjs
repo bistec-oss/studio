@@ -15,10 +15,26 @@ const prisma = new PrismaClient()
 // so this placeholder is never decoded.
 const PLACEHOLDER = "cli"
 
+// Team tenancy: AvailableProvider.teamId is required and the unique
+// constraint is now (teamId, slot, providerKey). This baseline provider
+// belongs in the "Bistec" team — created unconditionally by the
+// team_tenancy_b migration's backfill (id 'team_bistec_default'), so it
+// always exists by the time this script runs. Falls back to creating it
+// here too, defensively, if run standalone.
+async function ensureBistecTeamId() {
+  const existing = await prisma.team.findFirst({ where: { name: "Bistec" } })
+  if (existing) return existing.id
+  const created = await prisma.team.create({ data: { name: "Bistec" } })
+  return created.id
+}
+
+const teamId = await ensureBistecTeamId()
+
 const cli = await prisma.availableProvider.upsert({
-  where: { slot_providerKey: { slot: "COPY", providerKey: "cli" } },
+  where: { teamId_slot_providerKey: { teamId, slot: "COPY", providerKey: "cli" } },
   update: { isEnabled: true, isDefault: true },
   create: {
+    teamId,
     slot: "COPY",
     providerKey: "cli",
     providerName: "cli",

@@ -1,10 +1,13 @@
 'use client'
 
 import { ClaudeTokenCard } from '@/components/settings/ClaudeTokenCard'
+import { OpenAiKeyCard } from '@/components/settings/OpenAiKeyCard'
+import { ChangePasswordCard } from '@/components/settings/ChangePasswordCard'
 
-// Self-service user settings. Currently hosts the personal Claude account
-// connection; future per-user preferences belong here too (it's the only
-// non-admin settings surface).
+// Self-service user settings: personal Claude/OpenAI credential connections
+// plus account security. Team-wide settings (shared providers, channels,
+// team Claude token, API keys) live at /team instead — this page is strictly
+// per-user.
 export default function SettingsPage() {
   return (
     <div>
@@ -15,8 +18,10 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="max-w-3xl">
+      <div className="max-w-3xl flex flex-col gap-6">
         <ClaudeTokenCard />
+        <OpenAiKeyCard />
+        <ChangePasswordCard />
       </div>
     </div>
   )

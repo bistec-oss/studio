@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { withAdmin } from '@/lib/api/handler'
+import { withTeamAdmin } from '@/lib/api/handler'
 import { PublishError } from '@/lib/social/types'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { publishToChannel } from '@/lib/publish/publishDraft'
 
-export const POST = withAdmin<{ id: string }>(async (_req, { params }) => {
+export const POST = withTeamAdmin<{ id: string }>(async (_req, { params }, user) => {
   const post = await prisma.post.findUnique({
     where: { id: params.id },
     include: {
@@ -13,7 +13,9 @@ export const POST = withAdmin<{ id: string }>(async (_req, { params }) => {
     },
   })
 
-  if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!post || post.teamId !== user.teamId) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   if (post.status !== 'FAILED') {
     return NextResponse.json({ error: 'Post is not in FAILED state' }, { status: 409 })
@@ -28,7 +30,7 @@ export const POST = withAdmin<{ id: string }>(async (_req, { params }) => {
   }
 
   try {
-    const { platformId } = await publishToChannel(post.channel, draft.exportUrl, draft.copyText ?? '')
+    const { platformId } = await publishToChannel(post.channel, draft.exportUrl, draft.copyText ?? '', user.teamId)
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: {

@@ -1,3 +1,15 @@
+// The identity ON WHOSE BEHALF a generation/refine call runs — NOT necessarily
+// the brief's owner. Teammate B refining/regenerating teammate A's shared
+// brief must resolve B's personal OpenAI key (or the team default), never
+// A's — see resolveImageProvider (src/providers/registry.ts), which only
+// consults the personal tier when userId is given. userId is null when there
+// is genuinely no signed-in actor (MCP/ACP machine calls, the scheduler's
+// unattended runs).
+export interface GenerationActor {
+  userId: string | null
+  teamId: string
+}
+
 export interface BrandKitContext {
   colors: string[]
   fonts: Array<{ name: string; url: string }>
@@ -25,6 +37,10 @@ export interface DesignAgentOptions {
   // Lets oversized templates be sent to the model with their inline assets
   // stripped, then re-inlined for the final render.
   inlineAssets?: Record<string, string>
+  // Who to resolve the IMAGE provider as, when the model calls the
+  // generateImage tool (see tools.ts's toolGenerateImage). Optional only for
+  // callers that predate this threading; pathA.ts/pathB.ts always supply it.
+  actor?: GenerationActor
 }
 
 export interface DesignAgentResult {
