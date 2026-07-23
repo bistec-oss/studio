@@ -5,6 +5,8 @@ import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { isAllowedAssetUrl } from '@/lib/storage/minio'
 import { Prisma, Channel, DesignMode, type AspectRatio } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
+import { isCliMode } from '@/lib/agent/config'
+import { resolveBriefCopyKey } from '@/lib/brief/copyProvider'
 
 // Permissive schema: only guards the JSON parse. The thorough hand-rolled
 // validation below (exact error messages + channel normalization) is kept as-is.
@@ -81,9 +83,13 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   if (aspectRatio != null && !isAspectRatio(aspectRatio)) {
     return NextResponse.json({ error: 'aspectRatio must be SQUARE, PORTRAIT, or STORY' }, { status: 400 })
   }
-  if (!copyProviderKey?.trim()) {
-    return NextResponse.json({ error: 'copyProviderKey is required' }, { status: 400 })
+  // CLI mode defaults copy to the local Claude CLI (OAuth chain) — no provider
+  // key required; an explicit key overrides and is existence-checked below.
+  const copyKeyDecision = resolveBriefCopyKey(copyProviderKey, isCliMode())
+  if ('error' in copyKeyDecision) {
+    return NextResponse.json({ error: copyKeyDecision.error }, { status: 400 })
   }
+  const { key: resolvedCopyKey, validateExists: mustValidateCopyKey } = copyKeyDecision
 
   // SSRF guard: image URLs are embedded into agent-generated HTML and fetched by
   // headless Chromium at render time, so they must point at our own MinIO storage
@@ -112,9 +118,11 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   // then at generation time resolve to, a different team's registered
   // provider/API key; see the matching fix in resolveCopyProvider).
   const [copyProvider, imageProvider, campaign, template, brandKit] = await Promise.all([
-    prisma.availableProvider.findFirst({
-      where: { providerKey: copyProviderKey, slot: 'COPY', teamId: user.teamId, isEnabled: true },
-    }),
+    mustValidateCopyKey
+      ? prisma.availableProvider.findFirst({
+          where: { providerKey: resolvedCopyKey, slot: 'COPY', teamId: user.teamId, isEnabled: true },
+        })
+      : Promise.resolve(null),
     imageProviderKey
       ? prisma.availableProvider.findFirst({
           where: { providerKey: imageProviderKey, slot: 'IMAGE', teamId: user.teamId, isEnabled: true },
@@ -137,7 +145,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
       : Promise.resolve(null),
   ])
 
-  if (!copyProvider) {
+  if (mustValidateCopyKey && !copyProvider) {
     return NextResponse.json({ error: 'Invalid or disabled copyProviderKey' }, { status: 400 })
   }
   if (imageProviderKey && !imageProvider) {
@@ -171,7 +179,7 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
       designMode: designMode as DesignMode,
       campaignId: campaignId ?? null,
       brandKitId: brandKitId ?? null,
-      copyProviderKey: copyProviderKey.trim(),
+      copyProviderKey: resolvedCopyKey,
       imageProviderKey: imageProviderKey?.trim() ?? null,
       additionalImageUrl: additionalImageUrl ?? null,
       // Nullable Json column: use the Prisma sentinel rather than a bare null

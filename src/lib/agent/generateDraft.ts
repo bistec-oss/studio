@@ -7,6 +7,7 @@ import { buildBriefInput } from '@/lib/agent/briefInput'
 import { runPathADesign, assertTemplateMatchesBrief } from '@/lib/agent/pathA'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { humanizeGenerationError } from '@/lib/agent/generationErrors'
 import type { GenerationActor } from '@/lib/agent/types'
 
 // Path B needs a resolvable brand kit; thrown before any model call is paid for.
@@ -228,7 +229,7 @@ export async function runGenerationForDraft(draftId: string, actor: GenerationAc
     const design = await produceDesign(draft.brief, inputs, copyText, actor)
     await finalizeDraftV1(draftId, design)
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err)
+    const reason = humanizeGenerationError(err)
     await prisma.draft
       .update({ where: { id: draftId }, data: { status: 'FAILED', failureReason: reason } })
       .catch(() => {
