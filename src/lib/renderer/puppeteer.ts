@@ -11,18 +11,58 @@ const COMMON_LINUX_PATHS = [
   "/usr/bin/google-chrome-stable",
 ]
 
-function resolveExecutablePath(): string {
-  if (env.PUPPETEER_EXECUTABLE_PATH) {
-    return env.PUPPETEER_EXECUTABLE_PATH
+// Windows Chrome/Edge install locations. Edge is Chromium-based and present on
+// every Windows host, so it's the reliable last-resort autodetect target.
+function windowsCandidatePaths(): string[] {
+  const pf = process.env.PROGRAMFILES ?? "C:\\Program Files"
+  const pf86 = process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)"
+  const local = process.env.LOCALAPPDATA
+  return [
+    `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
+    ...(local ? [`${local}\\Google\\Chrome\\Application\\chrome.exe`] : []),
+    `${pf86}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
+  ]
+}
+
+// All autodetect candidates, platform-native first (harmless on the other OS —
+// existsSync just returns false for a Windows path on Linux and vice versa).
+function candidatePaths(): string[] {
+  return process.platform === "win32"
+    ? [...windowsCandidatePaths(), ...COMMON_LINUX_PATHS]
+    : [...COMMON_LINUX_PATHS, ...windowsCandidatePaths()]
+}
+
+// Pure resolver (deps injected for testing). A configured path is used only if
+// it actually exists — a set-but-missing PUPPETEER_EXECUTABLE_PATH (prod blocker
+// B3, 2026-07-23) must NOT be handed to puppeteer verbatim; fall back to
+// autodetection instead of failing with "Browser was not found".
+export function pickExecutablePath(
+  configured: string | undefined,
+  exists: (p: string) => boolean,
+  candidates: string[]
+): string {
+  if (configured && exists(configured)) return configured
+  if (configured) {
+    console.warn(
+      `[renderer] PUPPETEER_EXECUTABLE_PATH="${configured}" does not exist — ` +
+        "falling back to Chrome/Chromium/Edge autodetection"
+    )
   }
-  for (const p of COMMON_LINUX_PATHS) {
-    if (existsSync(p)) return p
+  for (const p of candidates) {
+    if (exists(p)) return p
   }
   throw new Error(
-    "Chromium not found. Set PUPPETEER_EXECUTABLE_PATH " +
+    "Chromium not found. Install Google Chrome / Chromium (or Edge on Windows), " +
+      "or set PUPPETEER_EXECUTABLE_PATH to an existing browser binary " +
       "(e.g. C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe on Windows, " +
       "or /usr/bin/chromium-browser on Linux)"
   )
+}
+
+function resolveExecutablePath(): string {
+  return pickExecutablePath(env.PUPPETEER_EXECUTABLE_PATH, existsSync, candidatePaths())
 }
 
 // Egress allowlist for rendered documents. The HTML we render is model-generated
@@ -42,7 +82,7 @@ for (const e of [env.MINIO_ENDPOINT, env.MINIO_PUBLIC_ENDPOINT]) {
   }
 }
 
-function isAllowedRenderRequest(url: string): boolean {
+export function isAllowedRenderRequest(url: string): boolean {
   // data:/blob: are in-document; about:blank is the setContent navigation itself.
   if (url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") return true
   try {
