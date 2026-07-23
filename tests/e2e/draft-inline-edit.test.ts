@@ -94,6 +94,9 @@ test.describe('§T — draft inline edit', () => {
     const draft = await createExportedDraft(api, `Inline Bad ${Date.now()}`)
     const res = await api.post(`/api/drafts/${draft.id}/inline-edit`, {})
     expect(res.status()).toBe(400)
+
+    const emptyRes = await api.post(`/api/drafts/${draft.id}/inline-edit`, { html: '' })
+    expect(emptyRes.status()).toBe(400)
   })
 
   // TC-INLINE-04 — a foreign draft id is a 404 (no existence leak).

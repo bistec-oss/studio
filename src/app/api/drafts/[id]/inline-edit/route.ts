@@ -38,6 +38,10 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
     return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   }
 
+  // Deliberately does NOT claim Draft.pendingAction (unlike regenerate/refine):
+  // this is a sub-second synchronous render with no AI call, so the tiny
+  // concurrent-commit window is already covered by withNextRevisionNumber's
+  // P2002 retry rather than needing the async claim/poll machinery.
   const blocked = inlineEditBlockReason(draft.status, draft.pendingAction)
   if (blocked) return NextResponse.json({ error: blocked }, { status: 409 })
 

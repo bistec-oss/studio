@@ -56,6 +56,19 @@ describe('stripEditingChrome', () => {
     expect(out).not.toContain('data-inline-edit-chrome')
     expect(out).toContain('<img src="https://cdn.example.com/a.png">')
   })
+
+  it('removes the replace-photo button and unwraps the img (real injected structure)', () => {
+    const html =
+      '<span data-inline-edit-chrome="img-wrap">' +
+      '<img src="https://cdn.example.com/a.png">' +
+      '<button data-inline-edit-chrome="img-btn" class="inline-replace-btn">Replace photo</button>' +
+      '</span>'
+    const out = stripEditingChrome(html)
+    expect(out).toContain('<img src="https://cdn.example.com/a.png">')
+    expect(out).not.toContain('Replace photo')
+    expect(out).not.toContain('<button')
+    expect(out).not.toContain('data-inline-edit-chrome')
+  })
 })
 
 describe('inlineEditBlockReason', () => {

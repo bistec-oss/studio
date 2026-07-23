@@ -88,6 +88,7 @@ export function InlineEditModal({
       btn.type = 'button'
       btn.className = 'inline-replace-btn'
       btn.textContent = 'Replace photo'
+      btn.setAttribute('data-inline-edit-chrome', 'img-btn')
       btn.addEventListener('click', () => {
         const input = doc.createElement('input')
         input.type = 'file'

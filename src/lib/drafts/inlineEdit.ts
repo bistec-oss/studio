@@ -4,6 +4,11 @@
 // egress is already allowlisted and edited HTML is never served back as HTML.
 
 // Remove <script>…</script> elements and on*="…" event-handler attributes.
+// Regex-based defense-in-depth with known limits (e.g. an unclosed <script>,
+// or a handler attribute not preceded by whitespace, can slip past). The real
+// safety net is structural: the iframe never sets allow-scripts, the renderer's
+// egress is allowlisted (MinIO + Google Fonts only), and this HTML is never
+// re-served to a browser as a live document — only rendered to a PNG.
 export function sanitizeInlineHtml(html: string): string {
   return (
     html
@@ -27,6 +32,7 @@ export function stripEditingChrome(html: string): string {
       /<div\b[^>]*data-inline-edit-chrome\s*=\s*["']banner["'][^>]*>[\s\S]*?<\/div\s*>/gi,
       '',
     )
+    .replace(/<button\b[^>]*data-inline-edit-chrome\s*=\s*["']img-btn["'][^>]*>[\s\S]*?<\/button\s*>/gi, '')
     .replace(
       /<span\b[^>]*data-inline-edit-chrome\s*=\s*["']img-wrap["'][^>]*>([\s\S]*?)<\/span\s*>/gi,
       '$1',
