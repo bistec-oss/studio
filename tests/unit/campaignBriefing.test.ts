@@ -17,6 +17,7 @@ const kit: ResolvedBrandKit = {
   colors: ['#0f2d4e'],
   fonts: [],
   logoUrl: null,
+  logos: [],
   voicePrompt: 'Warm, confident, human.',
   source: 'system',
 }

@@ -6,7 +6,7 @@ import type { PipelineMode } from '@/lib/agent/config'
 
 // Bump when prompt content changes materially; persisted on Draft.promptVersion
 // so output quality can be correlated with prompt revisions.
-export const PROMPT_VERSION = '2026-07-17.1'
+export const PROMPT_VERSION = '2026-07-23.1'
 
 // Instruction to preserve externalized inline-asset tokens (see inlineAssets.ts).
 // Included whenever the model sees HTML whose data: URIs were tokenized.
