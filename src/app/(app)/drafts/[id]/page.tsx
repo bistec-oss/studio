@@ -14,6 +14,7 @@ import {
   Undo2,
   Maximize2,
   AlertTriangle,
+  Pencil,
 } from 'lucide-react'
 import { ImageLightbox } from '@/components/ui/ImageLightbox'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +23,7 @@ import { StatusChip } from '@/components/ui/StatusChip'
 import { PublishDialog } from '@/components/library/PublishDialog'
 import { CopyEditor } from '@/components/drafts/CopyEditor'
 import { RefinementPanel } from '@/components/drafts/RefinementPanel'
+import { InlineEditModal } from '@/components/drafts/InlineEditModal'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { useUndoableAction } from '@/lib/hooks/useUndoableAction'
@@ -62,6 +64,7 @@ export default function DraftDetailPage() {
   const { isAdmin } = useCurrentUser()
   const [showPublish, setShowPublish] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [showInlineEdit, setShowInlineEdit] = useState(false)
   const [regenDesign, setRegenDesign] = useState(false)
   // Snapshot = revisionNumber of the design taken before the last regenerate (Undo target).
   const designUndo = useUndoableAction<number>(async (rev) => {
@@ -269,6 +272,19 @@ export default function DraftDetailPage() {
               onActionStarted={fetchDraft}
               onRefined={refreshAfterChange}
             />
+          )}
+          {ready && (
+            <div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowInlineEdit(true)}
+                disabled={actionPending || !draft.htmlContent}
+                title="Manually edit text and images, then re-export"
+              >
+                <Pencil size={13} /> Edit inline
+              </Button>
+            </div>
           )}
         </div>
 
@@ -506,6 +522,18 @@ export default function DraftDetailPage() {
             setShowPublish(false)
             fetchDraft()
           }}
+        />
+      )}
+
+      {/* Manual inline edit — sandboxed iframe, text + image edits, synchronous save. */}
+      {draft.htmlContent && (
+        <InlineEditModal
+          open={showInlineEdit}
+          onClose={() => setShowInlineEdit(false)}
+          draftId={draftId}
+          html={draft.htmlContent}
+          aspectRatio={draft.brief.aspectRatio}
+          onSaved={refreshAfterChange}
         />
       )}
     </>
