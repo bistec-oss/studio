@@ -39,6 +39,22 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   if (body.response) return body.response
   const { name, colors, fonts, logoUrl, isDefault } = body.data
 
+  // Setting the primary logo must reference an existing LOGO artifact of this
+  // kit (clearing with null is always allowed). The gallery's "Set as primary"
+  // PATCHes an artifact URL that necessarily exists; this rejects a stray URL.
+  if (logoUrl) {
+    const match = await prisma.brandKitArtifact.findFirst({
+      where: { brandKitId: params.id, type: 'LOGO', url: logoUrl },
+      select: { id: true },
+    })
+    if (!match) {
+      return NextResponse.json(
+        { error: 'logoUrl must match a LOGO artifact of this kit' },
+        { status: 400 },
+      )
+    }
+  }
+
   // Clearing the prior default + updating this row must be atomic so a
   // failure can't leave the slot with zero (or two) defaults.
   const updated = await prisma.$transaction(async (tx) => {

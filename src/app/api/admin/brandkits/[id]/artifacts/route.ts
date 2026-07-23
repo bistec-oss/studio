@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withTeamAdmin } from '@/lib/api/handler'
 import { uploadObject, publicUrl, BUCKET_BRANDKITS, validateUpload, RASTER_IMAGE_TYPES } from '@/lib/storage/minio'
 import { isAllowedDocument, parseDocumentText } from '@/lib/campaign/documents'
+import { shouldBecomePrimary } from '@/lib/brandkit/logos'
 import type { ArtifactType } from '@prisma/client'
 
 const VALID_TYPES: ArtifactType[] = ['LOGO', 'FONT', 'COLOR', 'REFERENCE_IMAGE', 'REFERENCE_DOC', 'EXAMPLE_POST', 'OTHER']
@@ -103,7 +104,17 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
     })
 
     if (type === 'LOGO') {
-      await tx.brandKit.update({ where: { id: params.id }, data: { logoUrl: url } })
+      // First logo auto-becomes primary; later uploads must not clobber it.
+      const fresh = await tx.brandKit.findUnique({
+        where: { id: params.id },
+        select: { logoUrl: true },
+      })
+      const existingLogoCount = await tx.brandKitArtifact.count({
+        where: { brandKitId: params.id, type: 'LOGO', id: { not: created.id } },
+      })
+      if (shouldBecomePrimary(existingLogoCount, fresh?.logoUrl ?? null)) {
+        await tx.brandKit.update({ where: { id: params.id }, data: { logoUrl: url } })
+      }
     }
     if (type === 'FONT') {
       const fresh = await tx.brandKit.findUnique({ where: { id: params.id }, select: { fonts: true } })
