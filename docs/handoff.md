@@ -1,15 +1,16 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-21 (latest: team tenancy — full multi-tenant rework)
+**Date:** 2026-07-22 (latest: team tenancy MERGED to `main` + deployed to production)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `feature/team-tenancy` (not yet merged to `main` — see below)
+**Branch:** `main` (team tenancy squash-merged as PR #29, commit `2a118a73`, 2026-07-22)
+**Production:** `https://studio.bistecglobal.com`
 **Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
 
 ---
 
 ## 2026-07-21 (latest) — Team tenancy: full multi-tenant rework
 
-**Branch `feature/team-tenancy`, 37 commits, merge-ready but NOT merged** (final whole-branch review verdict: Ready to merge — Yes; `.superpowers/sdd/final-review.md`) — per user directive, **everything stays parked on this branch for now**; the prod server on this machine runs the branch build at `http://localhost:3000` for review, and merge to `main` happens only on explicit go-ahead. Post-review fixes landed on-branch the same evening: dashboard KPI counts now use the D6 visibility helpers (editors saw team-wide "drafts ready" numbers their library contradicted), a near-opaque `.glass-popover` surface for the team-switcher dropdown (was see-through over nav text), a docs de-stale sweep (social guide → `/team`; e2e plan + CI dropped the deleted env-list API keys), and this machine's `.env` cleaned to infra-only. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
+**MERGED to `main` 2026-07-22** as PR #29 (squash commit `2a118a73` "Feature/team tenancy (#29)"; 37 tenancy commits + the TC-REG-H7a de-flake and CI seed fixes rolled in; final whole-branch review verdict: Ready to merge — Yes; `.superpowers/sdd/final-review.md`). The earlier "parked on branch, merge only on go-ahead" directive was satisfied — go-ahead given, merge landed. **Now deployed to production at `https://studio.bistecglobal.com`** (the `feature/team-tenancy` branch still exists locally and can be cleaned up). Post-review fixes landed on-branch the same evening: dashboard KPI counts now use the D6 visibility helpers (editors saw team-wide "drafts ready" numbers their library contradicted), a near-opaque `.glass-popover` surface for the team-switcher dropdown (was see-through over nav text), a docs de-stale sweep (social guide → `/team`; e2e plan + CI dropped the deleted env-list API keys), and this machine's `.env` cleaned to infra-only. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
 
 ### What changed
 
