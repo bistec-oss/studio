@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
@@ -14,8 +13,7 @@ import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pathForDesignMode, pipelineMode } from '@/lib/agent/config'
 import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/prompts/refine'
 import { generateBackgroundForRefine } from '@/lib/agent/background'
-import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
-import { withNextRevisionNumber } from '@/lib/drafts/revisions'
+import { commitDraftRevision } from '@/lib/drafts/revisions'
 import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 
 interface PendingConflict {
@@ -215,50 +213,19 @@ async function commitRevision(
   // instruction; undefined/null leaves Draft.imageUrl untouched.
   backgroundImageUrl?: string | null
 ) {
-  // finalExportUrl is an EXPORTS object key (from runDesignAgent's renderHtml).
-  // The override path has no fresh render — render the pending HTML now to get a key.
-  let finalExportUrl = exportUrl
-  if (!finalExportUrl) {
-    const { renderHtmlToPng } = await import('@/lib/renderer/puppeteer')
-    const { uploadObject, exportKey, BUCKET_EXPORTS } = await import('@/lib/storage/minio')
-    const buffer = await renderHtmlToPng(newHtml, width, height)
-    finalExportUrl = exportKey('refine', draftId)
-    await uploadObject(buffer, BUCKET_EXPORTS, finalExportUrl, 'image/png')
-  }
-
-  // Allocate the revision number, write the revision, and update the draft
-  // atomically (P2002 collision retry handled by the shared helper).
-  const revision = await withNextRevisionNumber(draftId, async (tx, revisionNumber) => {
-    const created = await tx.draftRevision.create({
-      data: {
-        draftId,
-        revisionNumber,
-        instruction,
-        htmlSnapshot: newHtml,
-        exportUrl: finalExportUrl,
-      },
-      select: { id: true },
-    })
-
-    await tx.draft.update({
-      where: { id: draftId },
-      data: {
-        htmlContent: newHtml,
-        exportUrl: finalExportUrl,
-        // The refined state becomes the active revision.
-        currentRevisionNumber: revisionNumber,
-        pendingConflict: Prisma.JsonNull,
-        promptVersion: PROMPT_VERSION,
-        ...(backgroundImageUrl ? { imageUrl: backgroundImageUrl } : {}),
-      },
-    })
-
-    return created
+  const { revisionId, exportKey } = await commitDraftRevision({
+    draftId,
+    instruction,
+    html: newHtml,
+    width,
+    height,
+    exportKey: exportUrl,
+    backgroundImageUrl,
   })
 
   return NextResponse.json({
     reply: 'Design updated',
-    revisionId: revision.id,
-    exportUrl: await resolveExportUrl(finalExportUrl),
+    revisionId,
+    exportUrl: await resolveExportUrl(exportKey),
   })
 }
