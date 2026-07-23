@@ -1,14 +1,40 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-22 (latest: team tenancy MERGED to `main` + deployed to production)
+**Date:** 2026-07-23 (latest: prod smoke re-run + prod fixes merged; two feature specs brainstormed, plans not yet written)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` (team tenancy squash-merged as PR #29, commit `2a118a73`, 2026-07-22)
+**Branch:** `main` (prod fixes merged as PR #30, commit `4e8e6e3e`, on top of team-tenancy PR #29 `2a118a73`)
 **Production:** `https://studio.bistecglobal.com`
-**Specclaw change:** `async-draft-actions` (previous: `brief-draft-recovery`)
 
 ---
 
-## 2026-07-21 (latest) — Team tenancy: full multi-tenant rework
+## ⏸️ 2026-07-23 (latest) — PICK UP HERE
+
+Three threads are open. Full detail: `docs/prod-e2e-findings-2026-07-23.md` and the two specs under `docs/superpowers/specs/`.
+
+### 1. Prod fixes — MERGED to `main` (PR #30, `4e8e6e3e`), NOT yet deployed
+
+A prod smoke **re-run** (as `adminBTG` on the **Claude Testing** team) confirmed the two 2026-07-22 blockers are fixed on the host — **B1** (MinIO uploads) and **B2** (AI; prod switched to **CLI mode**, `cliMode:true`, personal Claude token ACTIVE). Uploads, enhance, both assistant chats (grounding + tone/color extraction), copy generation, and **live CLI-mode vision** (from-image template) all verified working. Two **new** blockers surfaced:
+
+- **🔴 B3 — Puppeteer renderer misconfigured (host):** `PUPPETEER_EXECUTABLE_PATH` points at a `chrome.exe` that isn't installed → all HTML→PNG rendering fails (generation export, regenerate-design, refine, worker gen, from-image final render). Copy succeeds first, so it's render-only.
+- **🟠 B4 — scheduler worker not running (host).**
+
+**Code fixes for the code-fixable parts are merged** (branch `fix/prod-render-and-cli-copy` → PR #30): renderer `pickExecutablePath` autodetects/falls back (Windows Chrome+Edge added) so a set-but-missing env path no longer fails; `resolveCopyProvider` defaults to the Claude CLI in CLI mode (OAuth chain) with no provider row, `copyProviderKey` optional on `POST /api/briefs` (registered API-key provider overrides); `humanizeGenerationError` → clearer `Draft.failureReason`; prompt-injection hardening (`fenceUntrusted`/`UNTRUSTED_CONTENT_GUARD` in both assistants, CLI-vision "read only listed files", `isAllowedRenderRequest` SSRF regression test). Gates green (tsc, lint, **unit 293/293**, build).
+
+**⚠️ Not deployed:** a probe of `POST /api/briefs` (no `copyProviderKey`) still returns **400** on prod → the hosted site is running the **pre-fix build**. **Next: redeploy prod from `main`, install a browser on the host (B3), start the worker (B4)**, then re-run the generation/regenerate/refine/worker/from-image suite and **wipe the kept test data** (IDs in the 2026-07-23 findings doc). Residual security follow-up: OS-level sandbox for the CLI `Read` tool. Also: CLI-mode teams need a `cli` COPY provider only if you _don't_ deploy the new code; the merged fix removes that requirement (one was registered on Claude Testing during testing — `cli-1784786367943`).
+
+### 2. Feature: multiple logos per brand kit — spec done, plan NOT written
+
+Branch **`feat/multiple-brandkit-logos`**, spec `docs/superpowers/specs/2026-07-23-multiple-brandkit-logos-design.md` (committed `f3916e06`). Approach: reuse `BrandKitArtifact type=LOGO` (no migration), `name`=label, `BrandKit.logoUrl`=primary pointer; generation gets a labeled logo list (AI picks the variant); `KitDetail` gains a logo gallery. **Next step:** user reviews spec → invoke **writing-plans**.
+
+### 3. Feature: manual inline-edit mode for drafts — spec done, plan NOT written
+
+Branch **`feat/draft-inline-edit`**, spec `docs/superpowers/specs/2026-07-23-draft-inline-edit-design.md` (committed `784c7b70`). Approach: "Edit inline" button below Refine → sandboxed iframe (`allow-same-origin`, no `allow-scripts`; parent applies `contenteditable` + image-replace-to-URL) → **synchronous** Save re-renders + commits a normal `DraftRevision` via a `commitRevision` helper shared with refine. No AI, no schema change. **Next step:** user reviews spec → invoke **writing-plans**.
+
+**Branch state:** `main` = PR #30 merged (local main fast-forwarded to `origin/main`). `fix/prod-render-and-cli-copy` merged (can delete). Both feature branches exist locally, each with only its spec committed, **not pushed**. Awaiting user's call on which plan to write first (or both).
+
+---
+
+## 2026-07-21 — Team tenancy: full multi-tenant rework
 
 **MERGED to `main` 2026-07-22** as PR #29 (squash commit `2a118a73` "Feature/team tenancy (#29)"; 37 tenancy commits + the TC-REG-H7a de-flake and CI seed fixes rolled in; final whole-branch review verdict: Ready to merge — Yes; `.superpowers/sdd/final-review.md`). The earlier "parked on branch, merge only on go-ahead" directive was satisfied — go-ahead given, merge landed. **Now deployed to production at `https://studio.bistecglobal.com`** (the `feature/team-tenancy` branch still exists locally and can be cleaned up). Post-review fixes landed on-branch the same evening: dashboard KPI counts now use the D6 visibility helpers (editors saw team-wide "drafts ready" numbers their library contradicted), a near-opaque `.glass-popover` surface for the team-switcher dropdown (was see-through over nav text), a docs de-stale sweep (social guide → `/team`; e2e plan + CI dropped the deleted env-list API keys), and this machine's `.env` cleaned to infra-only. Built task-by-task via subagent-driven development (implementer + independent reviewer per task); the full ledger with every task's review notes is `.superpowers/sdd/progress.md`. Spec: `docs/superpowers/specs/2026-07-21-team-tenancy-design.md`. Plan: `docs/superpowers/plans/2026-07-21-team-tenancy.md`.
 
