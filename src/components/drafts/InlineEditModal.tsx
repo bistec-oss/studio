@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Save } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -22,17 +22,14 @@ interface InlineEditModalProps {
 // Parent-injected editing chrome. Kept in one place so stripEditingChrome (the
 // pure string version) and this DOM wiring stay in sync on the marker names.
 const EDITOR_STYLE = `
-  [contenteditable="true"]{outline:2px dashed transparent;transition:outline-color .15s}
-  [contenteditable="true"]:hover{outline-color:rgba(37,99,235,.5)}
+  [contenteditable="true"]{outline:2px dashed transparent;outline-offset:1px;transition:outline-color .15s;cursor:text}
+  [contenteditable="true"]:hover{outline-color:rgba(37,99,235,.35)}
   [contenteditable="true"]:focus{outline-color:rgba(37,99,235,.9)}
-  [data-inline-edit-chrome="img-wrap"]{position:relative;display:inline-block}
+  [data-inline-edit-chrome="img-wrap"]{position:relative;display:inline-block;cursor:default}
   [data-inline-edit-chrome="img-wrap"] .inline-replace-btn{
     position:absolute;top:6px;left:6px;z-index:2;font:600 12px system-ui;
     background:rgba(0,0,0,.6);color:#fff;border:0;border-radius:6px;padding:4px 8px;cursor:pointer}
 `
-
-// Display width the true-size canvas is scaled down to fit inside the dialog.
-const DISPLAY_W = 640
 
 export function InlineEditModal({
   open,
@@ -43,9 +40,32 @@ export function InlineEditModal({
   onSaved,
 }: InlineEditModalProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
   const [saving, setSaving] = useState(false)
   const { width, height } = dimensionsFor(aspectRatio)
-  const scale = Math.min(1, DISPLAY_W / width)
+
+  // The true-size canvas is scaled down to fit the stage on BOTH axes (the old
+  // width-only fit let tall ratios — PORTRAIT/STORY — overflow). Seed from the
+  // viewport to avoid a first-paint jump, then refine against the measured stage.
+  const [scale, setScale] = useState(() => {
+    if (typeof window === 'undefined') return 0.5
+    return Math.min(1, (window.innerWidth * 0.6) / width, (window.innerHeight * 0.66) / height)
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const el = stageRef.current
+    if (!el) return
+    const compute = () => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      if (w > 0 && h > 0) setScale(Math.min(1, w / width, h / height))
+    }
+    compute()
+    const ro = new ResizeObserver(compute)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open, width, height])
 
   // Wire the iframe once it has rendered the srcDoc. No scripts run inside the
   // sandbox (allow-same-origin only), so ALL wiring happens from the parent.
@@ -61,13 +81,20 @@ export function InlineEditModal({
       doc.head?.appendChild(style)
     }
 
-    // Make every text-leaf element editable (all child nodes are text).
+    // Make every element that DIRECTLY contains visible text editable. The rule
+    // is "has a non-empty direct text-node child" — NOT "all children are text".
+    // That distinction is the fix for the reported bug: mixed-content elements
+    // like `<p>Some <b>bold</b> text</p>` keep their plain-text runs ("Some ",
+    // " text") as direct children of <p>, so the old all-children-are-text test
+    // skipped <p> and those runs were uneditable. Since every visible text node
+    // is a direct child of exactly one element, marking that element editable
+    // guarantees ALL text on the page is editable.
     doc.body?.querySelectorAll<HTMLElement>('*').forEach((el) => {
       if (['SCRIPT', 'STYLE', 'IMG'].includes(el.tagName)) return
-      const onlyText =
-        el.childNodes.length > 0 &&
-        Array.from(el.childNodes).every((n) => n.nodeType === Node.TEXT_NODE)
-      if (onlyText) el.setAttribute('contenteditable', 'true')
+      const hasDirectText = Array.from(el.childNodes).some(
+        (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
+      )
+      if (hasDirectText) el.setAttribute('contenteditable', 'true')
     })
 
     // Plain-text paste only.
@@ -77,11 +104,15 @@ export function InlineEditModal({
       doc.execCommand('insertText', false, text)
     })
 
-    // Wrap each <img> with a "Replace photo" control.
+    // Wrap each <img> with a "Replace photo" control. The wrapper is marked
+    // contenteditable="false" so it stays a protected, non-editable island even
+    // when its parent element is now editable (mixed-content parents above) —
+    // the button and image can't be caret-edited or accidentally typed into.
     doc.body?.querySelectorAll('img').forEach((img) => {
       if (img.parentElement?.getAttribute('data-inline-edit-chrome') === 'img-wrap') return
       const wrap = doc.createElement('span')
       wrap.setAttribute('data-inline-edit-chrome', 'img-wrap')
+      wrap.setAttribute('contenteditable', 'false')
       img.replaceWith(wrap)
       wrap.appendChild(img)
       const btn = doc.createElement('button')
@@ -144,7 +175,7 @@ export function InlineEditModal({
       onClose={onClose}
       title="Edit inline"
       size="lg"
-      className="max-w-4xl"
+      className="max-w-6xl"
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
@@ -157,29 +188,39 @@ export function InlineEditModal({
         </>
       }
     >
-      <div className="space-y-3">
-        <div className="rounded-lg bg-primary/5 dark:bg-primary-light/10 px-3 py-2 text-xs text-light-text dark:text-dark-text">
-          ✎ Click any text to edit · hover an image and click <strong>Replace photo</strong> to swap
-          it.
-        </div>
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
+          Click any text to edit it in place, or hover an image and choose{' '}
+          <strong className="font-semibold text-light-text dark:text-dark-text">Replace photo</strong>{' '}
+          to swap it. Changes save as a new revision.
+        </p>
+        {/* Neutral stage: the canvas is centered and fit to this box on both
+            axes, so square, portrait and story ratios are all as large as they
+            can be without overflowing. */}
         <div
-          className="mx-auto overflow-hidden rounded-lg border border-light-border dark:border-dark-border"
-          style={{ width: width * scale, height: height * scale }}
+          ref={stageRef}
+          className="flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.04] ring-1 ring-inset ring-light-border dark:ring-dark-border p-4"
+          style={{ height: 'min(74vh, 820px)' }}
         >
-          <iframe
-            ref={iframeRef}
-            onLoad={onIframeLoad}
-            title="Inline editor"
-            sandbox="allow-same-origin"
-            srcDoc={html}
-            style={{
-              width,
-              height,
-              border: 0,
-              transformOrigin: 'top left',
-              transform: `scale(${scale})`,
-            }}
-          />
+          <div
+            className="overflow-hidden rounded-lg bg-white shadow-xl"
+            style={{ width: width * scale, height: height * scale }}
+          >
+            <iframe
+              ref={iframeRef}
+              onLoad={onIframeLoad}
+              title="Inline editor"
+              sandbox="allow-same-origin"
+              srcDoc={html}
+              style={{
+                width,
+                height,
+                border: 0,
+                transformOrigin: 'top left',
+                transform: `scale(${scale})`,
+              }}
+            />
+          </div>
         </div>
       </div>
     </Modal>
