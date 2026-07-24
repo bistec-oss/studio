@@ -34,13 +34,19 @@ interface BaseProps {
 // ─── Modal — centered dialog ────────────────────────────────────────────────
 
 interface ModalProps extends BaseProps {
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 }
 
+// One max-w class per size — the ONLY width source. `cn` is a plain join (no
+// tailwind-merge), so a caller passing an extra `max-w-*` in className would
+// leave two competing max-w utilities and let CSS source-order decide the
+// winner (which silently kept modals at `lg`). Widen via `size`, not className.
 const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
   sm: 'max-w-sm',
   md: 'max-w-md',
   lg: 'max-w-lg',
+  xl: 'max-w-4xl',
+  '2xl': 'max-w-6xl',
 }
 
 export function Modal({

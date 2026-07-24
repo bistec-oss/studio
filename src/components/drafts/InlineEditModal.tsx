@@ -174,8 +174,7 @@ export function InlineEditModal({
       open={open}
       onClose={onClose}
       title="Edit inline"
-      size="lg"
-      className="max-w-6xl"
+      size="2xl"
       footer={
         <>
           <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>
@@ -199,7 +198,7 @@ export function InlineEditModal({
             can be without overflowing. */}
         <div
           ref={stageRef}
-          className="flex items-center justify-center rounded-xl bg-black/[0.04] dark:bg-white/[0.04] ring-1 ring-inset ring-light-border dark:ring-dark-border p-4"
+          className="flex items-center justify-center overflow-hidden rounded-xl bg-black/[0.04] dark:bg-white/[0.04] ring-1 ring-inset ring-light-border dark:ring-dark-border p-4"
           style={{ height: 'min(74vh, 820px)' }}
         >
           <div
