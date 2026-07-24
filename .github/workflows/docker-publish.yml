@@ -51,3 +51,18 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Trigger Coolify to pull the freshly-pushed :latest and redeploy both
+      # resources that run this image. Requires the COOLIFY_API_TOKEN repo
+      # secret (Coolify → Keys & Tokens → create an API token with deploy scope).
+      - name: Redeploy app on Coolify
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+            "https://coolify.bistecglobal.com/api/v1/deploy?uuid=nck8s530pseqdcfxt50hndl5&force=false"
+
+      - name: Redeploy scheduler on Coolify
+        run: |
+          curl -fsS -X GET \
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
+            "https://coolify.bistecglobal.com/api/v1/deploy?uuid=warr96qhvzrie5ndwv8oteeu&force=false"
