@@ -11,6 +11,7 @@ const kit: ResolvedBrandKit = {
   colors: ['#0f2d4e', '#ff5a1f'],
   fonts: [{ name: 'Inter', url: 'https://fonts.example.com/inter.woff2' }],
   logoUrl: 'https://cdn.example.com/logo.svg',
+  logos: [{ label: 'Primary logo', url: 'https://cdn.example.com/logo.svg', primary: true }],
   voicePrompt: 'Warm, confident, human.',
   source: 'system',
 }

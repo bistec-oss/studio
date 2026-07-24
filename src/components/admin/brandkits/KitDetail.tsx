@@ -65,26 +65,57 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
     finally { setSaving(false) }
   }
 
-  async function uploadAsset(file: File) {
-    const fd = new FormData()
-    fd.append('file', file)
-    const data = await apiFetch<{ url: string }>(`/api/admin/brandkits/${kit.id}/upload`, { method: 'POST', body: fd })
-    return data.url
-  }
-
-  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAddLogo(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    if (fileRef.current) fileRef.current.value = ''
     if (!file) return
     try {
-      const url = await uploadAsset(file)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('type', 'LOGO')
+      fd.append('name', file.name.replace(/\.[^.]+$/, '')) // filename as default label
+      fd.append('feedToAI', 'true')
+      await apiFetch(`/api/admin/brandkits/${kit.id}/artifacts`, { method: 'POST', body: fd })
+      onRefresh()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
+  async function setPrimaryLogo(url: string) {
+    try {
       await apiFetch(`/api/admin/brandkits/${kit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ logoUrl: url }),
       })
       onRefresh()
-    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : 'Something went wrong') }
-    if (fileRef.current) fileRef.current.value = ''
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
+  async function renameLogo(artifactId: string, name: string) {
+    try {
+      await apiFetch(`/api/admin/brandkits/${kit.id}/artifacts/${artifactId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      onRefresh()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
+  async function deleteLogo(id: string) {
+    if (!(await confirm({ title: 'Delete this logo?', confirmLabel: 'Delete' }))) return
+    try {
+      await apiFetch(`/api/admin/brandkits/${kit.id}/artifacts/${id}`, { method: 'DELETE' })
+      onRefresh()
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Something went wrong')
+    }
   }
 
   async function handleArtifactUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -245,24 +276,70 @@ export function KitDetail({ kit, onRefresh }: KitDetailProps) {
         )}
       </GlassPanel>
 
-      {/* Logo */}
+      {/* Logos */}
       <GlassPanel className="p-4">
         <SectionHeader
-          title="Logo"
+          title="Logos"
           action={
             <>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAddLogo}
+              />
               <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
-                <Upload size={13} /> {kit.logoUrl ? 'Replace' : 'Upload'}
+                <Plus size={13} /> Add logo
               </Button>
             </>
           }
         />
-        {kit.logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={kit.logoUrl} alt="Brand logo" className="h-16 object-contain rounded-lg" />
+        {kit.artifacts.filter((a) => a.type === 'LOGO').length === 0 ? (
+          <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No logos yet.</span>
         ) : (
-          <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No logo uploaded</span>
+          <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {kit.artifacts
+              .filter((a) => a.type === 'LOGO')
+              .map((logo) => {
+                const isPrimary = logo.url === kit.logoUrl
+                return (
+                  <li key={logo.id} className="glass-input rounded-xl p-3 flex flex-col gap-2">
+                    <div className="relative h-16 flex items-center justify-center rounded-lg bg-white/40 dark:bg-white/5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={logo.url}
+                        alt={logo.name}
+                        className="max-h-14 max-w-full object-contain"
+                      />
+                    </div>
+                    <input
+                      defaultValue={logo.name}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim()
+                        if (v && v !== logo.name) renameLogo(logo.id, v)
+                      }}
+                      aria-label="Logo label"
+                      className="glass-input rounded-lg px-2 py-1 text-xs text-light-text dark:text-dark-text"
+                    />
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => !isPrimary && setPrimaryLogo(logo.url)}
+                        aria-pressed={isPrimary}
+                        title={isPrimary ? 'Primary logo' : 'Set as primary'}
+                        className={`flex items-center gap-1 text-xs transition-colors ${isPrimary ? 'text-primary dark:text-primary-light' : 'text-light-text-muted dark:text-dark-text-muted hover:text-primary dark:hover:text-primary-light'}`}
+                      >
+                        <Star size={14} className={isPrimary ? 'fill-current' : ''} />
+                        {isPrimary ? 'Primary' : 'Set primary'}
+                      </button>
+                      <Button variant="ghost" size="sm" onClick={() => deleteLogo(logo.id)}>
+                        <Trash2 size={13} />
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+          </ul>
         )}
       </GlassPanel>
 

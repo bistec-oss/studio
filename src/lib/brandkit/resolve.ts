@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma'
-import type { BrandKit, BrandKitPrompt } from '@prisma/client'
+import type { BrandKit, BrandKitPrompt, BrandKitArtifact } from '@prisma/client'
+import { buildLogoList, type LogoEntry } from '@/lib/brandkit/logos'
 
-type KitWithPrompts = BrandKit & { prompts: BrandKitPrompt[] }
+type KitWithPrompts = BrandKit & { prompts: BrandKitPrompt[]; artifacts?: BrandKitArtifact[] }
 
 export type BrandKitSource = 'explicit' | 'campaign' | 'project' | 'system'
 
@@ -11,6 +12,7 @@ export interface ResolvedBrandKit {
   colors: string[]
   fonts: Array<{ name: string; url: string }>
   logoUrl: string | null
+  logos: LogoEntry[]
   voicePrompt: string | null
   source: BrandKitSource
 }
@@ -22,12 +24,19 @@ function normalise(kit: KitWithPrompts, source: BrandKitSource): ResolvedBrandKi
     colors: Array.isArray(kit.colors) ? (kit.colors as string[]) : [],
     fonts: Array.isArray(kit.fonts) ? (kit.fonts as Array<{ name: string; url: string }>) : [],
     logoUrl: kit.logoUrl ?? null,
+    logos: buildLogoList(
+      (kit.artifacts ?? []).map((a) => ({ name: a.name, url: a.url })),
+      kit.logoUrl ?? null,
+    ),
     voicePrompt: kit.prompts[0]?.content ?? null,
     source,
   }
 }
 
-const PROMPT_INCLUDE = { prompts: { where: { isActive: true }, take: 1 } } as const
+const PROMPT_INCLUDE = {
+  prompts: { where: { isActive: true }, take: 1 },
+  artifacts: { where: { type: 'LOGO' as const }, orderBy: { createdAt: 'asc' as const } },
+} as const
 
 // Resolves brand kit precedence:
 //   explicit brief kit → campaign brand kit → project default → team default

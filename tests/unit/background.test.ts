@@ -46,6 +46,7 @@ const kit: ResolvedBrandKit = {
   colors: ['#14377D', '#2CB34A'],
   fonts: [{ name: 'Lato', url: 'https://fonts.example.com/lato.woff2' }],
   logoUrl: 'https://cdn.example.com/logo.svg',
+  logos: [{ label: 'Primary logo', url: 'https://cdn.example.com/logo.svg', primary: true }],
   voicePrompt: 'Warm, confident, human.',
   source: 'system',
 }

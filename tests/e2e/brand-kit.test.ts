@@ -183,6 +183,84 @@ test.describe('Brand kit management', () => {
     expect(detail.logoUrl).toBeNull()
   })
 
+  // TC-BK-10 — a SECOND logo upload does not clobber the primary.
+  test('second LOGO upload keeps the first as primary', async () => {
+    const kit = await (await api.post('/api/admin/brandkits', { name: 'Multi Logo Kit' })).json()
+
+    const first = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'primary.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+    const second = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'secondary.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+
+    const detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
+    // First upload became + stayed primary; both LOGO artifacts are present.
+    expect(detail.logoUrl).toBe(first.url)
+    const logoTypes = detail.artifacts.filter((a: { type: string }) => a.type === 'LOGO')
+    expect(logoTypes.map((a: { url: string }) => a.url).sort()).toEqual(
+      [first.url, second.url].sort(),
+    )
+  })
+
+  // TC-BK-11 — set primary via PATCH logoUrl (must match a LOGO artifact).
+  test('set-primary PATCH accepts a LOGO artifact url and rejects a foreign url', async () => {
+    const kit = await (await api.post('/api/admin/brandkits', { name: 'Set Primary Kit' })).json()
+    const first = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'a.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+    const second = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'b.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+
+    const ok = await api.patch(`/api/admin/brandkits/${kit.id}`, { logoUrl: second.url })
+    expect(ok.status()).toBe(200)
+    const detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBe(second.url)
+
+    // A URL that is not a LOGO artifact of this kit is rejected.
+    const bad = await api.patch(`/api/admin/brandkits/${kit.id}`, {
+      logoUrl: 'https://evil.example.com/x.png',
+    })
+    expect(bad.status()).toBe(400)
+    void first
+  })
+
+  // TC-BK-12 — deleting the primary reassigns to a remaining logo (not null).
+  test('deleting the primary reassigns logoUrl to a remaining logo', async () => {
+    const kit = await (await api.post('/api/admin/brandkits', { name: 'Reassign Kit' })).json()
+    const first = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'a.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+    const second = await (
+      await api.multipart(`/api/admin/brandkits/${kit.id}/artifacts`, {
+        file: { name: 'b.png', mimeType: 'image/png', buffer: PNG_1x1 },
+        type: 'LOGO',
+      })
+    ).json()
+
+    // first is primary; delete it → logoUrl reassigns to second (still present).
+    const del = await api.del(`/api/admin/brandkits/${kit.id}/artifacts/${first.id}`)
+    expect(del.status()).toBe(204)
+    const detail = await (await api.get(`/api/admin/brandkits/${kit.id}`)).json()
+    expect(detail.logoUrl).toBe(second.url)
+  })
+
   // TC-BK-07 — Upload size + MIME validation. Guards H8.
   test('oversized upload and SVG to /briefs/images are rejected with 400', async () => {
     const kit = await (await api.post('/api/admin/brandkits', { name: 'Validation Kit' })).json()
