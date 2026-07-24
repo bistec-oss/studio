@@ -22,6 +22,23 @@
 
 ---
 
+## 🔄 Update — 2026-07-24 (supersedes the host-based fix framing below)
+
+Two things changed after this smoke run, and they reframe the B3/B4 fix:
+
+1. **The code fixes are MERGED** — the `fix/prod-render-and-cli-copy` branch landed as **PR #30** (`4e8e6e3e`, merged 2026-07-23), and the two feature branches merged 2026-07-24 (**PR #35** multiple-brandkit-logos `d01ac4d2`, **PR #36** draft-inline-edit `3dcac485`). The GHCR image built after these merges contains all of it.
+2. **Deploy is via Coolify, not a bare host.** `.github/workflows/docker-publish.yml` only builds + pushes `ghcr.io/bistec-oss/studio:latest`; **Coolify** on the VPS pulls it and runs the **app** + **scheduler** resources off the one image (`docker-compose.yml`). The image already installs chromium at `/usr/bin/chromium`.
+
+**Corrected fixes:**
+
+- **B3** — the bad `C:\…\chrome.exe` path is a stale **`PUPPETEER_EXECUTABLE_PATH` set in Coolify's env vars**, overriding the image default. It is **not** a missing-browser problem. PR #30's `pickExecutablePath` now ignores a set-but-missing path and autodetects, so **redeploying `latest` fixes B3 on its own**; also deleting that Coolify env var is cleaner. No install step.
+- **B4** — ensure Coolify runs the **scheduler resource** (CMD `node dist/scheduler/worker.js`, same image + `.env`). Not "start the worker on the host."
+- The **`cli` COPY provider** config gap below is **removed by PR #30** (`copyProviderKey` optional in CLI mode) once `latest` is deployed.
+
+**Whether Coolify auto-deploys on push or needs a manual click is unverified** — check Coolify → app resource → Deployments to confirm the running tag/SHA. Prod is confirmed still on the pre-fix image (`POST /api/briefs` with no `copyProviderKey` still 400s).
+
+---
+
 ## ✅ Verified working
 
 | Area                                                      | Endpoint                                 | Result                                                                                                                                                                                                              |
@@ -93,16 +110,18 @@ Fixtures regenerated at the session scratchpad `…/scratchpad/fixtures/` (logo.
 
 ## Pick-up plan (next session)
 
-1. Team fixes **B3** on the prod host: install Chrome/Chromium and point `PUPPETEER_EXECUTABLE_PATH` at the real binary (or unset on Linux). Start the scheduler **worker** (**B4**).
-2. Ensure the **`cli` COPY provider** exists on each team that will generate (done for Claude Testing).
-3. Re-run: full generation (copy+design→EXPORT) → regenerate-copy / regenerate-design / refine → worker-run scheduled generation → publish (still needs social creds).
+> **Superseded by the 2026-07-24 update at the top** — the fixes are now Coolify-side, not host-side. Corrected sequence:
+
+1. **Redeploy `latest` in Coolify** (app + scheduler resources). This alone fixes **B3** (image ships chromium + PR #30 autodetects past the stale env path) and removes the `cli`-provider requirement. Optionally also delete the stale `PUPPETEER_EXECUTABLE_PATH` from the Coolify env, and confirm the **scheduler resource** is running (**B4**).
+2. Re-run: full generation (copy+design→EXPORT) → regenerate-copy / regenerate-design / refine → worker-run scheduled generation → **from-image** final render → publish (still needs social creds).
+3. Prod-smoke the two newly-merged features — multiple brand-kit logos (PR #35) and draft inline-edit (PR #36).
 4. Wipe the test data (IDs above).
 
 ---
 
-## Code fixes implemented (branch `fix/prod-render-and-cli-copy`, 2026-07-23)
+## Code fixes implemented (branch `fix/prod-render-and-cli-copy` → **MERGED as PR #30 `4e8e6e3e`, 2026-07-23**)
 
-All on a branch, gates green (tsc · lint 0 errors · **unit 293/293** · production build). **Not merged** — awaiting go-ahead. These are the code-fixable parts; **B3-host (install a browser) and B4 (start the worker) remain host/ops actions** the code cannot perform.
+Gates green (tsc · lint 0 errors · **unit 293/293** · production build). **Merged to `main` and in the `latest` GHCR image.** These are the code-fixable parts; the remaining action is a **Coolify redeploy of `latest`** (fixes B3 via the image's chromium + autodetect) plus confirming the **scheduler resource** runs (B4) — see the 2026-07-24 update at the top.
 
 1. **Renderer robustness (B3, code side)** — `src/lib/renderer/puppeteer.ts`: `pickExecutablePath()` now (a) uses `PUPPETEER_EXECUTABLE_PATH` only if it actually exists on disk — a set-but-missing path no longer fails the launch, it logs a warning and falls through; (b) autodetects across Linux **and Windows** (Chrome + Edge) candidates. So a Windows host finds Edge automatically and a Linux host with a stale Windows env var falls back to its Chromium. _(Still needs a browser installed somewhere standard — code can't conjure one.)_ Tests: `tests/unit/rendererExecutablePath.test.ts`.
 2. **Copy resolution CLI default + optional brief key** — `src/providers/registry.ts` `resolveCopyProvider()` returns the local `ClaudeCliCopyProvider` in CLI mode when no API-key provider is registered (billed via the OAuth chain personal→team); a registered API-key provider (explicit key or team default) **overrides** ("whenever configured"). `POST /api/briefs` no longer requires `copyProviderKey` in CLI mode (stores the `cli` marker) — the wizard works with no per-team provider row. The keyless `cli` row still resolves for backward-compat. Tests: `copyProviderCliMode.test.ts`, `briefCopyProvider.test.ts` + helper `src/lib/brief/copyProvider.ts`.

@@ -1,36 +1,54 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-23 (latest: prod smoke re-run + prod fixes merged; two feature specs brainstormed, plans not yet written)
+**Date:** 2026-07-24 (latest: two feature PRs merged to `main`; prod deploy topology mapped — VPS/Coolify redeploy is the one remaining blocker)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` (prod fixes merged as PR #30, commit `4e8e6e3e`, on top of team-tenancy PR #29 `2a118a73`)
+**Branch:** `main` (PR #35 `d01ac4d2` + PR #36 `3dcac485` merged on top of prod-fix PR #30 `4e8e6e3e` and team-tenancy PR #29 `2a118a73`)
 **Production:** `https://studio.bistecglobal.com`
 
 ---
 
-## ⏸️ 2026-07-23 (latest) — PICK UP HERE
+## ⏸️ 2026-07-24 (latest) — PICK UP HERE
 
-Three threads are open. Full detail: `docs/prod-e2e-findings-2026-07-23.md` and the two specs under `docs/superpowers/specs/`.
+**All code is merged to `main`. The one remaining blocker is a VPS/Coolify redeploy** — prod is still running the pre-fix image. Full detail: `docs/prod-e2e-findings-2026-07-23.md`.
 
-### 1. Prod fixes — MERGED to `main` (PR #30, `4e8e6e3e`), NOT yet deployed
+> Reference: **[`docs/mcp-acp-guide.md`](mcp-acp-guide.md)** documents the MCP/ACP machine-access surfaces — `bstk_` API keys, MCP tools + client config (where `MCP_API_KEY` goes), ACP capabilities, team-scoping, and the CLI prompt-injection / SSRF hardening.
 
-A prod smoke **re-run** (as `adminBTG` on the **Claude Testing** team) confirmed the two 2026-07-22 blockers are fixed on the host — **B1** (MinIO uploads) and **B2** (AI; prod switched to **CLI mode**, `cliMode:true`, personal Claude token ACTIVE). Uploads, enhance, both assistant chats (grounding + tone/color extraction), copy generation, and **live CLI-mode vision** (from-image template) all verified working. Two **new** blockers surfaced:
+### Everything merged to `main`
 
-- **🔴 B3 — Puppeteer renderer misconfigured (host):** `PUPPETEER_EXECUTABLE_PATH` points at a `chrome.exe` that isn't installed → all HTML→PNG rendering fails (generation export, regenerate-design, refine, worker gen, from-image final render). Copy succeeds first, so it's render-only.
-- **🟠 B4 — scheduler worker not running (host).**
+- **PR #30** `4e8e6e3e` "Fix/prod render and cli copy" (merged 2026-07-23) — the B3/B4 code-side fixes.
+- **PR #35** `d01ac4d2` multiple-brandkit-logos (merged 2026-07-24).
+- **PR #36** `3dcac485` draft-inline-edit (merged 2026-07-24).
 
-**Code fixes for the code-fixable parts are merged** (branch `fix/prod-render-and-cli-copy` → PR #30): renderer `pickExecutablePath` autodetects/falls back (Windows Chrome+Edge added) so a set-but-missing env path no longer fails; `resolveCopyProvider` defaults to the Claude CLI in CLI mode (OAuth chain) with no provider row, `copyProviderKey` optional on `POST /api/briefs` (registered API-key provider overrides); `humanizeGenerationError` → clearer `Draft.failureReason`; prompt-injection hardening (`fenceUntrusted`/`UNTRUSTED_CONTENT_GUARD` in both assistants, CLI-vision "read only listed files", `isAllowedRenderRequest` SSRF regression test). Gates green (tsc, lint, **unit 293/293**, build).
+All three branches can be deleted. The `docker-publish.yml` action rebuilt `ghcr.io/bistec-oss/studio:latest` (+ `:sha`) after the merges (run green ~06:04 2026-07-24) — the image contains all of it.
 
-**⚠️ Not deployed:** a probe of `POST /api/briefs` (no `copyProviderKey`) still returns **400** on prod → the hosted site is running the **pre-fix build**. **Next: redeploy prod from `main`, install a browser on the host (B3), start the worker (B4)**, then re-run the generation/regenerate/refine/worker/from-image suite and **wipe the kept test data** (IDs in the 2026-07-23 findings doc). Residual security follow-up: OS-level sandbox for the CLI `Read` tool. Also: CLI-mode teams need a `cli` COPY provider only if you _don't_ deploy the new code; the merged fix removes that requirement (one was registered on Claude Testing during testing — `cli-1784786367943`).
+### Deploy topology (the crux)
 
-### 2. Feature: multiple logos per brand kit — spec done, plan NOT written
+`.github/workflows/docker-publish.yml` **only builds + pushes to GHCR — it does not deploy.** Per its own comment, **Coolify** on the VPS pulls the tag and runs it as **two resources off the one image**: the **app** (default CMD) and the **scheduler** (CMD override `node dist/scheduler/worker.js`, from `docker-compose.yml`). So a green build ≠ prod updated. **Whether Coolify auto-deploys on push or needs a manual click is unverified — check Coolify → app resource → Deployments to see the running tag/SHA.** A probe of `POST /api/briefs` (no `copyProviderKey`) still 400s on prod, so prod is confirmed on the **pre-fix** image.
 
-Branch **`feat/multiple-brandkit-logos`**, spec `docs/superpowers/specs/2026-07-23-multiple-brandkit-logos-design.md` (committed `f3916e06`). Approach: reuse `BrandKitArtifact type=LOGO` (no migration), `name`=label, `BrandKit.logoUrl`=primary pointer; generation gets a labeled logo list (AI picks the variant); `KitDetail` gains a logo gallery. **Next step:** user reviews spec → invoke **writing-plans**.
+### The two live blockers — both fixed by redeploying `latest`
 
-### 3. Feature: manual inline-edit mode for drafts — spec done, plan NOT written
+- **🔴 B3 — HTML→PNG rendering fails** (draft FAILED: `Browser was not found at … C:\…\chrome.exe`). Root cause: a stale **`PUPPETEER_EXECUTABLE_PATH`** (a Windows path from a dev `.env`) set in **Coolify's env vars**, overriding the image's correct baked-in `/usr/bin/chromium`. **The image already ships chromium, and PR #30's `pickExecutablePath` ignores a set-but-missing path and autodetects — so redeploying `latest` fixes B3 even with the bad env var still set.** Cleaner: also delete `PUPPETEER_EXECUTABLE_PATH` from the Coolify env. **No browser install needed** — this was never a host-install problem.
+- **🟠 B4 (secondary) — scheduler worker not running.** Ensure Coolify runs the **scheduler resource** (`docker-compose.yml` `scheduler` service — same image, CMD `node dist/scheduler/worker.js`, same `.env`). If only the app resource exists, the worker never starts.
 
-Branch **`feat/draft-inline-edit`**, spec `docs/superpowers/specs/2026-07-23-draft-inline-edit-design.md` (committed `784c7b70`). Approach: "Edit inline" button below Refine → sandboxed iframe (`allow-same-origin`, no `allow-scripts`; parent applies `contenteditable` + image-replace-to-URL) → **synchronous** Save re-renders + commits a normal `DraftRevision` via a `commitRevision` helper shared with refine. No AI, no schema change. **Next step:** user reviews spec → invoke **writing-plans**.
+**Impact until redeployed:** B3 is a hard blocker for the core purpose — every path ends in a render, so no finished/exportable post can be produced (drafts go FAILED). Login, uploads, AI copy/enhance, chats, vision all work. B4 only disables scheduled generation.
 
-**Branch state:** `main` = PR #30 merged (local main fast-forwarded to `origin/main`). `fix/prod-render-and-cli-copy` merged (can delete). Both feature branches exist locally, each with only its spec committed, **not pushed**. Awaiting user's call on which plan to write first (or both).
+### 📋 Remaining automated tests — RUN ONCE COOLIFY HAS REDEPLOYED `latest`
+
+Against the **Claude Testing** team (test data KEPT — IDs in the 2026-07-23 findings doc), once B3 is fixed and the scheduler resource is up:
+
+1. Full generation copy+design → **EXPORTED**.
+2. The 3 async draft actions — regenerate-copy / regenerate-design / refine (blocked until a draft first reaches EXPORTED).
+3. Worker-run **scheduled generation**.
+4. **From-image** final render (confirm the hardened vision prompt didn't regress it).
+5. Publish (still needs social creds).
+6. Prod smoke of the two newly-merged features — **multiple brand-kit logos** (labeled logo gallery + AI variant pick) and **draft inline-edit** (Edit-inline → Save → new DraftRevision).
+
+**Then wipe the kept test data.** Residual security follow-up: OS-level sandbox for the CLI `Read` tool.
+
+### Features now shipped (were "spec done, plan not written" in the prior handoff)
+
+- **Multiple logos per brand kit** (PR #35): reuse `BrandKitArtifact type=LOGO` (no migration), `name`=label, `BrandKit.logoUrl`=primary pointer; generation gets a labeled logo list (AI picks the variant); `KitDetail` has a logo gallery. Spec `docs/superpowers/specs/2026-07-23-multiple-brandkit-logos-design.md`.
+- **Manual inline-edit mode for drafts** (PR #36): "Edit inline" button below Refine → sandboxed iframe (`allow-same-origin`, no `allow-scripts`; parent applies `contenteditable` + image-replace-to-URL) → **synchronous** Save re-renders + commits a normal `DraftRevision` via a `commitRevision` helper shared with refine. No AI, no schema change. Spec `docs/superpowers/specs/2026-07-23-draft-inline-edit-design.md`.
 
 ---
 
