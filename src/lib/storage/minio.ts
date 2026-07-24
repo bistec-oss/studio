@@ -44,6 +44,26 @@ const s3 = new S3Client({
   forcePathStyle: true,
 })
 
+// Separate client used ONLY to presign GET URLs (see getPresignedUrl). Presigned
+// URLs are never consumed in-container — they are returned to the browser
+// (library/draft/export download) or fetched by external services (Anthropic
+// vision, LinkedIn/Instagram publish). AWS SIGv4 binds the request's `host`
+// header into the signature, so a URL signed against the *internal* endpoint
+// (e.g. Coolify's `minio-xxxx:9000` container host) is both unresolvable from a
+// browser and un-validatable behind a public reverse proxy — the prod symptom
+// was blank library thumbnails / failed export downloads (B5, 2026-07-24).
+// Signing against publicEndpoint fixes it. When MINIO_PUBLIC_ENDPOINT is unset,
+// publicEndpoint === endpoint and this is the same client (local dev / tests).
+const s3Presign =
+  publicEndpoint === endpoint.replace(/\/+$/, "")
+    ? s3
+    : new S3Client({
+        endpoint: publicEndpoint,
+        region: "us-east-1",
+        credentials: { accessKeyId, secretAccessKey },
+        forcePathStyle: true,
+      })
+
 // Hosts our stored asset URLs are allowed to point at — the internal MinIO
 // endpoint and the browser-facing public endpoint. Brief image URLs are only
 // ever produced by /api/briefs/images (MinIO uploads), so legitimate values
@@ -223,5 +243,5 @@ export async function getPresignedUrl(
   key: string,
   expiresIn = SEVEN_DAYS
 ): Promise<string> {
-  return getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn })
+  return getSignedUrl(s3Presign, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn })
 }
