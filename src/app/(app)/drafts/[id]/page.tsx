@@ -61,7 +61,7 @@ export default function DraftDetailPage() {
   const [exporting, setExporting] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [restoringRev, setRestoringRev] = useState<number | null>(null)
-  const { isAdmin } = useCurrentUser()
+  const { isTeamAdmin } = useCurrentUser()
   const [showPublish, setShowPublish] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [showInlineEdit, setShowInlineEdit] = useState(false)
@@ -388,7 +388,7 @@ export default function DraftDetailPage() {
                 )}
                 {draft.exportUrl ? 'Re-export' : 'Export'}
               </Button>
-              {isAdmin && (
+              {isTeamAdmin && (
                 <Button
                   variant="primary"
                   size="sm"

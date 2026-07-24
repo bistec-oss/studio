@@ -43,10 +43,10 @@ function formatDateTime(iso: string | null): string {
 interface ScheduledQueueSectionProps {
   campaignId: string
   resolvedKitId: string | null
-  isAdmin: boolean
+  isTeamAdmin: boolean
 }
 
-export function ScheduledQueueSection({ campaignId, resolvedKitId, isAdmin }: ScheduledQueueSectionProps) {
+export function ScheduledQueueSection({ campaignId, resolvedKitId, isTeamAdmin }: ScheduledQueueSectionProps) {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const [modal, setModal] = useState<{ open: boolean; entry?: ScheduledGeneration }>({ open: false })
@@ -194,7 +194,7 @@ export function ScheduledQueueSection({ campaignId, resolvedKitId, isAdmin }: Sc
         <QueueEntryModal
           campaignId={campaignId}
           resolvedKitId={resolvedKitId}
-          isAdmin={isAdmin}
+          isTeamAdmin={isTeamAdmin}
           entry={modal.entry}
           onClose={() => setModal({ open: false })}
           onSaved={async () => {

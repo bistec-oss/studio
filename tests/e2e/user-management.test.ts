@@ -55,7 +55,6 @@ test.describe('Super-admin user management', () => {
     const createRes = await sa.post('/api/admin/users', {
       name: 'UM Test',
       username,
-      role: 'editor',
       password: 'InitialPass1!',
     })
     expect(createRes.status()).toBe(201)
@@ -69,7 +68,6 @@ test.describe('Super-admin user management', () => {
         await sa.post('/api/admin/users', {
           name: 'Dup',
           username,
-          role: 'editor',
           password: 'InitialPass1!',
         })
       ).status(),
@@ -103,7 +101,6 @@ test.describe('Super-admin user management', () => {
       await sa.post('/api/admin/users', {
         name: 'UM Session',
         username,
-        role: 'editor',
         password: 'SessionPass1!',
       })
     ).json()
@@ -122,47 +119,48 @@ test.describe('Super-admin user management', () => {
     await sa.dispose()
   })
 
-  test('guards: self-modify and super-admin targets are 403; role field rejects super_admin', async ({ request }) => {
+  test('guards: self-modify is 403; create never assigns an elevated role (always EDITOR)', async ({ request }) => {
     const sa = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
     const users = await (await sa.get('/api/admin/users')).json()
     const me = users.find((u: { email: string }) => u.email === ADMIN_EMAIL)
 
     expect((await sa.patch(`/api/admin/users/${me.id}`, { disabled: true })).status()).toBe(403)
-    // Creating a super_admin through the API is a schema violation.
-    expect(
-      (
-        await sa.post('/api/admin/users', {
-          name: 'Nope',
-          username: uniq(),
-          role: 'super_admin',
-          password: 'SomePass123!',
-        })
-      ).status(),
-    ).toBe(400)
+    // Create takes no role field (team tenancy): any role in the body is ignored
+    // and the account is always the baseline EDITOR — an elevated role can never
+    // be minted through this endpoint. Access is granted separately via team
+    // membership at /admin/teams.
+    const res = await sa.post('/api/admin/users', {
+      name: 'Nope',
+      username: uniq(),
+      role: 'super_admin',
+      password: 'SomePass123!',
+    })
+    expect(res.status()).toBe(201)
+    expect((await res.json()).role).toBe('EDITOR')
     await sa.dispose()
   })
 
-  test('a plain ADMIN gets 403 on every user-management route', async ({ request }) => {
+  test('a team ADMIN (non-super) gets 403 on every user-management route', async ({ request }) => {
     const sa = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
     const username = uniq()
     const created = await (
       await sa.post('/api/admin/users', {
         name: 'Plain Admin',
         username,
-        role: 'admin',
         password: 'PlainAdmin1!',
       })
     ).json()
     // Creating a platform user via /api/admin/users grants NO team membership
     // (a deliberate separate step — team-tenancy) — team-scoped routes like
     // /api/admin/brandkits (withTeamAdmin) 403 "not a member of any team"
-    // without one. Add this account to Bistec as a team ADMIN, mirroring how
-    // a real super admin provisions a new admin via /admin/teams.
+    // without one. Admin capability comes from the TEAM role, not the global
+    // one: add this account to Bistec as a team ADMIN, mirroring how a real
+    // super admin provisions a new admin via /admin/teams.
     const bistecId = await findTeamIdByName(sa, 'Bistec')
     await addTeamMember(sa, bistecId, created.id, 'ADMIN')
 
     const plain = await loginAs(request, `${username.toLowerCase()}@users.bistec.internal`, 'PlainAdmin1!')
-    // Sanity: this account IS an admin (reaches admin routes)…
+    // Sanity: this account IS a team admin (reaches team-admin routes)…
     expect((await plain.get('/api/admin/brandkits')).status()).toBe(200)
     // …but not a super-admin.
     expect((await plain.get('/api/admin/users')).status()).toBe(403)
@@ -171,7 +169,6 @@ test.describe('Super-admin user management', () => {
         await plain.post('/api/admin/users', {
           name: 'x',
           username: uniq(),
-          role: 'editor',
           password: 'SomePass123!',
         })
       ).status(),

@@ -17,7 +17,7 @@ export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { isAdmin } = useCurrentUser()
+  const { isTeamAdmin } = useCurrentUser()
   const [savingKit, setSavingKit] = useState(false)
 
   const projectQuery = useQuery({
@@ -110,7 +110,7 @@ export default function ProjectDetailPage() {
                   Default brand kit
                   {savingKit && <Loader2 size={11} className="animate-spin" />}
                 </dt>
-                {isAdmin ? (
+                {isTeamAdmin ? (
                   <dd className="mt-1">
                     <Select
                       options={[

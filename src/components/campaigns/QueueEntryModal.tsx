@@ -27,7 +27,7 @@ interface TemplateOption {
 export interface QueueEntryModalProps {
   campaignId: string
   resolvedKitId: string | null
-  isAdmin: boolean
+  isTeamAdmin: boolean
   // Present when editing an existing (PENDING) entry.
   entry?: ScheduledGeneration
   onClose: () => void
@@ -48,7 +48,7 @@ const ACTION_OPTIONS: Array<{ value: PostGenerationAction; label: string; hint: 
   { value: 'PUBLISH_NOW', label: 'Publish immediately', hint: 'Publishes right after generation completes.' },
 ]
 
-export function QueueEntryModal({ campaignId, resolvedKitId, isAdmin, entry, onClose, onSaved }: QueueEntryModalProps) {
+export function QueueEntryModal({ campaignId, resolvedKitId, isTeamAdmin, entry, onClose, onSaved }: QueueEntryModalProps) {
   const [topic, setTopic] = useState(entry?.topic ?? '')
   const [description, setDescription] = useState(entry?.description ?? '')
   const [goal, setGoal] = useState(entry?.goal ?? '')
@@ -234,7 +234,7 @@ export function QueueEntryModal({ campaignId, resolvedKitId, isAdmin, entry, onC
           <p className="text-sm font-medium text-light-text dark:text-dark-text mb-2">After generation</p>
           <div className="space-y-2">
             {ACTION_OPTIONS.map(opt => {
-              const disabled = !isAdmin && opt.value !== 'HOLD'
+              const disabled = !isTeamAdmin && opt.value !== 'HOLD'
               return (
                 <label
                   key={opt.value}
@@ -256,7 +256,7 @@ export function QueueEntryModal({ campaignId, resolvedKitId, isAdmin, entry, onC
               )
             })}
           </div>
-          {!isAdmin && (
+          {!isTeamAdmin && (
             <p className="text-xs text-light-text-muted dark:text-dark-text-muted mt-1">
               Auto-publish requires admin.
             </p>

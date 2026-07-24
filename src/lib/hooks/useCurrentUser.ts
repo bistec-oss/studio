@@ -22,8 +22,6 @@ export function useCurrentUser() {
 
   return {
     user: data ?? null,
-    // super_admin passes every admin gate (mirrors hasRole on the server)
-    isAdmin: role === 'admin' || isSuperAdmin,
     isSuperAdmin,
     // Personal-Claude-token surface (see MeResponse): whether the server runs
     // CLI mode and the user's (masked) token connection state.

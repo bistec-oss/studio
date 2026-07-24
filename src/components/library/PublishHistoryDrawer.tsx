@@ -22,7 +22,7 @@ interface PostHistory {
 interface PublishHistoryDrawerProps {
   draftId: string | null
   posts: PostHistory[]
-  isAdmin: boolean
+  isTeamAdmin: boolean
   onClose: () => void
   onRetry: (postId: string) => Promise<void>
 }
@@ -46,7 +46,7 @@ const PLATFORM_URLS: Record<string, (id: string) => string> = {
 export function PublishHistoryDrawer({
   draftId,
   posts,
-  isAdmin,
+  isTeamAdmin,
   onClose,
   onRetry,
 }: PublishHistoryDrawerProps) {
@@ -118,7 +118,7 @@ export function PublishHistoryDrawer({
                   )}
 
                   {/* Retry button — admin only, FAILED rows */}
-                  {isAdmin && isFailed && (
+                  {isTeamAdmin && isFailed && (
                     <Button
                       variant="secondary"
                       size="sm"

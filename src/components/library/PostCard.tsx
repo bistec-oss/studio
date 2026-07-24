@@ -31,7 +31,7 @@ interface PostCardDraft {
 
 interface PostCardProps {
   draft: PostCardDraft
-  isAdmin: boolean
+  isTeamAdmin: boolean
   onPublish: (draftId: string, exportUrl: string) => void
   onViewHistory: (draftId: string, posts: PostSummary[]) => void
   // Admin-only hard delete (button hidden when omitted).
@@ -53,7 +53,7 @@ function deriveStatus(draft: PostCardDraft): ChipStatus {
   return 'draft'
 }
 
-export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }: PostCardProps) {
+export function PostCard({ draft, isTeamAdmin, onPublish, onViewHistory, onDelete }: PostCardProps) {
   const chipStatus = deriveStatus(draft)
   const [showPreview, setShowPreview] = useState(false)
 
@@ -138,7 +138,7 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }:
 
         {/* Actions */}
         <div className="flex gap-2 pt-1">
-          {isAdmin && (
+          {isTeamAdmin && (
             <Button
               variant="primary"
               size="sm"
@@ -152,12 +152,12 @@ export function PostCard({ draft, isAdmin, onPublish, onViewHistory, onDelete }:
           <Button
             variant="secondary"
             size="sm"
-            className={isAdmin ? '' : 'flex-1'}
+            className={isTeamAdmin ? '' : 'flex-1'}
             onClick={() => onViewHistory(draft.id, draft.posts)}
           >
             History
           </Button>
-          {isAdmin && onDelete && (
+          {isTeamAdmin && onDelete && (
             <Button
               variant="ghost"
               size="sm"

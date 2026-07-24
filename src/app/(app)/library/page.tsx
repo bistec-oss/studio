@@ -61,7 +61,7 @@ export default function LibraryPage() {
   const [activeStatus, setActiveStatus] = useState<StatusFilter>('ALL')
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const { isAdmin } = useCurrentUser()
+  const { isTeamAdmin } = useCurrentUser()
 
   const [selectedDraft, setSelectedDraft] = useState<{
     id: string
@@ -197,7 +197,7 @@ export default function LibraryPage() {
               <PostCard
                 key={draft.id}
                 draft={toBriefCardProps(draft)}
-                isAdmin={isAdmin}
+                isTeamAdmin={isTeamAdmin}
                 onPublish={(draftId, exportUrl) =>
                   setShowPublishDialog({ draftId, exportUrl })
                 }
@@ -241,7 +241,7 @@ export default function LibraryPage() {
       <PublishHistoryDrawer
         draftId={selectedDraft?.id ?? null}
         posts={selectedDraft?.posts ?? []}
-        isAdmin={isAdmin}
+        isTeamAdmin={isTeamAdmin}
         onClose={() => setSelectedDraft(null)}
         onRetry={handleRetry}
       />

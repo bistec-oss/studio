@@ -26,7 +26,7 @@ export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const { isAdmin } = useCurrentUser()
+  const { isTeamAdmin } = useCurrentUser()
   const [savingKit, setSavingKit] = useState(false)
   const [savingProject, setSavingProject] = useState(false)
 
@@ -133,12 +133,12 @@ export default function CampaignDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         {/* Stats */}
         <div className="space-y-4">
-          <CampaignBriefingSection campaignId={params.id} isAdmin={isAdmin} />
+          <CampaignBriefingSection campaignId={params.id} isTeamAdmin={isTeamAdmin} />
 
           <ScheduledQueueSection
             campaignId={params.id}
             resolvedKitId={resolved?.kit?.id ?? null}
-            isAdmin={isAdmin}
+            isTeamAdmin={isTeamAdmin}
           />
 
           <GlassPanel className="p-4">
@@ -214,7 +214,7 @@ export default function CampaignDetailPage() {
                   Project
                   {savingProject && <Loader2 size={11} className="animate-spin" />}
                 </dt>
-                {isAdmin ? (
+                {isTeamAdmin ? (
                   <dd className="mt-1">
                     <Select
                       options={[
@@ -243,7 +243,7 @@ export default function CampaignDetailPage() {
                   Brand kit override
                   {savingKit && <Loader2 size={11} className="animate-spin" />}
                 </dt>
-                {isAdmin ? (
+                {isTeamAdmin ? (
                   <dd className="mt-1">
                     <Select
                       options={[

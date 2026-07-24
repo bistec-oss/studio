@@ -19,10 +19,10 @@ import type { CampaignBriefing } from '@/lib/api-types'
 
 interface CampaignBriefingSectionProps {
   campaignId: string
-  isAdmin: boolean
+  isTeamAdmin: boolean
 }
 
-export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefingSectionProps) {
+export function CampaignBriefingSection({ campaignId, isTeamAdmin }: CampaignBriefingSectionProps) {
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
@@ -105,7 +105,7 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
           Campaign Briefing
         </h3>
         <div className="flex items-center gap-2">
-          {isAdmin && (
+          {isTeamAdmin && (
             <Button variant="ghost" size="sm" onClick={() => setAssistantOpen(true)}>
               <MessageSquareText size={13} /> Draft with AI
             </Button>
@@ -122,7 +122,7 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
         design prompts alongside the brand voice.
       </p>
 
-      {isAdmin ? (
+      {isTeamAdmin ? (
         <div className="space-y-3">
           <SegmentedToggle
             options={[
@@ -244,7 +244,7 @@ export function CampaignBriefingSection({ campaignId, isAdmin }: CampaignBriefin
         </p>
       )}
 
-      {isAdmin && (
+      {isTeamAdmin && (
         <BriefingAssistantPanel
           campaignId={campaignId}
           open={assistantOpen}

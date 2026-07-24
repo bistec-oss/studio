@@ -33,6 +33,10 @@ export const GET = withSuperAdmin(async () => {
   return NextResponse.json(users)
 })
 
+// No role field: after team tenancy the global User.role no longer gates any
+// team-scoped access (that comes from TeamMembership.teamRole, set when the
+// user is added to a team at /admin/teams). New accounts are always created as
+// the baseline EDITOR; SUPER_ADMIN is never assignable through this API.
 const createSchema = z.object({
   name: z.string().trim().min(1),
   username: z
@@ -41,14 +45,13 @@ const createSchema = z.object({
     .min(3)
     .max(30)
     .regex(/^[a-zA-Z0-9_.-]+$/, 'Letters, numbers, dot, dash, underscore only'),
-  role: z.enum(['admin', 'editor']),
   password: z.string().min(8),
 })
 
 export const POST = withSuperAdmin(async (req) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
-  const { name, username, role, password } = body.data
+  const { name, username, password } = body.data
 
   const existing = await prisma.user.findUnique({ where: { username: username.toLowerCase() } })
   if (existing) {
@@ -56,14 +59,14 @@ export const POST = withSuperAdmin(async (req) => {
   }
 
   // Create through better-auth so the credential Account row + password hash
-  // use its own machinery (same pattern as scripts/seed-admin.mjs), then set
-  // the role server-side (role is input:false on the sign-up surface).
+  // use its own machinery (same pattern as scripts/seed-admin.mjs). The role is
+  // input:false on the sign-up surface; better-auth's additionalField default
+  // ('EDITOR') applies, so no explicit role write is needed.
   const email = internalEmail(username)
   await auth.api.signUpEmail({ body: { name, email, password, username } })
 
-  const user = await prisma.user.update({
+  const user = await prisma.user.findUniqueOrThrow({
     where: { email },
-    data: { role: role === 'admin' ? 'ADMIN' : 'EDITOR' },
     select: USER_SELECT,
   })
 

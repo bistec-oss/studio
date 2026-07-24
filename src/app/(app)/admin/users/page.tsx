@@ -222,14 +222,12 @@ function AddUserModal({
 }) {
   const [name, setName] = useState('')
   const [username, setUsername] = useState('')
-  const [role, setRole] = useState('editor')
   const [password, setPassword] = useState('')
   const [saving, setSaving] = useState(false)
 
   function reset() {
     setName('')
     setUsername('')
-    setRole('editor')
     setPassword('')
   }
 
@@ -240,7 +238,7 @@ function AddUserModal({
       await apiFetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, username, role, password }),
+        body: JSON.stringify({ name, username, password }),
       })
       toast.success(`User created — share the initial password with ${name}.`)
       await onSaved()
@@ -269,15 +267,6 @@ function AddUserModal({
           required
           placeholder="e.g. jane.d"
         />
-        <Select
-          label="Role"
-          options={[
-            { value: 'editor', label: 'Editor' },
-            { value: 'admin', label: 'Admin' },
-          ]}
-          value={role}
-          onChange={e => setRole(e.target.value)}
-        />
         <GlassInput
           label="Initial password"
           type="text"
@@ -289,6 +278,8 @@ function AddUserModal({
         />
         <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
           The password is set directly — share it with the user privately and ask them to change it.
+          Grant access by adding this user to a team in Teams, where you pick their per-team role
+          (Admin or Editor).
         </p>
         <div className="flex gap-2 justify-end pt-1">
           <Button type="button" variant="secondary" onClick={onClose}>
