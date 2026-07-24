@@ -69,9 +69,11 @@ export function InlineEditModal({
 
   // Wire the iframe once it has rendered the srcDoc. No scripts run inside the
   // sandbox (allow-same-origin only), so ALL wiring happens from the parent.
-  const onIframeLoad = useCallback(() => {
-    const doc = iframeRef.current?.contentDocument
-    if (!doc) return
+  // Idempotent — safe to call more than once (see the load event + effect
+  // below): the style, contenteditable, paste handler and img wrappers are each
+  // guarded so a second call is a no-op.
+  const wireEditor = useCallback((doc: Document) => {
+    if (!doc.body) return
 
     // Inject the editor stylesheet.
     if (!doc.getElementById('inline-edit-style')) {
@@ -97,12 +99,16 @@ export function InlineEditModal({
       if (hasDirectText) el.setAttribute('contenteditable', 'true')
     })
 
-    // Plain-text paste only.
-    doc.body?.addEventListener('paste', (e: ClipboardEvent) => {
-      e.preventDefault()
-      const text = e.clipboardData?.getData('text/plain') ?? ''
-      doc.execCommand('insertText', false, text)
-    })
+    // Plain-text paste only. Registered once (a duplicate listener would insert
+    // the pasted text twice) — guarded by a marker on <body>.
+    if (!doc.body.dataset.inlineEditPasteWired) {
+      doc.body.dataset.inlineEditPasteWired = '1'
+      doc.body.addEventListener('paste', (e: ClipboardEvent) => {
+        e.preventDefault()
+        const text = e.clipboardData?.getData('text/plain') ?? ''
+        doc.execCommand('insertText', false, text)
+      })
+    }
 
     // Wrap each <img> with a "Replace photo" control. The wrapper is marked
     // contenteditable="false" so it stays a protected, non-editable island even
@@ -144,6 +150,37 @@ export function InlineEditModal({
       wrap.appendChild(btn)
     })
   }, [])
+
+  const onIframeLoad = useCallback(() => {
+    const doc = iframeRef.current?.contentDocument
+    if (doc) wireEditor(doc)
+  }, [wireEditor])
+
+  // Backup wiring — do NOT rely on the iframe `load` event alone. For a srcDoc
+  // iframe the load event can fire before React attaches onLoad (so it never
+  // runs), AND the frame first exposes a blank about:blank document that is
+  // already "complete" before the srcDoc content parses in. Either one leaves
+  // the editor un-wired — the intermittent "nothing is editable" bug. So poll
+  // until the frame's document actually holds the rendered content (body has
+  // children), then wire it directly. wireEditor is idempotent, so onLoad
+  // firing too is harmless.
+  useEffect(() => {
+    if (!open) return
+    let raf = 0
+    let tries = 0
+    const attempt = () => {
+      const doc = iframeRef.current?.contentDocument
+      const hasContent =
+        doc && doc.body && doc.readyState !== 'loading' && doc.body.children.length > 0
+      if (hasContent) {
+        wireEditor(doc)
+        return
+      }
+      if (tries++ < 600) raf = requestAnimationFrame(attempt) // ~10s safety cap
+    }
+    attempt()
+    return () => cancelAnimationFrame(raf)
+  }, [open, html, wireEditor])
 
   async function handleSave() {
     const doc = iframeRef.current?.contentDocument
