@@ -9,7 +9,6 @@ import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
 import { GlassInput } from '@/components/ui/GlassInput'
-import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 
@@ -28,12 +27,6 @@ interface ManagedUser {
 // predating the username switch.
 function loginLabel(u: ManagedUser): string {
   return u.displayUsername ?? u.username ?? u.email
-}
-
-const ROLE_LABEL: Record<ManagedUser['role'], string> = {
-  SUPER_ADMIN: 'Super admin',
-  ADMIN: 'Admin',
-  EDITOR: 'Editor',
 }
 
 function StatusPill({ disabled }: { disabled: boolean }) {
@@ -133,7 +126,6 @@ export default function AdminUsersPage() {
               <tr className="text-left text-xs text-light-text-muted dark:text-dark-text-muted">
                 <th className="py-2 pr-3 font-medium">Name</th>
                 <th className="py-2 pr-3 font-medium">Username</th>
-                <th className="py-2 pr-3 font-medium">Role</th>
                 <th className="py-2 pr-3 font-medium">Status</th>
                 <th className="py-2 pr-3 font-medium">Created</th>
                 <th className="py-2 font-medium sr-only">Actions</th>
@@ -149,24 +141,13 @@ export default function AdminUsersPage() {
                       {u.id === me?.userId && (
                         <span className="ml-1.5 text-xs text-light-text-muted dark:text-dark-text-muted">(you)</span>
                       )}
-                    </td>
-                    <td className="py-2.5 pr-3 font-mono text-xs text-light-text dark:text-dark-text">{loginLabel(u)}</td>
-                    <td className="py-2.5 pr-3">
-                      {locked ? (
-                        <span className="text-light-text dark:text-dark-text">{ROLE_LABEL[u.role]}</span>
-                      ) : (
-                        <Select
-                          aria-label={`Role for ${loginLabel(u)}`}
-                          className="w-28 py-1"
-                          options={[
-                            { value: 'admin', label: 'Admin' },
-                            { value: 'editor', label: 'Editor' },
-                          ]}
-                          value={u.role === 'ADMIN' ? 'admin' : 'editor'}
-                          onChange={e => patchUser(u, { role: e.target.value }, 'Role updated')}
-                        />
+                      {u.role === 'SUPER_ADMIN' && (
+                        <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-primary/10 text-primary dark:bg-primary-light/15 dark:text-primary-light">
+                          Super admin
+                        </span>
                       )}
                     </td>
+                    <td className="py-2.5 pr-3 font-mono text-xs text-light-text dark:text-dark-text">{loginLabel(u)}</td>
                     <td className="py-2.5 pr-3">
                       <StatusPill disabled={u.disabled} />
                     </td>
