@@ -6,7 +6,7 @@ import type { PipelineMode } from '@/lib/agent/config'
 
 // Bump when prompt content changes materially; persisted on Draft.promptVersion
 // so output quality can be correlated with prompt revisions.
-export const PROMPT_VERSION = '2026-07-28.1'
+export const PROMPT_VERSION = '2026-09-15.1'
 
 // Multilingual/script fidelity, applied to every design surface (Path A/B +
 // refine). The copy generator can emit non-Latin scripts (Sinhala especially,

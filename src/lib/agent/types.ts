@@ -47,6 +47,23 @@ export interface DesignAgentResult {
   htmlContent: string
   exportUrl: string
   toolCallCount: number
+  /**
+   * The model's COMPLETE reply, before the document was cut out of it and before
+   * inline assets were spliced back in. Set by the CLI runner only; undefined on
+   * the API tool-use path, whose HTML arrives as a renderHtml tool argument and
+   * therefore has no surrounding text at all.
+   *
+   * It exists for the refine route (T10/FR-01): the refine envelope's
+   * `REFINE-CLASSES:` / `REFINE-SUPERSEDES:` header lines sit OUTSIDE the
+   * document, in exactly the region extractHtmlDocument discards, so a caller
+   * handed only `htmlContent` can never see them. Re-parsing the reply from here
+   * also recovers the model's document PRE-restore, which is the only moment the
+   * `__INLINE_ASSET_n__` token arithmetic (reconcileInlineAssets) is still true.
+   *
+   * Optional and purely additive: every other caller ignores it and behaves
+   * exactly as before.
+   */
+  rawReply?: string
 }
 
 export class AgentToolLimitError extends Error {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, parseBody } from '@/lib/api/handler'
@@ -8,13 +9,36 @@ import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
-import { extractInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
+import { extractInlineAssets, reconcileInlineAssets, restoreInlineAssets } from '@/lib/agent/inlineAssets'
 import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pathForDesignMode, pipelineMode } from '@/lib/agent/config'
-import { buildRefineSystemPrompt, buildRefineUserMessage } from '@/lib/agent/prompts/refine'
+import {
+  buildRefineSystemPrompt,
+  buildRefineUserMessage,
+  resolveEffectiveClasses,
+} from '@/lib/agent/prompts/refine'
+import { DEFAULT_INSTRUCTION_CLASSES, parseRefineEnvelope } from '@/lib/agent/refineEnvelope'
+import type { InstructionClass } from '@/lib/agent/instructionClasses'
+import { verifyRefine, type VerificationResult } from '@/lib/drafts/refineVerify'
+import { MOCK_AI } from '@/lib/testHooks'
 import { generateBackgroundForRefine } from '@/lib/agent/background'
 import { commitDraftRevision } from '@/lib/drafts/revisions'
 import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
+
+// ── The hard cap (FR-11/AC-15) ──────────────────────────────────────────────
+// "At most 2 refine calls and 2 verifier calls, under any input" is enforced by
+// SHAPE, not by reading the branches below: the refine calls are the iterations
+// of one bounded `for`, and the verifier calls are counted against a budget from
+// verifyRefine's own `modelCalls` return rather than inferred from which class
+// ran. Nothing inside an iteration can add another iteration, and an over-budget
+// attempt skips verification and fails closed rather than calling again.
+const MAX_REFINE_ATTEMPTS = 2
+const MAX_VERIFIER_CALLS = 2
+
+// Negative-number allocation contends on @@unique([draftId, revisionNumber])
+// exactly as withNextRevisionNumber's positive one does; same retry discipline,
+// same generous budget (a small one 500s under heavy concurrency — TC-REG-H7a).
+const REJECTED_ALLOC_ATTEMPTS = 12
 
 interface PendingConflict {
   conflictId: string
@@ -92,6 +116,9 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
     if (!pending || pending.conflictId !== overrideConflictId) {
       return NextResponse.json({ error: 'Conflict not found or already resolved' }, { status: 409 })
     }
+    // This path commits, so any not-applied outcome from an earlier refine is
+    // now stale. (The model path clears it on claim instead — see below.)
+    await clearNotApplied(draft.id)
     return commitRevision(draft.id, instruction || 'Override brand kit conflict', pending.pendingHtml, width, height)
   }
 
@@ -120,6 +147,11 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   if (!claimed) {
     return NextResponse.json({ error: 'Another action is already running on this draft' }, { status: 409 })
   }
+  // notAppliedReason is a SEPARATE channel from pendingActionError (FR-14), so
+  // claimDraftAction's clear does not cover it. Cleared here, as the new action
+  // starts, so the poll stops reporting the previous refine's failure the moment
+  // this one is under way rather than for the two minutes it runs.
+  await clearNotApplied(draft.id)
 
   // CLI mode bills the acting user's personal Claude token when connected
   // (the team token otherwise) — startDraftAction resolves it before the
@@ -137,70 +169,285 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
       teamId: user.teamId,
     })
 
-    const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
-    const userMessage = buildRefineUserMessage({
-      slimHtml,
-      hasHtml: !!draft.htmlContent,
-      instruction,
-      width,
-      height,
-    })
+    // ── The refine loop (FR-07/11). One iteration = one refine call, its
+    // classification, and one verification. The second iteration exists only to
+    // re-issue the edit with the previous attempt's MEASURED miss made explicit;
+    // a second miss ends the attempt (FR-11), whatever the class or failure kind.
+    let priorMiss: string | undefined
+    let rejected: RejectedRender | null = null
+    let verifierCallsSpent = 0
 
-    // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic API,
-    // no API key). Conflict-card detection is an API-mode feature; CLI mode applies
-    // the edit directly.
-    if (isCliMode()) {
-      const result = await runDesignAgentCli({
-        systemPrompt,
-        userMessage,
-        briefId: draft.brief.id,
-        inlineAssets,
+    for (let attempt = 1; attempt <= MAX_REFINE_ATTEMPTS; attempt += 1) {
+      const systemPrompt = buildRefineSystemPrompt({ kit, mode, width, height, hasInlineAssets, backgroundImageUrl })
+      const userMessage = buildRefineUserMessage({
+        slimHtml,
+        hasHtml: !!draft.htmlContent,
+        instruction,
         width,
         height,
-        model: modelFor(path, 'cli'),
+        priorMiss,
       })
-      await commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
-      return
+
+      // What one attempt yields, in the same shape from both pipeline modes.
+      let classes: InstructionClass[]
+      let supersedes: string[]
+      // `before`/`after` MUST be on the same footing — both with inline assets
+      // externalized (CLI) or both with them inlined (API). Comparing a
+      // tokenized `before` against a restored `after` would make every length
+      // and element measurement wrong by the size of the assets.
+      let before: string
+      let after: string
+      let commitHtml: string
+      let exportUrl: string | undefined
+      // A miss established without the verifier (FR-20's placeholder mismatch).
+      let preVerificationMiss: string | null = null
+
+      // ── CLI mode: single-shot edit through the local Claude CLI (no Anthropic
+      // API, no API key). Conflict-card detection is an API-mode feature; CLI
+      // mode applies the edit directly.
+      if (isCliMode()) {
+        const result = await runDesignAgentCli({
+          systemPrompt,
+          userMessage,
+          briefId: draft.brief.id,
+          inlineAssets,
+          width,
+          height,
+          model: modelFor(path, 'cli'),
+        })
+
+        // The envelope header lines live OUTSIDE the document, in the text
+        // runDesignAgentCli discards — hence the rawReply seam. Parsing the
+        // restored htmlContent instead would find no header and silently default
+        // every reply to the preserving class. Null (no document at all) cannot
+        // happen — the runner already threw — but defaults rather than crashes.
+        const envelope = parseRefineEnvelope(result.rawReply ?? result.htmlContent)
+        supersedes = envelope?.supersedes ?? []
+
+        // FR-04 — the ROUTE decides whether a destructive class is permitted.
+        // The prompt asked for a target and the parser reported what it got;
+        // neither is trusted to have enforced it.
+        const effective = resolveEffectiveClasses(
+          envelope?.classes ?? [...DEFAULT_INSTRUCTION_CLASSES],
+          supersedes,
+        )
+        classes = effective.classes
+        if (effective.downgraded.length > 0) {
+          console.warn(
+            `[refine] draft ${draft.id}: ${effective.downgraded.join('/')} declared with no superseded element named — ` +
+              `downgraded to ${classes.join(', ')} (FR-04); nothing will be deleted.`,
+          )
+        }
+        if (envelope?.defaulted) {
+          console.warn(
+            `[refine] draft ${draft.id}: classification defaulted (${envelope.ambiguity})` +
+              `${envelope.unrecognized.length > 0 ? ` — unrecognized: ${envelope.unrecognized.join(', ')}` : ''}`,
+          )
+        }
+
+        before = slimHtml
+        after = envelope?.html ?? result.htmlContent
+        commitHtml = result.htmlContent
+        exportUrl = result.exportUrl
+
+        // FR-20 — reconciliation, not detection. Run against the model's own
+        // document, which is the only place the token arithmetic is still true:
+        // runDesignAgentCli has already spliced the real assets into
+        // result.htmlContent. A mismatch takes the same path as a verified miss.
+        if (hasInlineAssets) {
+          const reconciliation = reconcileInlineAssets(Object.keys(inlineAssets), after)
+          if (reconciliation.outcome === 'mismatch') {
+            preVerificationMiss =
+              `The image placeholders in the reply do not reconcile with the ones it was given: ` +
+              `${reconciliation.unexpected.join(', ')} was never sent, or came back more than once. ` +
+              `Keep every __INLINE_ASSET_n__ token exactly as written, once each.`
+          } else if (reconciliation.outcome === 'restored') {
+            console.warn(
+              `[refine] draft ${draft.id}: reply dropped ${reconciliation.absent.length} asset placeholder(s): ${reconciliation.absent.join(', ')}`,
+            )
+          }
+        }
+      } else {
+        const result = await runDesignAgent({
+          systemPrompt,
+          userMessage,
+          briefId: draft.brief.id,
+          model: modelFor(path, 'api'),
+          maxToolCalls: 15,
+          inlineAssets,
+          width,
+          height,
+          actor: { userId: user.userId, teamId: user.teamId },
+        })
+
+        // The conflict protocol is API-only and is NOT a fidelity failure: the
+        // model deliberately withheld the edit. It ends the action before any
+        // verification, exactly as before this change.
+        const conflict = parseConflict(result.htmlContent)
+        if (conflict) {
+          const conflictId = randomUUID()
+          await prisma.draft.update({
+            where: { id: draft.id },
+            data: {
+              pendingConflict: {
+                conflictId,
+                // Restore externalized assets so the withheld HTML renders correctly
+                // if the user clicks Override later.
+                pendingHtml: restoreInlineAssets(conflict.pendingHtml, inlineAssets),
+                explanation: conflict.explanation,
+              },
+            },
+          })
+          // The conflict is a clean completion of the action — startDraftAction
+          // releases the claim; the client learns of the conflict from the draft
+          // GET's pendingConflict-derived field, not from this route's response.
+          return
+        }
+
+        // API mode carries no envelope: its HTML arrives as a renderHtml TOOL
+        // ARGUMENT, so there is no surrounding text for the header lines to sit
+        // in and nothing to classify from. It therefore always takes FR-05's
+        // preserving default — which is precisely today's API-mode behaviour —
+        // and is verified against it. Its HTML also comes back with the inline
+        // assets already restored, so `before` is the draft's stored HTML rather
+        // than the tokenized copy the model saw.
+        classes = [...DEFAULT_INSTRUCTION_CLASSES]
+        supersedes = []
+        before = draft.htmlContent ?? ''
+        after = result.htmlContent
+        commitHtml = result.htmlContent
+        exportUrl = result.exportUrl
+      }
+
+      // MOCK_AI is a STUB, not a model: buildMockHtml is a deterministic
+      // function of the prompt, and both the generation and the refine prompt
+      // open with the same brand-kit colour list, so a mocked refine hands back
+      // the document it was given, byte for byte. In production an unchanged
+      // document is a miss ("nothing was applied") and must stay one; under the
+      // stub it carries no information at all, and verifying it would fail every
+      // mocked refine in suites that have nothing to do with this change.
+      //
+      // Deliberately narrow: it needs MOCK_AI *and* exact identity, it is inert
+      // in production, and it retires itself the moment the stub varies its
+      // output per instruction (T12/FR-24) — after which the full verification,
+      // and its forced-miss seam, run on every mocked refine.
+      if (MOCK_AI && before === after) {
+        await commitRevision(draft.id, instruction, commitHtml, width, height, exportUrl, backgroundImageUrl)
+        return
+      }
+
+      // ── Verification (FR-07/08/10). `unavailable` is not a third branch — it
+      // routes exactly as `miss`, so there is no path on which a broken verifier
+      // commits. The budget check is the arithmetic half of AC-15: it spends
+      // verifyRefine's own reported modelCalls and refuses to call once the two
+      // are gone, fail-closed.
+      const verification: Pick<VerificationResult, 'outcome' | 'reason' | 'modelCalls'> = preVerificationMiss
+        ? { outcome: 'miss', reason: preVerificationMiss, modelCalls: 0 }
+        : verifierCallsSpent >= MAX_VERIFIER_CALLS
+          ? {
+              outcome: 'miss',
+              reason: 'The verifier budget for this refine was already spent, so the edit could not be confirmed.',
+              modelCalls: 0,
+            }
+          : await verifyRefine({ before, after, instruction, supersedes, classes })
+      verifierCallsSpent += verification.modelCalls
+
+      if (verification.outcome === 'pass') {
+        await commitRevision(draft.id, instruction, commitHtml, width, height, exportUrl, backgroundImageUrl)
+        return
+      }
+
+      console.warn(
+        `[refine] draft ${draft.id} attempt ${attempt}/${MAX_REFINE_ATTEMPTS} ${verification.outcome} ` +
+          `(classes=${classes.join(',')}, verifierCalls=${verifierCallsSpent}): ${verification.reason}`,
+      )
+      priorMiss = verification.reason
+      rejected = { html: commitHtml, exportUrl, classes, reason: verification.reason }
     }
 
-    const result = await runDesignAgent({
-      systemPrompt,
-      userMessage,
-      briefId: draft.brief.id,
-      model: modelFor(path, 'api'),
-      maxToolCalls: 15,
-      inlineAssets,
-      width,
-      height,
-      actor: { userId: user.userId, teamId: user.teamId },
-    })
-
-    const conflict = parseConflict(result.htmlContent)
-    if (conflict) {
-      const conflictId = randomUUID()
-      await prisma.draft.update({
-        where: { id: draft.id },
-        data: {
-          pendingConflict: {
-            conflictId,
-            // Restore externalized assets so the withheld HTML renders correctly
-            // if the user clicks Override later.
-            pendingHtml: restoreInlineAssets(conflict.pendingHtml, inlineAssets),
-            explanation: conflict.explanation,
-          },
-        },
-      })
-      // The conflict is a clean completion of the action — startDraftAction
-      // releases the claim; the client learns of the conflict from the draft
-      // GET's pendingConflict-derived field, not from this route's response.
-      return
-    }
-
-    await commitRevision(draft.id, instruction, result.htmlContent, width, height, result.exportUrl, backgroundImageUrl)
+    // Missed twice: the edit is NOT applied (FR-12) — the chain and
+    // currentRevisionNumber are left exactly as they were — and the render that
+    // was thrown away is retained out of chain for diagnosis (FR-13/14).
+    if (rejected) await retainRejectedRender(draft.id, instruction, rejected)
   })
 
   return NextResponse.json({ ok: true }, { status: 202 })
 })
+
+// The render a twice-missed refine threw away, plus everything FR-13 wants it
+// labelled with.
+interface RejectedRender {
+  html: string
+  exportUrl?: string
+  classes: InstructionClass[]
+  reason: string
+}
+
+// updateMany (not update) so a draft deleted mid-action is a silent no-op,
+// matching releaseDraftAction.
+async function clearNotApplied(draftId: string): Promise<void> {
+  await prisma.draft.updateMany({ where: { id: draftId }, data: { notAppliedReason: null } })
+}
+
+// Retains the rejected render OUT OF CHAIN and records the not-applied outcome.
+//
+// Deliberately NOT withNextRevisionNumber: that helper allocates POSITIVE
+// numbers, and the DB CHECK (DraftRevision_rejected_offchain_check, migration
+// 20260915140000) requires a rejected row to be negative. The allocation is
+// min(revisionNumber) - 1 floored at -1 over ALL of this draft's rows — first
+// rejection -1, second -2 — so a rejection can neither collide with a chain
+// number nor consume one, and the chain stays contiguous (FR-12).
+//
+// currentRevisionNumber is untouched and no chain row is written (AC-16); the
+// ONLY draft field this writes is notAppliedReason (FR-14), which is separate
+// from pendingActionError because the run did not crash — startDraftAction
+// still releases the claim cleanly.
+async function retainRejectedRender(
+  draftId: string,
+  instruction: string,
+  rejected: RejectedRender
+): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        // The one DraftRevision read that must NOT exclude rejected rows: it
+        // allocates inside the rejected rows' own number space, so filtering
+        // them out would hand every rejection on a draft the number -1.
+        // eslint-disable-next-line no-restricted-syntax -- allocating the rejected (out-of-chain) number space, which by definition must see rejected rows
+        const lowest = await tx.draftRevision.findFirst({
+          where: { draftId },
+          orderBy: { revisionNumber: 'asc' },
+          select: { revisionNumber: true },
+        })
+        await tx.draftRevision.create({
+          data: {
+            draftId,
+            revisionNumber: Math.min(-1, (lowest?.revisionNumber ?? 0) - 1),
+            instruction,
+            htmlSnapshot: rejected.html,
+            exportUrl: rejected.exportUrl || null,
+            rejected: true,
+            rejectionReason: rejected.reason,
+            instructionClasses: rejected.classes,
+          },
+        })
+        await tx.draft.update({ where: { id: draftId }, data: { notAppliedReason: rejected.reason } })
+      })
+      return
+    } catch (err) {
+      // Same contention as withNextRevisionNumber's positive allocation: two
+      // concurrent rejections race for the same number and the loser recomputes.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        attempt < REJECTED_ALLOC_ATTEMPTS
+      ) {
+        continue
+      }
+      throw err
+    }
+  }
+}
 
 async function commitRevision(
   draftId: string,

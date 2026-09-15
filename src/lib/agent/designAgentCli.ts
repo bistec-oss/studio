@@ -70,6 +70,10 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
   const key = exportKey("cli", briefId)
   await uploadObject(png, BUCKET_EXPORTS, key, "image/png")
 
-  // Persist the object key; it is signed per read.
-  return { htmlContent: html, exportUrl: key, toolCallCount: 0 }
+  // Persist the object key; it is signed per read. `rawReply` is the untouched
+  // reply — the refine route re-parses it to read the envelope header lines this
+  // function discarded, and to see the model's document before the splice above
+  // (see DesignAgentResult.rawReply). Nothing here depends on it, and callers
+  // that ignore it are unaffected.
+  return { htmlContent: html, exportUrl: key, toolCallCount: 0, rawReply: raw }
 }
