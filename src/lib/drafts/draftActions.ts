@@ -11,12 +11,18 @@ import { runWithClaudeAuth } from '@/lib/agent/claudeAuth'
 // Atomically claim the action slot: a conditional update where pendingAction
 // IS NULL, so there is no read-then-write race — exactly one concurrent
 // request wins. Returns false when an action is already in flight (or the
-// draft doesn't exist); the caller responds 409. Claiming also clears the
-// error from any previous action run.
+// draft doesn't exist); the caller responds 409. Claiming also clears BOTH
+// outcome channels from any previous action run: pendingActionError ("the run
+// crashed") and notAppliedReason ("the refine ran fine and did not do what you
+// asked" — FR-14). They are separate fields on purpose, but they go stale for
+// the same reason, so they are cleared in the same place. Clearing only the
+// first left a refine's red "Couldn't apply that change — your design is
+// unchanged" card standing over a design that a subsequent regenerate had since
+// replaced: a true statement about a draft that no longer existed.
 export async function claimDraftAction(draftId: string, action: DraftAction): Promise<boolean> {
   const { count } = await prisma.draft.updateMany({
     where: { id: draftId, pendingAction: null },
-    data: { pendingAction: action, pendingActionError: null },
+    data: { pendingAction: action, pendingActionError: null, notAppliedReason: null },
   })
   return count === 1
 }

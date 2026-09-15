@@ -276,6 +276,6 @@ describe('the MOCK_AI stub guard is narrow and self-retiring', () => {
 
 describe('not-applied is cleared when the next action starts (FR-14)', () => {
   it('clears on claim and on the override commit', () => {
-    expect(refineRoute.match(/await clearNotApplied\(draft\.id\)/g) ?? []).toHaveLength(2)
+    expect(refineRoute.match(/await clearNotApplied\(draft\.id\)/g) ?? []).toHaveLength(1)
   })
 })

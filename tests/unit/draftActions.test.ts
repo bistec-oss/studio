@@ -39,11 +39,16 @@ async function waitForRelease(calls: number) {
 }
 
 describe('claimDraftAction', () => {
-  it('claims atomically (pendingAction null in the where-clause) and clears the previous error', async () => {
+  // BOTH outcome channels are cleared on claim: pendingActionError ("the run
+  // crashed") and notAppliedReason ("the refine ran fine and did not do what you
+  // asked"). They are separate fields by design (FR-14) but go stale together —
+  // clearing only the first left a refine's "your design is unchanged" card
+  // standing over a design a later regenerate had already replaced.
+  it('claims atomically (pendingAction null in the where-clause) and clears both previous outcomes', async () => {
     expect(await claimDraftAction('draft-1', 'REFINE')).toBe(true)
     expect(h.updateMany).toHaveBeenCalledWith({
       where: { id: 'draft-1', pendingAction: null },
-      data: { pendingAction: 'REFINE', pendingActionError: null },
+      data: { pendingAction: 'REFINE', pendingActionError: null, notAppliedReason: null },
     })
   })
 

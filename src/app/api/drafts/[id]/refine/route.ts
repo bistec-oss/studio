@@ -116,8 +116,9 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
     if (!pending || pending.conflictId !== overrideConflictId) {
       return NextResponse.json({ error: 'Conflict not found or already resolved' }, { status: 409 })
     }
-    // This path commits, so any not-applied outcome from an earlier refine is
-    // now stale. (The model path clears it on claim instead — see below.)
+    // This path commits WITHOUT claiming the action slot, so it is the one place
+    // claimDraftAction's clear cannot reach — an earlier refine's not-applied
+    // outcome is stale the moment this Override commits.
     await clearNotApplied(draft.id)
     return commitRevision(draft.id, instruction || 'Override brand kit conflict', pending.pendingHtml, width, height)
   }
@@ -147,11 +148,12 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
   if (!claimed) {
     return NextResponse.json({ error: 'Another action is already running on this draft' }, { status: 409 })
   }
-  // notAppliedReason is a SEPARATE channel from pendingActionError (FR-14), so
-  // claimDraftAction's clear does not cover it. Cleared here, as the new action
-  // starts, so the poll stops reporting the previous refine's failure the moment
-  // this one is under way rather than for the two minutes it runs.
-  await clearNotApplied(draft.id)
+  // No clearNotApplied here: claimDraftAction clears notAppliedReason alongside
+  // pendingActionError, so the poll stops reporting the previous refine's
+  // failure the moment this one is under way rather than for the two minutes it
+  // runs. Doing it centrally also covers regenerate-copy and regenerate-design,
+  // which claim the same slot and would otherwise leave a stale not-applied
+  // card standing over a design they had just replaced.
 
   // CLI mode bills the acting user's personal Claude token when connected
   // (the team token otherwise) — startDraftAction resolves it before the
