@@ -108,8 +108,10 @@ Each criterion must pass for the change to be considered complete.
 
 **Phase 1**
 
-- **AC-01** — A design whose HTML contains a `★` (U+2605) renders with a visible star glyph, not a replacement box, in the runner image.
-- **AC-02** — The rasterizing harness fails when given HTML containing a glyph with no font coverage, and passes when coverage exists. The assertion is glyph-agnostic — it detects replacement boxes, not one specific character.
+> ⚠️ **AC-01 cannot be verified on a developer machine.** The font is installed in the **Alpine runner stage of the Docker image**, and the glyph environment that matters is Chromium's inside that image. Running the harness against host Chromium proves the harness works — on Windows it will pass using Segoe UI Symbol whether or not `Dockerfile` was ever touched. That is a **false green**. AC-01 is proven only by `docker build` followed by running the assertion inside the built image, or by the CI docker-build job. Do not mark AC-01 met on a local run, and do not let a green local suite stand in for it.
+
+- **AC-01** — A design whose HTML contains a `★` (U+2605) renders with a visible star glyph, not a replacement box, **inside the built runner image**. Verification method must be recorded in `verify-report.md` as either `docker-build-local` or `ci-docker-build` — never `local`.
+- **AC-02** — The rasterizing harness fails when given HTML containing a glyph with no font coverage, and passes when coverage exists. The assertion is glyph-agnostic — it detects replacement boxes, not one specific character. This one **is** verifiable locally, because it tests the harness, not the image.
 - **AC-03** — The harness runs the real `renderHtmlToPng` path with `MOCK_PUPPETEER` off.
 - **AC-04** — A draft record carries the font-set identifier used for its render, readable alongside `promptVersion`.
 - **AC-05** — Given HTML sent out with N inline-asset placeholders, a model reply returning the same N tokens reconciles clean and commits.

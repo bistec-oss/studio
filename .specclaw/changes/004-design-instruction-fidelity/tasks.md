@@ -21,6 +21,7 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Estimate: small
   - Kind: config
   - Notes: Beside the existing `font-noto-sinhala` on the runner stage (`Dockerfile:68`). Monochrome symbol coverage only — not a full colour emoji set (FR-21). Chromium's fontconfig fallback picks it up OS-wide; no CSS or `@import` in generated HTML.
+  - ⚠️ **Verification requires a Docker image build.** This task's effect exists only inside the built image. A local test run uses host Chromium, which on Windows already has symbol coverage via Segoe UI Symbol and will pass whether or not this task was done — a false green. Prove it with `docker build` and run the assertion inside the image, or rely on the CI docker-build job. **The Docker daemon must be running**; it was not available in the planning session, which is why this is called out here rather than discovered at verify time.
 
 - [ ] `T2` — Font-set identifier, stamped per draft
   - Files: `src/lib/renderer/fontSet.ts` (new), `prisma/schema.prisma`, `prisma/migrations/*`, render/export call sites
@@ -35,6 +36,7 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Kind: test
   - Depends: T1
   - Notes: FR-23, AC-01/02/03. Runs real `renderHtmlToPng` with `MOCK_PUPPETEER` **off**. Tofu detection compares the candidate glyph against a known-covered control glyph at the same size rather than matching an absolute pattern — a replacement box has a uniform-rectangle signature no real glyph has. This harness is the compounding asset: proposal 007 and every future font/render question reuse it. Include a `★` case that fails without T1 and passes with it.
+  - ⚠️ **Split what this proves.** AC-02 (the harness detects tofu) is provable locally. AC-01 (the runner image actually has the glyph) is **not** — see T1. The `★` case will pass locally on Windows regardless of T1, so a green local run is not evidence the font fix works. Make the harness runnable inside the image so CI and a local `docker build` can both execute it.
 
 - [ ] `T4` — Inline-asset reconciliation replacing detection
   - Files: `src/lib/agent/inlineAssets.ts`, unit tests
