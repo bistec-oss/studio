@@ -100,11 +100,13 @@ admin-curated list. The design orchestrator remains env-configured (infrastructu
 choice, not user-facing).
 
 Provider resolution order for copy + image slots:
+
 1. **Brief's chosen provider** — stored on the Brief record, passed to the route handler
 2. **System default** — the `AvailableProvider` row marked `isDefault=true` for that slot
 3. **Env var fallback** — `COPY_PROVIDER` / `IMAGE_PROVIDER` (used only if DB has no config)
 
 Adding a new model (e.g. Gemini for image generation):
+
 1. Create `src/providers/implementations/image/gemini.ts` implementing `ImageProvider`
 2. Register it in `src/providers/registry.ts` under the key `"gemini"`
 3. Admin enables it in the settings UI → it appears in the brief UI for all users immediately
@@ -115,6 +117,7 @@ Only `AvailableProvider` rows change when models are added/removed.
 ### Design paths (Path A vs Path B)
 
 **Path A — Preset template:**
+
 ```
 POST /api/generate/copy   → CopyProvider.generateCopy(brief)
 POST /api/design/assemble?mode=template
@@ -130,6 +133,7 @@ POST /api/design/assemble?mode=template
 ```
 
 **Path B — Freeform AI-generated design:**
+
 ```
 POST /api/design/assemble?mode=generate
   → resolve BrandKit (campaign → project → system default)
@@ -176,6 +180,7 @@ getBrandKitContext(briefId: string): Promise<BrandKitContext>
 ```
 
 Agent loop (standard Anthropic SDK tool-use pattern):
+
 1. Build messages: system prompt + user message (brief + template/mode context)
 2. POST to Anthropic API with tools array + max_tokens
 3. If response contains `tool_use` blocks: execute each tool, append `tool_result`
@@ -208,44 +213,45 @@ Claude Code CLI session on the host machine instead.
 
 **How it works:**
 
-```typescript
+````typescript
 // claude-cli.ts — implements DesignOrchestrator
-import { execFile } from "child_process"
-import { promisify } from "util"
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 
 const exec = promisify(execFile)
 
 export class ClaudeCliOrchestrator implements DesignOrchestrator {
   async orchestrate(brief: Brief, brandKitId: string) {
     const prompt = buildCliPrompt(brief, brandKitId)
-    const { stdout } = await exec("claude", ["-p", prompt])
-    const html = extractHtmlBlock(stdout)  // parse first ```html...``` block
+    const { stdout } = await exec('claude', ['-p', prompt])
+    const html = extractHtmlBlock(stdout) // parse first ```html...``` block
     return {
       htmlContent: html,
-      exportUrl: "",   // Puppeteer skipped in CLI mode — no PNG rendered
+      exportUrl: '', // Puppeteer skipped in CLI mode — no PNG rendered
     }
   }
 }
-```
+````
 
 **What works in CLI mode vs. production:**
 
-| Capability | Production (`claude-html`) | CLI proxy (`claude-cli`) |
-|---|---|---|
-| Claude generates HTML | Yes | Yes |
-| Tool-use loop (up to 15 calls) | Yes | No — single-shot call |
-| `renderHtml` → Puppeteer → PNG | Yes | No — `exportUrl` is empty |
-| `generateImage` tool | Yes | No |
-| Brand kit context passed | Yes | Yes (in prompt string) |
-| MinIO upload | Yes | No |
-| API key required | Yes (`sk-ant-*`) | No |
-| Good for testing | Full pipeline | UI flow + copy/HTML output |
+| Capability                     | Production (`claude-html`) | CLI proxy (`claude-cli`)   |
+| ------------------------------ | -------------------------- | -------------------------- |
+| Claude generates HTML          | Yes                        | Yes                        |
+| Tool-use loop (up to 15 calls) | Yes                        | No — single-shot call      |
+| `renderHtml` → Puppeteer → PNG | Yes                        | No — `exportUrl` is empty  |
+| `generateImage` tool           | Yes                        | No                         |
+| Brand kit context passed       | Yes                        | Yes (in prompt string)     |
+| MinIO upload                   | Yes                        | No                         |
+| API key required               | Yes (`sk-ant-*`)           | No                         |
+| Good for testing               | Full pipeline              | UI flow + copy/HTML output |
 
 **Env var:** `DESIGN_PROVIDER=cli` in `.env` (or `.env.local` for local dev).
 The registry checks this only for the orchestrator slot — copy and image providers
 are unaffected and still require their respective keys.
 
 **`.env.example` entry:**
+
 ```
 # Set to "cli" to use Claude Code CLI proxy for design generation (no API key required).
 # Omit or set to "claude-html" for production.
@@ -543,6 +549,7 @@ model DraftRevision {
 ### Asset storage
 
 **MinIO** (S3-compatible object storage, Docker container on VPS) — two buckets:
+
 - `generated-images` — raster images from on-demand `generateImage` tool calls (temp, 7-day lifecycle rule)
 - `exported-designs` — Puppeteer-rendered PNG assets (permanent, linked in Draft.exportUrl)
 
@@ -561,6 +568,7 @@ never directly exposed to the public internet.
 **Dedicated Docker container** (defined in `docker-compose.yml` as the `scheduler`
 service, runs `src/scheduler/worker.ts` on a 60-second polling loop) — a standalone
 Node.js script that:
+
 1. Queries DB for `Post WHERE status=SCHEDULED AND scheduledAt <= now()`
 2. For each, calls the publish layer
 3. Updates status to PUBLISHED or FAILED with reason
@@ -597,67 +605,67 @@ A static prototype (`bistec-studio-proto/`) and its page outline (`docs/prototyp
 
 ## File Changes Map
 
-| File / Directory | Action | Description |
-|---|---|---|
-| `src/app/` | create | Next.js App Router pages |
-| `src/app/api/generate/copy/route.ts` | create | Copy generation endpoint |
-| `src/app/api/generate/image/route.ts` | create | Image generation endpoint |
-| `src/app/api/design/assemble/route.ts` | create | Design assembly (Path A + B) — launches Claude design agent |
-| `src/app/api/design/export/route.ts` | create | Re-render export (thin wrapper; Puppeteer runs at assembly time) |
-| `src/app/api/publish/route.ts` | create | Immediate publish |
-| `src/app/api/schedule/route.ts` | create | Schedule a post |
-| `src/app/api/posts/route.ts` | create | List/cancel scheduled posts |
-| `src/app/api/projects/route.ts` | create | Project CRUD |
-| `src/app/api/projects/[id]/route.ts` | create | Project update / soft-delete / recover |
-| `src/app/api/campaigns/route.ts` | create | Campaign CRUD |
-| `src/app/api/campaigns/[id]/route.ts` | create | Campaign update / soft-delete / recover |
-| `src/app/api/campaigns/[id]/projects/route.ts` | create | Campaign → project reassignment (admin) |
-| `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts` | create | Link draft to campaign (shared asset) |
-| `src/app/api/campaigns/[id]/brandkit/route.ts` | create | Resolved brand kit for a campaign |
-| `src/app/api/library/route.ts` | create | Asset library + publish history (filterable by project/campaign) |
-| `src/app/api/admin/brandkits/route.ts` | create | BrandKit CRUD (admin) |
-| `src/app/api/admin/brandkits/[id]/route.ts` | create | BrandKit update / soft-delete / set default (admin) |
-| `src/app/api/admin/brandkits/[id]/prompt/route.ts` | create | BrandKit prompt versions: list, add, activate (rollback) (admin) |
-| `src/app/api/admin/brandkits/[id]/artifacts/route.ts` | create | BrandKit artifact upload to MinIO / list / delete (admin) |
-| `src/app/api/admin/brandkits/[id]/templates/route.ts` | create | HTML template CRUD per brand kit (admin) |
-| `src/app/(app)/projects/page.tsx` | create | Projects list UI |
-| `src/app/(app)/projects/[id]/page.tsx` | create | Project detail — campaigns + posts |
-| `src/app/(app)/campaigns/page.tsx` | create | Campaigns list UI (standalone + project-assigned) |
-| `src/app/(app)/campaigns/[id]/page.tsx` | create | Campaign detail — posts |
-| `src/providers/interfaces/` | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces |
-| `src/providers/implementations/copy/openai.ts` | create | GPT copy provider |
-| `src/providers/implementations/image/openai.ts` | create | gpt-image-2 provider |
-| `src/providers/implementations/orchestrator/claude-html.ts` | create | DesignOrchestrator impl wrapping designAgent (production) |
-| `src/providers/implementations/orchestrator/claude-cli.ts` | create | DesignOrchestrator CLI proxy for test mode — no API key, no Puppeteer |
-| `src/providers/registry.ts` | create | Provider resolution from env config |
-| `src/lib/agent/designAgent.ts` | create | Claude tool-use agent loop (Anthropic SDK) |
-| `src/lib/agent/tools.ts` | create | Tool implementations: generateImage, renderHtml, getBrandKitContext |
-| `src/lib/renderer/puppeteer.ts` | create | HTML → PNG renderer (puppeteer-core + chromium-min) |
-| `src/lib/social/instagram.ts` | create | Instagram Graph API publisher |
-| `src/lib/social/linkedin.ts` | create | LinkedIn API publisher |
-| `src/lib/storage/minio.ts` | create | MinIO (S3-compatible) upload / pre-signed URL |
-| `src/scheduler/worker.ts` | create | Scheduled post worker |
-| `prisma/schema.prisma` | create | Full data model |
-| `prisma/migrations/` | create | Auto-generated migrations |
-| `tailwind.config.ts` | create | Frozen Light theme tokens (light + dark), `darkMode: "class"` |
-| `src/app/globals.css` | create | Glass utility classes, custom scrollbars, self-hosted font faces |
-| `src/components/theme/` | create | ThemeProvider (system + localStorage), ThemeToggle, pre-paint FOUC script |
-| `src/components/layout/AppShell.tsx` | create | Top app bar + sidebar + fluid canvas layout |
-| `src/components/ui/` | create | Base components: Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip |
-| `src/middleware.ts` | create | Clerk auth middleware |
-| `src/app/(auth)/` | create | Login/signup pages (Clerk components) |
-| `src/app/(app)/brief/` | create | Brief creation UI (Path A / B mode select) |
-| `src/app/(app)/draft/[id]/` | create | Draft refinement UI |
-| `src/app/(app)/library/` | create | Asset library + history |
-| `src/app/(app)/admin/settings/` | create | Admin: provider management (with API key registration + auto-detect) + brand kit manager |
-| `src/app/api/drafts/[id]/refine/route.ts` | create | AGUI refinement endpoint — Claude agent updates HTML, re-renders, checks brand kit compliance |
-| `src/app/api/drafts/[id]/revisions/route.ts` | create | List revisions for undo panel |
-| `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts` | create | Re-render stored htmlSnapshot via Puppeteer |
-| `src/components/draft/RefinementPanel.tsx` | create | AGUI chat panel — instruction input, AI reply stream, undo history list |
-| `.env.example` | create | Required env vars documented |
-| `Dockerfile` | create | Container image (includes chromium-min layer; shared by app + scheduler services) |
-| `docker-compose.yml` | create | Orchestrates app, scheduler, postgres, minio containers |
-| `.gitignore` | modify | Ensure `.env*` (except `.env.example`) is ignored |
+| File / Directory                                            | Action | Description                                                                                   |
+| ----------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `src/app/`                                                  | create | Next.js App Router pages                                                                      |
+| `src/app/api/generate/copy/route.ts`                        | create | Copy generation endpoint                                                                      |
+| `src/app/api/generate/image/route.ts`                       | create | Image generation endpoint                                                                     |
+| `src/app/api/design/assemble/route.ts`                      | create | Design assembly (Path A + B) — launches Claude design agent                                   |
+| `src/app/api/design/export/route.ts`                        | create | Re-render export (thin wrapper; Puppeteer runs at assembly time)                              |
+| `src/app/api/publish/route.ts`                              | create | Immediate publish                                                                             |
+| `src/app/api/schedule/route.ts`                             | create | Schedule a post                                                                               |
+| `src/app/api/posts/route.ts`                                | create | List/cancel scheduled posts                                                                   |
+| `src/app/api/projects/route.ts`                             | create | Project CRUD                                                                                  |
+| `src/app/api/projects/[id]/route.ts`                        | create | Project update / soft-delete / recover                                                        |
+| `src/app/api/campaigns/route.ts`                            | create | Campaign CRUD                                                                                 |
+| `src/app/api/campaigns/[id]/route.ts`                       | create | Campaign update / soft-delete / recover                                                       |
+| `src/app/api/campaigns/[id]/projects/route.ts`              | create | Campaign → project reassignment (admin)                                                       |
+| `src/app/api/campaigns/[id]/drafts/[draftId]/route.ts`      | create | Link draft to campaign (shared asset)                                                         |
+| `src/app/api/campaigns/[id]/brandkit/route.ts`              | create | Resolved brand kit for a campaign                                                             |
+| `src/app/api/library/route.ts`                              | create | Asset library + publish history (filterable by project/campaign)                              |
+| `src/app/api/admin/brandkits/route.ts`                      | create | BrandKit CRUD (admin)                                                                         |
+| `src/app/api/admin/brandkits/[id]/route.ts`                 | create | BrandKit update / soft-delete / set default (admin)                                           |
+| `src/app/api/admin/brandkits/[id]/prompt/route.ts`          | create | BrandKit prompt versions: list, add, activate (rollback) (admin)                              |
+| `src/app/api/admin/brandkits/[id]/artifacts/route.ts`       | create | BrandKit artifact upload to MinIO / list / delete (admin)                                     |
+| `src/app/api/admin/brandkits/[id]/templates/route.ts`       | create | HTML template CRUD per brand kit (admin)                                                      |
+| `src/app/(app)/projects/page.tsx`                           | create | Projects list UI                                                                              |
+| `src/app/(app)/projects/[id]/page.tsx`                      | create | Project detail — campaigns + posts                                                            |
+| `src/app/(app)/campaigns/page.tsx`                          | create | Campaigns list UI (standalone + project-assigned)                                             |
+| `src/app/(app)/campaigns/[id]/page.tsx`                     | create | Campaign detail — posts                                                                       |
+| `src/providers/interfaces/`                                 | create | CopyProvider, ImageProvider, DesignOrchestrator interfaces                                    |
+| `src/providers/implementations/copy/openai.ts`              | create | GPT copy provider                                                                             |
+| `src/providers/implementations/image/openai.ts`             | create | gpt-image-2 provider                                                                          |
+| `src/providers/implementations/orchestrator/claude-html.ts` | create | DesignOrchestrator impl wrapping designAgent (production)                                     |
+| `src/providers/implementations/orchestrator/claude-cli.ts`  | create | DesignOrchestrator CLI proxy for test mode — no API key, no Puppeteer                         |
+| `src/providers/registry.ts`                                 | create | Provider resolution from env config                                                           |
+| `src/lib/agent/designAgent.ts`                              | create | Claude tool-use agent loop (Anthropic SDK)                                                    |
+| `src/lib/agent/tools.ts`                                    | create | Tool implementations: generateImage, renderHtml, getBrandKitContext                           |
+| `src/lib/renderer/puppeteer.ts`                             | create | HTML → PNG renderer (puppeteer-core + chromium-min)                                           |
+| `src/lib/social/instagram.ts`                               | create | Instagram Graph API publisher                                                                 |
+| `src/lib/social/linkedin.ts`                                | create | LinkedIn API publisher                                                                        |
+| `src/lib/storage/minio.ts`                                  | create | MinIO (S3-compatible) upload / pre-signed URL                                                 |
+| `src/scheduler/worker.ts`                                   | create | Scheduled post worker                                                                         |
+| `prisma/schema.prisma`                                      | create | Full data model                                                                               |
+| `prisma/migrations/`                                        | create | Auto-generated migrations                                                                     |
+| `tailwind.config.ts`                                        | create | Frozen Light theme tokens (light + dark), `darkMode: "class"`                                 |
+| `src/app/globals.css`                                       | create | Glass utility classes, custom scrollbars, self-hosted font faces                              |
+| `src/components/theme/`                                     | create | ThemeProvider (system + localStorage), ThemeToggle, pre-paint FOUC script                     |
+| `src/components/layout/AppShell.tsx`                        | create | Top app bar + sidebar + fluid canvas layout                                                   |
+| `src/components/ui/`                                        | create | Base components: Button, GlassPanel, GlassInput, Select, SegmentedToggle, StatusChip          |
+| `src/middleware.ts`                                         | create | Clerk auth middleware                                                                         |
+| `src/app/(auth)/`                                           | create | Login/signup pages (Clerk components)                                                         |
+| `src/app/(app)/brief/`                                      | create | Brief creation UI (Path A / B mode select)                                                    |
+| `src/app/(app)/draft/[id]/`                                 | create | Draft refinement UI                                                                           |
+| `src/app/(app)/library/`                                    | create | Asset library + history                                                                       |
+| `src/app/(app)/admin/settings/`                             | create | Admin: provider management (with API key registration + auto-detect) + brand kit manager      |
+| `src/app/api/drafts/[id]/refine/route.ts`                   | create | AGUI refinement endpoint — Claude agent updates HTML, re-renders, checks brand kit compliance |
+| `src/app/api/drafts/[id]/revisions/route.ts`                | create | List revisions for undo panel                                                                 |
+| `src/app/api/drafts/[id]/revisions/[rev]/restore/route.ts`  | create | Re-render stored htmlSnapshot via Puppeteer                                                   |
+| `src/components/draft/RefinementPanel.tsx`                  | create | AGUI chat panel — instruction input, AI reply stream, undo history list                       |
+| `.env.example`                                              | create | Required env vars documented                                                                  |
+| `Dockerfile`                                                | create | Container image (includes chromium-min layer; shared by app + scheduler services)             |
+| `docker-compose.yml`                                        | create | Orchestrates app, scheduler, postgres, minio containers                                       |
+| `.gitignore`                                                | modify | Ensure `.env*` (except `.env.example`) is ignored                                             |
 
 ## Data Model Changes
 
@@ -788,6 +796,7 @@ cost (equivalent of EC-12).
 
 **4b-model. Haiku for Path A, Sonnet for Path B**
 The design agent uses different Claude models depending on the generation mode:
+
 - **Path A (template fill)** — `claude-haiku-4-5-20251001`. Template filling is a
   constrained, lower-complexity task: inject copy, embed image URLs, apply brand
   colors. Haiku handles this correctly at ~10× lower cost than Sonnet.
@@ -814,7 +823,7 @@ tested without an `sk-ant-*` key. The production path is restored by removing th
 env var or setting `DESIGN_PROVIDER=claude-html`.
 
 **4b-edit. Edit brand kit as a distinct, always-available flow**
-The settings UI separates brand kit *creation* from brand kit *editing*. An Edit
+The settings UI separates brand kit _creation_ from brand kit _editing_. An Edit
 button on each kit card opens a modal pre-populated with the kit's current name,
 colors, fonts, logoUrl, and linked templates. Prompt
 versioning and artifact management remain on the expanded card — they are not part
@@ -879,13 +888,13 @@ Project default → system default (`BrandKit.isDefault = true`).
 
 ## Risks & Mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Instagram Graph API app review takes weeks | High | High (blocks AC-3) | Start Meta Business app registration immediately; build and test publish flow with a test account before review completes |
-| LinkedIn app publishing permissions gated | Medium | High (blocks AC-3) | Apply for LinkedIn app early; design the publish layer to degrade gracefully (one channel fails, other proceeds) |
-| Puppeteer container size (Chromium ~200MB) | Medium | Low | Use `chromium-min` + Docker layer caching; Chromium layer is cached across deploys unless base image changes |
-| Claude-generated HTML has layout issues for certain post dimensions | Medium | Medium | `renderHtml` returns dimensions metadata; agent can call `renderHtml` multiple times to iterate; add a post-render dimension validation step |
-| Font loading failures in Puppeteer | Low | Medium | All brand fonts served from MinIO absolute URLs; `waitUntil: 'networkidle0'` ensures fonts are loaded before screenshot |
-| Path B agent runaway / high token cost | Medium | Medium | Hard limit of 15 tool calls per run; per-user generation budget enforced by NFR-7 |
-| MinIO disk fills up on VPS | Low | Medium | Monitor VPS disk usage; 7-day lifecycle rule on `generated-images` bucket auto-deletes temp images; alert if disk > 80% |
-| `.env` file leaked via git | Low | High | `.gitignore` enforced; pre-commit hook blocks accidental commit of `.env`; rotate all secrets immediately if leak occurs |
+| Risk                                                                | Likelihood | Impact             | Mitigation                                                                                                                                   |
+| ------------------------------------------------------------------- | ---------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instagram Graph API app review takes weeks                          | High       | High (blocks AC-3) | Start Meta Business app registration immediately; build and test publish flow with a test account before review completes                    |
+| LinkedIn app publishing permissions gated                           | Medium     | High (blocks AC-3) | Apply for LinkedIn app early; design the publish layer to degrade gracefully (one channel fails, other proceeds)                             |
+| Puppeteer container size (Chromium ~200MB)                          | Medium     | Low                | Use `chromium-min` + Docker layer caching; Chromium layer is cached across deploys unless base image changes                                 |
+| Claude-generated HTML has layout issues for certain post dimensions | Medium     | Medium             | `renderHtml` returns dimensions metadata; agent can call `renderHtml` multiple times to iterate; add a post-render dimension validation step |
+| Font loading failures in Puppeteer                                  | Low        | Medium             | All brand fonts served from MinIO absolute URLs; `waitUntil: 'networkidle0'` ensures fonts are loaded before screenshot                      |
+| Path B agent runaway / high token cost                              | Medium     | Medium             | Hard limit of 15 tool calls per run; per-user generation budget enforced by NFR-7                                                            |
+| MinIO disk fills up on VPS                                          | Low        | Medium             | Monitor VPS disk usage; 7-day lifecycle rule on `generated-images` bucket auto-deletes temp images; alert if disk > 80%                      |
+| `.env` file leaked via git                                          | Low        | High               | `.gitignore` enforced; pre-commit hook blocks accidental commit of `.env`; rotate all secrets immediately if leak occurs                     |

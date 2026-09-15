@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "4257055447 6840",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Unresolved analytics-view scoping (super-admin global vs team-admin scoped) changes the data-fetch and filter design; new trust boundary (session replay with unresolved masking rules) and persisted data shape (WorkerHeartbeat table, event traces); expanded release machinery (PostHog + ClickHouse infrastructure and retention policies).",
+  "domains": ["security", "data", "ops"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

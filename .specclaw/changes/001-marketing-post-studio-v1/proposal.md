@@ -24,6 +24,7 @@ A Next.js + TypeScript web application (hosted on Azure) that orchestrates a
 brand-consistent rendering and export.
 
 **Core v1 flow:**
+
 1. An authenticated team member writes a **brief** (topic, goal, channel, tone).
 2. **OpenAI GPT** drafts the marketing copy from the brief.
 3. **gpt-image-2** generates the post imagery.
@@ -42,6 +43,7 @@ finished posts, and a publish-history log.
 ## Scope
 
 ### In Scope
+
 - Authenticated internal-team access with **simple roles** (admin vs editor;
   publishing gated by role).
 - Brief input UI.
@@ -57,6 +59,7 @@ finished posts, and a publish-history log.
 - Deployment to **Azure**.
 
 ### Out of Scope (v1)
+
 - **Video** generation/publishing (planned for a later phase).
 - A custom drag-and-drop / pixel-level design editor.
 - Manual editing inside Canva (edit-in-Canva deep-link flow).
@@ -117,4 +120,3 @@ The following were settled during the design and planning phase — recorded her
 ---
 
 **To proceed:** Review this proposal and approve to begin planning.
-

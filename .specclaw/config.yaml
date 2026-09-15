@@ -97,3 +97,23 @@ jira:
   email: ""         # Atlassian account email
   project_key: ""   # Project key shown in issue IDs, e.g. PROJ
   issue_type: "Story"  # Default issue type: Story | Task | Bug | Epic
+
+# Adversarial review panel (party mode)
+party:
+  enabled: true            # false = /specclaw:propose behaves exactly as before — no prompt, no files, no spawns
+  default: false           # true = convene without asking; false = ask once, quoting the roster and the spawn count
+  on_loop_halt: false      # true = also convene the panel when /specclaw:loop halts, against the halt
+  rounds: 2                # 2 = findings then a rebuttal round; 1 = no rebuttal, roughly halves the bill
+  block: false             # true = a CHANGES_REQUESTED verdict is a hard stop for /specclaw:plan
+  panel_mode: dynamic      # dynamic = the classifier picks the tier; fixed = use `panel` below verbatim
+  panel: [party-po, party-architect, party-ba, party-visionary]
+  always: []
+  min_seats: 2
+  max_seats: 6
+  models:
+    party-classifier: haiku
+    party-visionary: opus
+    party-architect: opus
+    party-security: opus
+    party-ba: sonnet
+    party-po: sonnet

@@ -24,6 +24,7 @@ Build the two infrastructure modules that everything else depends on: the HTML r
   **1. `puppeteer.ts` — headless Chromium renderer**
 
   Exports a single function:
+
   ```typescript
   renderHtmlToPng(html: string, width: number, height: number): Promise<Buffer>
   ```
@@ -37,52 +38,55 @@ Build the two infrastructure modules that everything else depends on: the HTML r
 
 > **Note (2026-06-30, later extended):** `renderHtmlToPng` already takes `width`/`height`, so the renderer needed no change. Post size is now configurable per brief — SQUARE 1080×1080 or PORTRAIT 1080×1350 (`Brief.aspectRatio`); callers resolve dimensions via `src/lib/aspectRatio.ts`. The 1080×1080 figures above reflect the original square-only scope.
 
-  **2. `designAgent.ts` — Claude tool-use agent loop**
+**2. `designAgent.ts` — Claude tool-use agent loop**
 
-  Exports:
-  ```typescript
-  runDesignAgent(options: DesignAgentOptions): Promise<DesignAgentResult>
-  ```
+Exports:
 
-  Types in `types.ts`:
-  ```typescript
-  interface DesignAgentOptions {
-    systemPrompt: string        // caller sets mode: template-fill or freeform
-    userMessage: string         // instruction or initial design brief
-    briefId: string             // used by getBrandKitContext tool
-    tools: AgentTool[]          // subset of available tools for this mode
-    maxToolCalls?: number       // default 15 (EC-12)
-  }
+```typescript
+runDesignAgent(options: DesignAgentOptions): Promise<DesignAgentResult>
+```
 
-  interface DesignAgentResult {
-    htmlContent: string         // final HTML produced by agent
-    exportUrl: string           // MinIO pre-signed URL from last renderHtml call
-    toolCallCount: number
-  }
-  ```
+Types in `types.ts`:
 
-  Loop logic (standard Anthropic SDK tool-use pattern):
-  1. Send messages to Claude (claude-sonnet-4-6) via Anthropic SDK
-  2. Inspect response — if no `tool_use` blocks, return final result
-  3. For each `tool_use` block: execute the matching tool function, collect result
-  4. Append `tool_result` blocks and loop
-  5. Hard limit: 15 total tool calls — if exceeded, halt and throw `AgentToolLimitError`
+```typescript
+interface DesignAgentOptions {
+  systemPrompt: string // caller sets mode: template-fill or freeform
+  userMessage: string // instruction or initial design brief
+  briefId: string // used by getBrandKitContext tool
+  tools: AgentTool[] // subset of available tools for this mode
+  maxToolCalls?: number // default 15 (EC-12)
+}
 
-  Tools implemented in `tools.ts`:
+interface DesignAgentResult {
+  htmlContent: string // final HTML produced by agent
+  exportUrl: string // MinIO pre-signed URL from last renderHtml call
+  toolCallCount: number
+}
+```
 
-  | Tool | Signature | Behaviour |
-  |---|---|---|
-  | `generateImage` | `(prompt: string, brandKitId: string) → { url: string }` | Calls active `ImageProvider` → uploads buffer to MinIO `generated-images` → returns pre-signed URL |
-  | `renderHtml` | `(html: string, width: number, height: number) → { url: string }` | Calls `renderHtmlToPng` → uploads PNG buffer to MinIO `exported-designs` → returns pre-signed URL |
-  | `getBrandKitContext` | `(briefId: string) → BrandKitContext` | Resolves brand kit via campaign → project → system default chain; returns `{ colors, fonts, logoUrl, voicePrompt, artifactUrls }` |
+Loop logic (standard Anthropic SDK tool-use pattern):
 
-  On any tool error: agent halted immediately, `DesignAgentResult` is not returned — caller receives the error with brief record preserved.
+1. Send messages to Claude (claude-sonnet-4-6) via Anthropic SDK
+2. Inspect response — if no `tool_use` blocks, return final result
+3. For each `tool_use` block: execute the matching tool function, collect result
+4. Append `tool_result` blocks and loop
+5. Hard limit: 15 total tool calls — if exceeded, halt and throw `AgentToolLimitError`
 
-  **CLI proxy path:** when `DESIGN_PROVIDER=cli`, `runDesignAgent` is never called —
-  `ClaudeCliOrchestrator` handles the request entirely via a single CLI subprocess
-  call. T09 does not need to implement CLI mode; it only needs to ensure
-  `runDesignAgent` is not imported/executed in that path. The registry in T08 handles
-  the dispatch before the orchestrator layer reaches `designAgent.ts`.
+Tools implemented in `tools.ts`:
+
+| Tool                 | Signature                                                         | Behaviour                                                                                                                         |
+| -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `generateImage`      | `(prompt: string, brandKitId: string) → { url: string }`          | Calls active `ImageProvider` → uploads buffer to MinIO `generated-images` → returns pre-signed URL                                |
+| `renderHtml`         | `(html: string, width: number, height: number) → { url: string }` | Calls `renderHtmlToPng` → uploads PNG buffer to MinIO `exported-designs` → returns pre-signed URL                                 |
+| `getBrandKitContext` | `(briefId: string) → BrandKitContext`                             | Resolves brand kit via campaign → project → system default chain; returns `{ colors, fonts, logoUrl, voicePrompt, artifactUrls }` |
+
+On any tool error: agent halted immediately, `DesignAgentResult` is not returned — caller receives the error with brief record preserved.
+
+**CLI proxy path:** when `DESIGN_PROVIDER=cli`, `runDesignAgent` is never called —
+`ClaudeCliOrchestrator` handles the request entirely via a single CLI subprocess
+call. T09 does not need to implement CLI mode; it only needs to ensure
+`runDesignAgent` is not imported/executed in that path. The registry in T08 handles
+the dispatch before the orchestrator layer reaches `designAgent.ts`.
 
 ---
 
@@ -94,6 +98,7 @@ Build the two infrastructure modules that everything else depends on: the HTML r
 - **Notes:** Wraps `@aws-sdk/client-s3` (MinIO is S3-compatible; only the endpoint differs).
 
   Exported methods:
+
   ```typescript
   uploadObject(buffer: Buffer, bucket: string, key: string): Promise<string>
   // returns pre-signed GET URL (7-day expiry for generated-images, permanent for exported-designs)

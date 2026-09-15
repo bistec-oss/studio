@@ -152,6 +152,7 @@ T11 (wizard) ─── calls T13/T14 indirectly via POST /api/briefs
 ## Draft refinement (handled in Wave 6/T21, listed here for context)
 
 After generation, the draft view (T21) allows:
+
 - Edit copy text → re-save
 - Swap template (Path A) → re-runs T13 with different template
 - Issue AGUI instruction → Claude updates HTML (may call `generateImage` if imagery change requested) → Puppeteer re-renders

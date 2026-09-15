@@ -38,6 +38,7 @@ channels limited to Instagram + LinkedIn, internal team only.
 ### Functional Requirements
 
 **Authentication & Roles**
+
 - **FR-1** The system requires users to log in before accessing any functionality.
 - **FR-2** The system supports two roles: **admin** and **editor**.
 - **FR-3** Both roles can create briefs, generate drafts, and refine drafts.
@@ -47,11 +48,13 @@ channels limited to Instagram + LinkedIn, internal team only.
   design — see Open Questions.)
 
 **Projects**
+
 - **FR-P1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Project. A Project has a name, an optional default brand kit (reference to an admin-managed BrandKit — see FR-25b), and a default tone.
 - **FR-P2** Soft-deleted projects are hidden from active views but recoverable by any authenticated user within a defined recovery window. All campaigns and posts under a soft-deleted project are preserved.
 - **FR-P3** A project's default brand kit and tone are automatically inherited by campaigns created within it, but can be overridden at the campaign level.
 
 **Campaigns**
+
 - **FR-C1** Any authenticated user (admin or editor) can create, edit, and soft-delete a Campaign. A Campaign has a name, an optional brand kit override, and an optional default tone override.
 - **FR-C2** A campaign can be assigned to one or more projects, or exist as a standalone campaign with no project.
 - **FR-C3** Reassigning a campaign to a different project (or removing it from a project) is **admin-only**.
@@ -59,6 +62,7 @@ channels limited to Instagram + LinkedIn, internal team only.
 - **FR-C5** A post (draft/export) can be linked to multiple campaigns (shared asset — the same rendered PNG and export URL is reused, not duplicated).
 
 **Brief Input**
+
 - **FR-5** A user can create a brief specifying at minimum: topic/subject, goal/
   call-to-action, target channel(s) (Instagram and/or LinkedIn), desired tone, and
   **design mode**: "preset template" (Path A) or "generate new design" (Path B).
@@ -70,6 +74,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   brand or marketing expertise is required to produce a usable brief.
 
 **AI Copy Generation**
+
 - **FR-7** From a brief, the system generates marketing copy using OpenAI GPT.
 - **FR-8** Generated copy is appropriate to the selected channel(s) (e.g. caption
   length/format conventions for Instagram vs LinkedIn).
@@ -77,6 +82,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   before it is applied to a design.
 
 **AI Image Generation (on-demand)**
+
 - **FR-10** The Claude design agent may call the `generateImage` tool during design
   generation when raster imagery is needed for the post. Image generation is
   **on-demand** — Claude decides whether to invoke it based on the design
@@ -90,6 +96,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   `generateImage` if raster imagery is required for the change.
 
 **Design Path A — Preset Brand Template (Claude design agent)**
+
 - **FR-12** The system composes a design by instantiating the HTML/CSS template
   string stored in `BrandKitTemplate.htmlTemplate`, then invoking the Claude design
   agent. Claude receives: the template HTML, the resolved brand kit context (colors
@@ -119,6 +126,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   MinIO URLs. The user does not configure brand styling manually.
 
 **Design Path B — AI-Generated New Design (Claude design agent, freeform)**
+
 - **FR-18b** When the user selects "generate new design" in the brief, the backend
   runs the Claude design agent in freeform mode. Claude receives: the user's brief,
   the resolved brand kit's active system prompt, structured brand data (colors,
@@ -134,9 +142,9 @@ channels limited to Instagram + LinkedIn, internal team only.
     `<img>` tag. The image is placed in the design as a visual element.
   - **"Style reference only"** — Claude uses this image for compositional inspiration
     (layout, color mood, composition) but does not embed it in the output HTML.
-  Uploaded images are stored in MinIO as `briefImages: { url, intent }[]` on the
-  Brief record. Claude receives both the URLs and their intent tags and acts
-  accordingly. This replaces the old flat `referenceImageUrls[]` field.
+    Uploaded images are stored in MinIO as `briefImages: { url, intent }[]` on the
+    Brief record. Claude receives both the URLs and their intent tags and acts
+    accordingly. This replaces the old flat `referenceImageUrls[]` field.
 - **FR-18d** The brief UI for Path B includes an optional **template reference**
   picker: the user can select one of the brand kit's linked HTML/CSS templates as a
   **style inspiration**. The selected template's HTML is passed to the Claude design
@@ -156,6 +164,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   export flow as Path A (FR-15, FR-16, FR-17).
 
 **Admin: Brand Kits**
+
 - **FR-25b** A **brand kit** is a first-class, admin-managed entity. It owns: a
   name, a brand voice (versioned system prompt), a folder of brand artifacts
   (logos, fonts, colors, reference images, example posts), structured brand data —
@@ -197,6 +206,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   brand kit (see FR-5b).
 
 **User-selectable AI models (copy)**
+
 - **FR-28** At brief creation time, the user can select which AI model to use for
   **copy generation**. The image provider (used when Claude calls `generateImage`
   during the agent run) resolves automatically from the system default; an optional
@@ -212,6 +222,7 @@ channels limited to Instagram + LinkedIn, internal team only.
   take effect immediately for new briefs without a redeploy.
 
 **Admin: AI provider registration**
+
 - **FR-32** An admin can register a new AI provider directly from the bistec-studio settings UI — no redeploy or env var change required. A registered provider becomes available to users immediately.
 - **FR-32a** When an admin enters an API key, the system inspects the key prefix and auto-identifies the provider where possible (e.g. `sk-ant-` → Anthropic, `sk-` → OpenAI). If identified, the provider name and label are auto-populated. If the key format is unrecognized, the admin manually specifies the provider name and label and proceeds — no block.
 - **FR-32b** The system validates the key against the provider's API before saving. If validation fails, the key is not saved and the admin is shown the error.
@@ -219,6 +230,7 @@ channels limited to Instagram + LinkedIn, internal team only.
 - **FR-32d** The model selector in the brief UI displays each provider's name and label as registered by the admin (e.g. "Claude 3.5 Sonnet (Anthropic)") so users know exactly which model and provider they are selecting.
 
 **AGUI — Chat-driven design refinement**
+
 - **FR-33** After a design is returned (Path A or Path B), the draft page exposes a **chat-driven refinement panel**. The user types natural language instructions (e.g. "reposition the topic to the bottom", "change the background to something darker"); the backend runs the Claude design agent with `draft.htmlContent` as context plus the instruction. Claude updates the HTML and calls `renderHtml` to produce a new PNG. The user never directly manipulates design elements.
 - **FR-33a** Each refinement instruction that results in a committed render is recorded as a `DraftRevision` row, storing `htmlSnapshot` (the HTML at that point) and `exportUrl` (the rendered PNG). The user can revert to any prior revision via an explicit undo step, which re-renders from the stored `htmlSnapshot`.
 - **FR-33b** Before committing any refinement edit, the AI checks whether the instruction conflicts with the resolved brand kit. If a conflict is detected, the AI returns a **conflict card** with **Override** and **Cancel** buttons. Override applies the change; Cancel dismisses the card with no edit applied.
@@ -227,6 +239,7 @@ channels limited to Instagram + LinkedIn, internal team only.
 - **FR-33e** The refinement panel does not allow direct element dragging or asset uploads. All changes are applied server-side via the Claude design agent (HTML generation) and Puppeteer rendering only.
 
 **In-App Refinement (no pixel editing)**
+
 - **FR-15** The user can refine a draft entirely within bistec-studio by any
   combination of: editing copy text, swapping the brand template (Path A), and
   issuing natural language instructions via the AGUI chat panel (FR-33) —
@@ -235,11 +248,13 @@ channels limited to Instagram + LinkedIn, internal team only.
   is server-side only — no canvas editor UI is surfaced.
 
 **Export**
+
 - **FR-17** The system exports the finished design as a publish-ready PNG by running
   Puppeteer against the final `draft.htmlContent`. The PNG is stored in MinIO and
   its pre-signed URL is used for display and publishing.
 
 **Publishing & Scheduling**
+
 - **FR-18** A user with publish rights can publish an exported post immediately to
   the selected channel(s): Instagram (Business) and/or LinkedIn (company page).
 - **FR-19** A user with publish rights can schedule a post for a future date/time;
@@ -249,6 +264,7 @@ channels limited to Instagram + LinkedIn, internal team only.
 - **FR-21** A user can view and cancel a scheduled (not-yet-published) post.
 
 **Persistence: Library & History**
+
 - **FR-22** The system persists users, projects, campaigns, briefs, generated drafts, finished assets (an asset library), scheduled posts, and a publish-history log.
 - **FR-23** A user can browse the asset library and publish history. The library supports drill-down filtering: filter by Project → then by Campaign within that project. Uncategorized posts (no campaign) are accessible via an "Uncategorized" filter.
 - **FR-24** A standalone post (no campaign assigned) can be promoted into a campaign after creation. A campaign can be reassigned to a different project by an admin.
@@ -383,6 +399,7 @@ Each criterion must pass for the change to be considered complete.
 ## Dependencies
 
 **External services / APIs**
+
 - **OpenAI API** — GPT (copy generation, both paths); gpt-image-2 (image generation,
   both paths — mandatory on Path A, Claude-decided on Path B). Requires API key +
   spend controls.
@@ -396,6 +413,7 @@ Each criterion must pass for the change to be considered complete.
   with the appropriate posting permissions.
 
 **Infrastructure (VPS)**
+
 - A VPS running Docker Compose (Ubuntu). Containers: Next.js app, PostgreSQL, MinIO, Puppeteer renderer, scheduler worker.
 - PostgreSQL for persistence (Docker container, data volume on VPS).
 - MinIO (S3-compatible) for generated images and exported PNG designs (Docker container, data volume on VPS). MinIO is served to the browser via pre-signed URLs only — the MinIO port is never publicly exposed.
@@ -406,6 +424,7 @@ Each criterion must pass for the change to be considered complete.
 - Secrets managed via `.env` file on the VPS (never committed to git, permissions `600`, owned by root).
 
 **Internal prerequisites**
+
 - An initial set of on-brand HTML/CSS templates authored for bistec-studio (see
   Open Questions — template authoring process).
 - Bistec brand fonts available for self-hosting via MinIO (see Open Questions — font
@@ -421,10 +440,10 @@ A static prototype (`bistec-studio-proto/`) and its page outline (`docs/prototyp
 
 ## Notes
 
-**Open questions to resolve in the design phase (`/specclaw:plan`):**
-0. **Path B design model** — which Claude model drives the Path B freeform design
-   agent? (Claude 3.5 Sonnet is the natural choice for HTML/CSS generation with
-   tool use; confirm whether a different model is preferred.)
+**Open questions to resolve in the design phase (`/specclaw:plan`):** 0. **Path B design model** — which Claude model drives the Path B freeform design
+agent? (Claude 3.5 Sonnet is the natural choice for HTML/CSS generation with
+tool use; confirm whether a different model is preferred.)
+
 1. **Auth provider** — custom auth vs. a managed provider vs. Microsoft Entra ID
    SSO (team is on a Microsoft stack; Entra is a natural fit but not a hard v1
    requirement). Also: exact role→permission matrix for publishing.

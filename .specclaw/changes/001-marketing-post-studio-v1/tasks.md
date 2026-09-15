@@ -120,6 +120,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
   - Notes: Wraps `@aws-sdk/client-s3` (MinIO is S3-compatible; only the endpoint differs).
 
     Exported methods:
+
     ```typescript
     uploadObject(buffer: Buffer, bucket: string, key: string): Promise<string>
     // returns pre-signed GET URL (7-day expiry for generated-images, permanent for exported-designs)
@@ -310,14 +311,14 @@ Within a wave, tasks without inter-dependencies can run in parallel.
     - `create_brand_kit(name, colors, fonts, logoUrl)` → `{ brandKitId }` — creates BrandKit row
     - `set_brand_kit_prompt(brandKitId, content)` → `{ promptId }` — adds a new active BrandKitPrompt version
     - `upload_brand_template(brandKitId, name, htmlTemplate)` → `{ templateId }` — creates BrandKitTemplate row
-    **Read tools** (any authenticated caller):
+      **Read tools** (any authenticated caller):
     - `list_brand_kits()` → `{ kits }` — returns all active (non-deleted) BrandKit rows with names and IDs
     - `get_brand_kit(id)` → `{ kit, templates, activePrompt }` — full kit detail including linked templates
-    **Generation tools** (any authenticated caller):
+      **Generation tools** (any authenticated caller):
     - `generate_post(brief)` → `{ draftId, exportUrl, htmlContent }` — runs the full generation pipeline (copy + design agent + Puppeteer render)
     - `get_draft(id)` → `{ copyText, imageUrl, exportUrl, status }` — retrieve a draft by ID
     - `publish_post(draftId, channel)` → `{ platformId }` — publish an exported draft to a social channel
-    Implementation: `src/mcp/server.ts` uses the `@modelcontextprotocol/sdk` server package. Tool handlers call the same service layer as the API routes — no duplicated logic. Auth: `src/mcp/auth.ts` validates a per-request API key (stored in `AvailableProvider`-style pattern or a dedicated admin token env var) and checks admin role for gated tools.
+      Implementation: `src/mcp/server.ts` uses the `@modelcontextprotocol/sdk` server package. Tool handlers call the same service layer as the API routes — no duplicated logic. Auth: `src/mcp/auth.ts` validates a per-request API key (stored in `AvailableProvider`-style pattern or a dedicated admin token env var) and checks admin role for gated tools.
 
 - [ ] `T29` — bistec-studio ACP server
   - Files: `src/acp/server.ts`, `src/acp/agent.ts`
@@ -335,6 +336,7 @@ Within a wave, tasks without inter-dependencies can run in parallel.
 - `[!]` Failed
 
 **Task format:**
+
 ```
 - [ ] `T<n>` — <title>
   - Files: <files to create/modify>

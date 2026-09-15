@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "156127072 6061",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Reverses an architectural decision (COPY slot reinstatement), fixes a live prod bug (isDefault) that changes behavior for existing teams, and has three unresolved design questions (Alpine sandbox mechanism, per-provider capability map, warning-vs-failure) whose answers materially affect scope and implementation.",
+  "domains": ["ops"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

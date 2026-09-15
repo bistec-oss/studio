@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["security", "data", "ops"],
+  "rationale": "Unresolved analytics-view scoping (super-admin global vs team-admin scoped) changes the data-fetch and filter design; new trust boundary (session replay with unresolved masking rules) and persisted data shape (WorkerHeartbeat table, event traces); expanded release machinery (PostHog + ClickHouse infrastructure and retention policies).",
+  "signals": {
+    "blast_radius": "Instrumentation threaded across brief wizard, draft actions, publish path, and scheduler; new WorkerHeartbeat table with scheduler polling logic; admin analytics view and routes; PostHog + ClickHouse services in compose; draft page stale-export indicator",
+    "unresolved": "Analytics view scoping (super-admin global vs team-admin scoped, changes filtering/row-level security); session replay masking scope (all text vs sensitive-region-only); consent requirement and disclosure UI; full-prompt-and-output in generation traces (privacy vs debuggability)",
+    "irreversibility": "ClickHouse and collected event data become operational and privacy liabilities; new migration adds WorkerHeartbeat rows; data retention and consent policies once deployed create ongoing compliance burden; infrastructure must be maintained or painstakingly decommissioned"
+  }
+}
