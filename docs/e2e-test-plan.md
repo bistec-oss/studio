@@ -286,6 +286,27 @@ Legend: **P** precondition · **S** steps · **E** expected. "Guards" = remediat
 - **TC-AGUI-12 — regenerate-design / regenerate-copy unchanged (AC-20).** S: both actions on an EXPORTED Path B draft. E: 202 → settle; `notAppliedReason` null on both (they acquire no verification step and no not-applied outcome); new `htmlContent` / `copyText`.
 - **TC-AGUI-13 — The seam does not leak into ordinary instructions.** S: refine `Reduce the text and verify the layout still balances`. E: commits normally, `notAppliedReason` null. Guards the sentinel against widening into a substring real user copy could contain.
 
+#### E3. Draft inline edit (`tests/e2e/draft-inline-edit.test.ts`)
+
+> **Backfill note.** TC-INLINE-01…04 shipped with the draft-inline-edit feature (PR #36, 2026-07-24) and were never catalogued; they are recorded here alongside the element-mode cases added by change 004.
+>
+> **Two modes, one route.** `POST /api/drafts/[id]/inline-edit` accepts either `{html}` (the pre-existing WHOLE-DOCUMENT mode — the client sends the edited document, the server runs `sanitizeInlineHtml` and commits) or `{element:{tag,text,kind,value}}` (change 004's ELEMENT mode). `element` wins if both are sent. Element mode is deliberately **narrower**, never wider: the base document is always the server's stored HTML, and the only client-derived bytes that enter are one escaped text run or one value re-serialized from a closed grammar. The whole-document mode is unchanged and keeps its documented regex limits.
+>
+> **The element address is content, not a position.** The payload carries no selector, xpath or index — there is nowhere to put one — and `text` is the node's `textContent` at click time, which the server re-resolves against its own current HTML. Only **text-leaf** nodes resolve (the match pattern's content class is `[^<]*`), so the client must offer only leaves. Two nodes with identical visible text are **ambiguous by construction** and refused, not disambiguated.
+
+- **TC-INLINE-01 — Inline edit saves a revision.** S: POST `{html}`. E: new revision; `currentRevisionNumber` advanced; signed `exportUrl`.
+- **TC-INLINE-02 — The prior revision is restorable.** S: restore the pre-edit revision. E: `Draft.htmlContent` back to that snapshot.
+- **TC-INLINE-03 — Empty/missing html is 400.**
+- **TC-INLINE-04 — Unknown draft id is 404.**
+- **TC-INLINE-05 — Element text edit escapes markup (AC-21).** S: `kind:'text'`, value `<script>alert(1)</script>`. E: 200; stored `htmlContent` carries `&lt;script&gt;alert(1)&lt;/script&gt;` and **no** `<script>` element; the sibling node is untouched (FR-17). ⚠️ Under `MOCK_PUPPETEER` nothing rasterizes, so "appears in the render as literal visible text" is asserted via the stored HTML — the strongest proxy a mocked suite has.
+- **TC-INLINE-06 — Colour declaration break-out is rejected (AC-22).** S: `kind:'color'`, value `red; background: url(http://evil.test/x)`. E: **400**; `htmlContent` byte-identical; `currentRevisionNumber` unchanged; `evil.test` absent everywhere. Rejected by two independent gates — it is not a colour token, and `url(` is denied outright.
+- **TC-INLINE-07 — Bad size units and non-numerics are rejected (AC-23).** S: `24pt`, `huge`, `24` (no unit). E: 400 each; no write, no revision. Allowed units are `px, rem, em, %`.
+- **TC-INLINE-08 — One edit, one revision, one writer (AC-24).** S: a valid `#FF0000`. E: exactly one new revision and pointer +1; the written declaration is `color: #ff0000` — **re-serialized and lower-cased, proving the input is parsed rather than echoed**; the recorded instruction is the closed literal `Manual element edit (colour)`, so no address is persisted (FR-18).
+- **TC-INLINE-09 — A client-supplied selector does not choose the target (AC-26).** S: payload stuffed with `selector`/`xpath` (both inside `element` and at top level) pointing at a _different_ node. E: the write lands on the content-addressed node; the decoy node is unchanged.
+- **TC-INLINE-10 — A stale address refuses instead of mis-landing (AC-25).** S: seed `Alpha headline`, rewrite the markup to `Beta headline`, then save against the `Alpha` address. E: **409** "no longer in the design"; `htmlContent` unchanged. _(The rewrite is simulated with a whole-document save — element mode cannot tell who moved the HTML, only that it moved.)_
+- **TC-INLINE-11 — An ambiguous address refuses.** P: two nodes with identical visible text. E: **409** "could not be identified uniquely"; nothing written. The client also pre-empts this at selection time so it reads as a property of the design, not a failure.
+- **TC-INLINE-12 — Closed allow-lists hold.** S: `tag:'script'` and `kind:'background'`. E: 400 each, no write. `script`/`style`/`title`/`textarea` are excluded because escaping is _meaningless_ inside raw-text elements, not merely unnecessary.
+
 ### F. Export
 
 - **TC-EXP-01 — Export re-renders missing PNG.** P: draft with `htmlContent` but no `exportUrl`. S: POST export. E: `{exportUrl}` signed; draft `EXPORTED`.
