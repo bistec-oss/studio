@@ -507,3 +507,58 @@ describe('parseAddVerdict', () => {
     expect(parseAddVerdict(`{"present": true, "evidence": "${'x'.repeat(500)}"}`)).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// FR-24 — the deterministic verification-miss seam at its call site (T12)
+// ---------------------------------------------------------------------------
+
+describe('the MOCK_AI verification-miss seam (FR-24)', () => {
+  // The seam is only consulted inside verifyAdd's `if (MOCK_AI)` branch, and
+  // MOCK_AI is snapshotted at module load — so driving it needs a fresh copy of
+  // the module under a stubbed env. The vi.mock registrations at the top of this
+  // file are per-file and survive resetModules, so that copy is still fully seamed.
+  async function loadWithMockAi() {
+    vi.resetModules()
+    vi.stubEnv('MOCK_AI', 'true')
+    return (await import('@/lib/drafts/refineVerify')).verifyRefine
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.resetModules()
+  })
+
+  it('is dormant in production: with MOCK_AI unset the sentinel is ordinary instruction text', async () => {
+    h.anthropicCreate.mockReset().mockResolvedValue(apiReply('{"present": true}'))
+    const result = await verifyRefine(input({ instruction: 'add a person __FAIL_VERIFY_ALWAYS__ dormancy' }))
+    // The real verifier ran and its verdict stood — the seam did not fire.
+    expect(result.outcome).toBe('pass')
+    expect(totalModelCalls()).toBe(1)
+  })
+
+  it('stubs a pass with no model call when the instruction carries no sentinel', async () => {
+    const verify = await loadWithMockAi()
+    const result = await verify(input({ instruction: 'include a human character' }))
+    expect(result.outcome).toBe('pass')
+    expect(totalModelCalls()).toBe(0)
+  })
+
+  it('__FAIL_VERIFY_ALWAYS__ misses on every attempt — the twice-failed / not-applied path', async () => {
+    const verify = await loadWithMockAi()
+    const args = input({ instruction: 'add a human character __FAIL_VERIFY_ALWAYS__ verify-always' })
+    expect((await verify(args)).outcome).toBe('miss')
+    const second = await verify(args)
+    expect(second.outcome).toBe('miss')
+    expect(second.reason).toContain('[add]')
+    expect(second.modelCalls).toBe(0)
+    expect(totalModelCalls()).toBe(0)
+  })
+
+  it('__FAIL_VERIFY_ONCE__ misses then passes — the retry-then-succeed path', async () => {
+    const verify = await loadWithMockAi()
+    const args = input({ instruction: 'add a human character __FAIL_VERIFY_ONCE__ verify-once' })
+    expect((await verify(args)).outcome).toBe('miss')
+    expect((await verify(args)).outcome).toBe('pass')
+    expect(totalModelCalls()).toBe(0)
+  })
+})

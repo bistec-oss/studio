@@ -91,6 +91,50 @@ export function shouldMockGenerateFail(promptContext: string): boolean {
   return false
 }
 
+// Per-instruction record so a __FAIL_VERIFY_ONCE__ refine misses verification on
+// its first attempt and passes on the single permitted retry — state for the
+// life of the serve process. Same globalThis-backed pattern as the two Sets
+// above, for the same reason: the retry lives in the refine route today, but
+// nothing structurally pins both consults to one Turbopack dev-mode instance of
+// this module, and a split Set would silently turn "miss once" into "miss
+// always" — which is the OTHER sentinel, so the E2E case would still go green
+// while asserting the wrong branch.
+const mockVerifyMissedOnce: Set<string> = ((globalThis as Record<string, unknown>).__mockVerifyMissedOnce ??=
+  new Set<string>()) as Set<string>
+
+/**
+ * Decide whether a mocked refine VERIFICATION should report a miss (FR-24).
+ *
+ * The MOCK_AI branch of `drafts/refineVerify.ts` stubs a deterministic pass with
+ * zero model calls — correct for every unrelated suite, and the reason the retry
+ * and twice-failed (not-applied) branches are otherwise unreachable from the
+ * test suite. This seam is the way into them.
+ *
+ * The sentinel rides in the refine INSTRUCTION: it is user-supplied text that
+ * reaches the verifier verbatim, and it is scoped to one refine rather than to
+ * every draft generated from a brief (the carrier the publish/generation seams
+ * use), which is exactly the granularity a per-refine outcome needs.
+ *   - "__FAIL_VERIFY_ALWAYS__" → miss every time (first attempt AND retry, so the
+ *     refine lands on the twice-failed / not-applied path)
+ *   - "__FAIL_VERIFY_ONCE__"   → miss the first verification, pass the retry's
+ *     (the retry-then-succeed path)
+ * The instruction must be unique per draft for __FAIL_VERIFY_ONCE__ to isolate
+ * its state, exactly as a __FAIL_ONCE__ caption must be.
+ *
+ * Doubly dormant in production: MOCK_AI is re-checked here, AND the only call
+ * site sits inside refineVerify's `if (MOCK_AI)` branch.
+ */
+export function shouldMockVerificationMiss(instruction: string): boolean {
+  if (!MOCK_AI) return false
+  if (instruction.includes('__FAIL_VERIFY_ALWAYS__')) return true
+  if (instruction.includes('__FAIL_VERIFY_ONCE__')) {
+    if (mockVerifyMissedOnce.has(instruction)) return false
+    mockVerifyMissedOnce.add(instruction)
+    return true
+  }
+  return false
+}
+
 /**
  * Deterministic briefing-assistant chat reply (MOCK_AI). Echoes the last user
  * message and always carries a ```briefing block so tests can assert the

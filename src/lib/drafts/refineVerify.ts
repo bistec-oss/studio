@@ -37,7 +37,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { env } from '@/lib/env'
-import { MOCK_AI } from '@/lib/testHooks'
+import { MOCK_AI, shouldMockVerificationMiss } from '@/lib/testHooks'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
 import { isCliMode, modelForBackground } from '@/lib/agent/config'
 import { fenceUntrusted, UNTRUSTED_CONTENT_GUARD } from '@/lib/agent/untrusted'
@@ -305,12 +305,20 @@ async function verifyAdd(input: VerifyRefineInput): Promise<ClassVerification> {
   // pass, zero calls, inert in production — the same contract as every other
   // seam in testHooks.ts.
   //
-  // ⚠️ T12 (FR-24) plugs the deterministic MISS seam in RIGHT HERE: a
-  // `shouldMockVerificationMiss(instruction)` sentinel helper in
-  // `src/lib/testHooks.ts`, following shouldMockGenerateFail's `__FAIL_*__`
-  // pattern, returning the miss branch instead of this pass. Without it the
-  // retry and twice-failed branches are unreachable from the E2E suite.
+  // T12 (FR-24) plugged the deterministic MISS seam in HERE: a
+  // `__FAIL_VERIFY_ALWAYS__` / `__FAIL_VERIFY_ONCE__` sentinel in the refine
+  // instruction takes the miss branch instead of that pass, which is what makes
+  // the retry and twice-failed branches reachable from the E2E suite. The seam
+  // re-checks MOCK_AI itself, so it is dormant in production twice over.
   if (MOCK_AI) {
+    if (shouldMockVerificationMiss(input.instruction)) {
+      return {
+        class: 'add',
+        outcome: 'miss',
+        detail: 'MOCK_AI: verification stubbed as a miss by the FR-24 sentinel seam.',
+        modelCall: false,
+      }
+    }
     return { class: 'add', outcome: 'pass', detail: 'MOCK_AI: verification stubbed as applied.', modelCall: false }
   }
 
