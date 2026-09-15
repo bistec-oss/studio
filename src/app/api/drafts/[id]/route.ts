@@ -13,6 +13,14 @@ type Params = { id: string }
 
 // The fields recoverIfStuck reads and writes. Structurally satisfies the pure
 // planner's RecoverableDraft, but with the Prisma enum types the writes need.
+//
+// notAppliedReason is DELIBERATELY not here, and not on the effective shape
+// returned below. Recovery neither reads nor writes it: a not-applied refine is
+// not a stuck run — it ran to completion twice and the claim was released
+// cleanly — so no branch has anything to say about it. Carrying it through
+// anyway would put a second copy of the value in this file that could silently
+// disagree with the row it came from. It flows once, straight from the loaded
+// draft to the response.
 interface DraftRecoveryRow {
   id: string
   status: DraftStatus
@@ -148,6 +156,17 @@ async function loadDraft(id: string) {
     failureReason: effective.failureReason,
     pendingAction: effective.pendingAction,
     pendingActionError: effective.pendingActionError,
+    // FR-14 — the not-applied outcome travels on its OWN poll field, never
+    // folded into pendingActionError. "The model did not do what you asked"
+    // and "the run crashed" are different outcomes with different remedies
+    // (rephrase vs retry), and the design on screen differs too: a crash may
+    // have left a half-applied draft, a not-applied refine left the PREVIOUS
+    // design byte-for-byte intact with no new revision. The 2026-07-28 copy-edit
+    // incident is the standing lesson — one field made to mean a second thing
+    // made five unrelated consumers wrong at once, "and each looked like its own
+    // bug". Named identically to the column and to DraftDetail so the two halves
+    // of this contract cannot drift.
+    notAppliedReason: draft.notAppliedReason,
     conflict: pendingConflict
       ? { conflictId: pendingConflict.conflictId, explanation: pendingConflict.explanation }
       : null,

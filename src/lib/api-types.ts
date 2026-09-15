@@ -243,6 +243,13 @@ export interface DraftDetail {
   failureReason: string | null
   pendingAction: DraftAction | null
   pendingActionError: string | null
+  // The verifier's stated miss after a refine that ran cleanly twice and still
+  // did not do what was asked (FR-14). A THIRD outcome alongside success and
+  // pendingActionError, never a variant of either: nothing was committed, the
+  // design is still the previous one, and the remedy is to rephrase rather than
+  // retry. Same name as the column and the poll field — the client and server
+  // halves of this contract are one merge and would otherwise drift silently.
+  notAppliedReason: string | null
   conflict: { conflictId: string; explanation: string } | null
   createdAt: string
   revisionCount: number

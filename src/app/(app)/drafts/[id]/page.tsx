@@ -271,6 +271,7 @@ export default function DraftDetailPage() {
               draftId={draftId}
               pendingAction={draft.pendingAction}
               pendingActionError={draft.pendingActionError}
+              notAppliedReason={draft.notAppliedReason}
               conflict={draft.conflict}
               currentRevisionNumber={draft.currentRevisionNumber}
               onActionStarted={fetchDraft}

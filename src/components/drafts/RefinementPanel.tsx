@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Send, Loader2, AlertTriangle, Check } from 'lucide-react'
+import { Send, Loader2, AlertTriangle, Check, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { GlassPanel } from '@/components/ui/GlassPanel'
 import { apiFetch } from '@/lib/apiFetch'
@@ -9,10 +9,14 @@ import type { DraftAction } from '@/lib/api-types'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
+// 'not-applied' is its own status, NOT a flavour of 'error'. The run did not
+// crash; the model was asked twice and measurably did not do it, so nothing was
+// committed and the design on screen is unchanged. Different cause, different
+// remedy (rephrase, not retry) — hence a different row.
 interface RefineMessage {
   id: string
   instruction: string
-  status: 'pending' | 'applied' | 'conflict' | 'error'
+  status: 'pending' | 'applied' | 'conflict' | 'error' | 'not-applied'
   detail?: string
 }
 
@@ -47,6 +51,10 @@ export interface RefinementPanelProps {
   /** Polled draft state driving the async-refine lifecycle. */
   pendingAction: DraftAction | null
   pendingActionError: string | null
+  /** FR-14 — the last refine ran cleanly and still did not do what was asked.
+   *  A hard failure on its OWN channel: read it as "nothing changed", never as a
+   *  warning on a committed revision, and never as a crash. */
+  notAppliedReason: string | null
   conflict: { conflictId: string; explanation: string } | null
   currentRevisionNumber: number | null
   /** Called right after an async action is accepted (202) so the parent can
@@ -61,6 +69,7 @@ export function RefinementPanel({
   draftId,
   pendingAction,
   pendingActionError,
+  notAppliedReason,
   conflict,
   currentRevisionNumber,
   onActionStarted,
@@ -82,7 +91,8 @@ export function RefinementPanel({
 
   // Resolve the pending chat message when the polled pendingAction transitions
   // REFINE → null: a NEW conflict (different id than at send) → conflict card;
-  // an action error → error; a moved revision pointer → applied.
+  // a stated miss → not-applied; an action error → error; a moved revision
+  // pointer → applied.
   useEffect(() => {
     const prev = prevActionRef.current
     prevActionRef.current = pendingAction
@@ -98,6 +108,14 @@ export function RefinementPanel({
         explanation: conflict.explanation,
         instruction: res.instruction,
       })
+    } else if (notAppliedReason) {
+      // Checked BEFORE the error channel and before the revision pointer: a
+      // twice-missed refine leaves pendingActionError null (nothing crashed) and
+      // the pointer where it was (nothing was committed), so without this branch
+      // it would fall through to the "shouldn't happen" fallback and the
+      // verifier's measurement — the one thing that tells the user how to
+      // rephrase — would be thrown away.
+      setStatus('not-applied', notAppliedReason)
     } else if (pendingActionError) {
       setStatus('error', pendingActionError)
     } else if (currentRevisionNumber !== res.baselineRevision) {
@@ -108,7 +126,7 @@ export function RefinementPanel({
       // shouldn't happen, but never leave the message spinning forever.
       setStatus('error', 'The refinement finished without producing a new revision.')
     }
-  }, [pendingAction, pendingActionError, conflict, currentRevisionNumber, onRefined])
+  }, [pendingAction, pendingActionError, notAppliedReason, conflict, currentRevisionNumber, onRefined])
 
   async function send(instruction: string, overrideConflictId?: string) {
     if (!instruction.trim() && !overrideConflictId) return
@@ -193,6 +211,11 @@ export function RefinementPanel({
                   <AlertTriangle size={11} /> Brand conflict
                 </span>
               )}
+              {m.status === 'not-applied' && (
+                <span className="text-red-500 flex items-center gap-1" title={m.detail}>
+                  <XCircle size={11} className="flex-shrink-0" /> Not applied — nothing changed
+                </span>
+              )}
               {m.status === 'error' && (
                 <span className="text-red-500" title={m.detail}>
                   Failed: {m.detail}
@@ -202,6 +225,37 @@ export function RefinementPanel({
           </div>
         ))}
       </div>
+
+      {/* FR-14 / AC-18 — the not-applied outcome, as a hard failure. It reads
+          off the POLLED field rather than the message list so it survives a
+          reload (the chat messages are client state and a refine runs for
+          minutes), and it is deliberately not dismissible: there is no
+          successful result underneath it to dismiss it onto. Red and stated as
+          a failure — never amber like the brand conflict above, which IS a
+          committed-on-override outcome with a decision to make. Gated on no
+          action in flight, because the route writes notAppliedReason while the
+          claim is still held, and until it releases the message row above is
+          still legitimately "Applying…". */}
+      {notAppliedReason && pendingAction === null && (
+        <div className="mb-3 rounded-xl border border-red-300 dark:border-red-700/50 bg-red-50 dark:bg-red-900/20 p-3 animate-fade-in">
+          <div className="flex items-start gap-2">
+            <XCircle size={16} className="text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                Couldn&apos;t apply that change — your design is unchanged
+              </p>
+              {/* The verifier's MEASUREMENT, not a paraphrase of it: it names
+                  what it found in the output, which is what tells the user how
+                  to rephrase. Surfaced, never swallowed. */}
+              <p className="text-xs text-red-700 dark:text-red-400/90 mt-1">{notAppliedReason}</p>
+              <p className="text-xs text-red-700/80 dark:text-red-400/70 mt-2">
+                No new version was created. Try rephrasing the instruction — naming the element you
+                want changed usually helps.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {conflictCard && (
         <div className="mb-3 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/20 p-3 animate-fade-in">
