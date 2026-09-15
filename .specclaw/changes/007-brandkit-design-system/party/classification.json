@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": [],
+  "rationale": "Three unresolved design questions - dataset source, rewrite-vs-diff upgrade architecture, and whether design-system slices go into every-generation prompts or kit-authoring-only - materially change the implementation scope; changes to design prompts affect every future generation globally, and a bad rule would degrade output across all kits.",
+  "signals": {
+    "blast_radius": "New design-system data module, brand-kit assistant extensions, kit prompt authoring UI changes, and modifications to prompt builders in design paths (estimated 15-25 files); prompt injection may touch every generation flow.",
+    "unresolved": "Where does curated dataset come from (licensing/authoring approach); rewrite-vs-diff architecture for upgrade assistant (affects implementation complexity and reviewability); and hot-path inclusion (every-generation context vs kit-authoring-only, affects prompt size and scope).",
+    "irreversibility": "Kit-prompt upgrades via existing versioned BrandKitPrompt flow are revertible; PROMPT_VERSION stamps each draft so old renders stay tied to their prompt revision, but prompt context changes at new-generation default are persistent until explicitly reverted."
+  }
+}

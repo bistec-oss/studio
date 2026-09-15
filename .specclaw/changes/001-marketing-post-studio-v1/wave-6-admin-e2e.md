@@ -106,23 +106,23 @@ Ship the remaining admin surface (provider settings with API key registration + 
 
   Apply the following schema changes and run `prisma migrate dev`. Must be complete before T21 backend work begins.
 
-  | Change | Detail |
-  |---|---|
-  | `Draft.htmlContent String? @db.Text` | Added — stores current HTML design state |
-  | `DraftRevision.htmlSnapshot String @db.Text` | Renamed from `elementTreeSnapshot` — stores HTML at that revision |
-  | `DraftRevision.exportUrl String?` | Added — pre-signed PNG URL for that revision |
-  | `BrandKit.colors Json?` | Added — array of brand hex color strings |
-  | `BrandKit.fonts Json?` | Added — array of `{ name, url }` objects (font files stored in MinIO) |
-  | `BrandKit.logoUrl String?` | Added — MinIO URL of the brand logo |
-  | `BrandKit.canvaBrandKitId` | **Removed** |
-  | `BrandKit.source` | **Removed** |
-  | `BrandKit.artifactFolder` | **Removed** |
-  | `BrandKitTemplate.htmlTemplate String @db.Text` | Added — HTML/CSS template string |
-  | `BrandKitTemplate.canvaTemplateId` | **Removed** |
-  | `BrandKitSource` enum | **Removed** |
-  | `AvailableProvider.providerName String` | Added |
-  | `AvailableProvider.keyPrefix String` | Added |
-  | `AvailableProvider.encryptedApiKey String` | Added |
+  | Change                                          | Detail                                                                |
+  | ----------------------------------------------- | --------------------------------------------------------------------- |
+  | `Draft.htmlContent String? @db.Text`            | Added — stores current HTML design state                              |
+  | `DraftRevision.htmlSnapshot String @db.Text`    | Renamed from `elementTreeSnapshot` — stores HTML at that revision     |
+  | `DraftRevision.exportUrl String?`               | Added — pre-signed PNG URL for that revision                          |
+  | `BrandKit.colors Json?`                         | Added — array of brand hex color strings                              |
+  | `BrandKit.fonts Json?`                          | Added — array of `{ name, url }` objects (font files stored in MinIO) |
+  | `BrandKit.logoUrl String?`                      | Added — MinIO URL of the brand logo                                   |
+  | `BrandKit.canvaBrandKitId`                      | **Removed**                                                           |
+  | `BrandKit.source`                               | **Removed**                                                           |
+  | `BrandKit.artifactFolder`                       | **Removed**                                                           |
+  | `BrandKitTemplate.htmlTemplate String @db.Text` | Added — HTML/CSS template string                                      |
+  | `BrandKitTemplate.canvaTemplateId`              | **Removed**                                                           |
+  | `BrandKitSource` enum                           | **Removed**                                                           |
+  | `AvailableProvider.providerName String`         | Added                                                                 |
+  | `AvailableProvider.keyPrefix String`            | Added                                                                 |
+  | `AvailableProvider.encryptedApiKey String`      | Added                                                                 |
 
 ---
 
@@ -136,52 +136,58 @@ Ship the remaining admin surface (provider settings with API key registration + 
 
 > **Note (2026-06-30, later extended):** post size is now per-brief — `Brief.aspectRatio` (SQUARE 1080×1080 | PORTRAIT 1080×1350) + `BrandKitTemplate.aspectRatio`, resolved via `src/lib/aspectRatio.ts`. Where the assertions below say "1080×1080 logical", read it as the brief's chosen size. The implemented suite adds TC-GEN-A3/A4 (portrait + ratio-mismatch) and a portrait Path B case; the Publish button opens the shared `PublishDialog`. See `docs/e2e-test-plan.md`.
 
-  **`path-a.test.ts`**
-  - Create a brand kit with a linked HTML template + brand colors/fonts
-  - Submit a brief selecting Path A + that template
-  - Assert: `Draft.htmlContent` non-null after assembly
-  - Assert: `Draft.exportUrl` is set and the PNG renders at correct dimensions (1080×1080 logical)
-  - Assert: brand colors from `BrandKit.colors` are present in the HTML content
-  - Assert: export produces a downloadable PNG at the MinIO URL
-  - Assert: `Draft.imageUrl` is null when Claude used CSS/SVG; non-null when Claude called `generateImage`
+**`path-a.test.ts`**
 
-  **`path-b.test.ts`**
-  - Submit a brief selecting Path B + 1 reference image
-  - Assert: Claude design agent completed (`Draft.htmlContent` non-null)
-  - Assert: `Draft.exportUrl` set and PNG renders correctly
-  - Assert: draft created with status EXPORTED
+- Create a brand kit with a linked HTML template + brand colors/fonts
+- Submit a brief selecting Path A + that template
+- Assert: `Draft.htmlContent` non-null after assembly
+- Assert: `Draft.exportUrl` is set and the PNG renders at correct dimensions (1080×1080 logical)
+- Assert: brand colors from `BrandKit.colors` are present in the HTML content
+- Assert: export produces a downloadable PNG at the MinIO URL
+- Assert: `Draft.imageUrl` is null when Claude used CSS/SVG; non-null when Claude called `generateImage`
 
-  **`publish.test.ts`**
-  - Immediate publish: `POST /api/posts` with `scheduledAt = null` → status = PUBLISHED
-  - Scheduled publish: `POST /api/posts` with future `scheduledAt` → status = SCHEDULED → worker tick → PUBLISHED
-  - FAILED post retry: mock publisher failure → status = FAILED → `POST /api/posts/[id]/publish` → PUBLISHED
+**`path-b.test.ts`**
 
-  **`brand-kit.test.ts`**
-  - Create kit with color palette, fonts, logo, and HTML template
-  - Edit kit → HTML template updated, colors/fonts persisted
-  - Brand voice prompt versioning: new version saves, active version is promoted explicitly
-  - AI-assisted generate and improve return draft prompts — not auto-saved
-  - Artifacts upload to MinIO, feedToAI toggle persists
-  - Soft delete → kit excluded from brief picker
+- Submit a brief selecting Path B + 1 reference image
+- Assert: Claude design agent completed (`Draft.htmlContent` non-null)
+- Assert: `Draft.exportUrl` set and PNG renders correctly
+- Assert: draft created with status EXPORTED
 
-  **`provider-registration.test.ts`**
-  - Register provider with `sk-ant-` prefix → providerName auto-populated as "Anthropic", no manual entry required
-  - Register provider with `sk-` prefix → auto-populated as "OpenAI"
-  - Register provider with unknown prefix → admin supplies name manually, proceeds without block
-  - Invalid key → API validation fails → 422, row not created
-  - Registered provider appears in brief model selector with correct label + provider name
-  - Full API key never returned in any GET response — only keyPrefix shown
-  - Disable provider → removed from `GET /api/providers/available` immediately
+**`publish.test.ts`**
 
-  **`agui-refinement.test.ts`**
-  - Submit refinement instruction → Claude design agent applies change → `Draft.htmlContent` updated → `DraftRevision` row created with non-null `htmlSnapshot`
-  - Submit instruction that violates brand kit → reply returned, `Draft.htmlContent` unchanged, no revision created
-  - Click Override after conflict card → change applied, `Draft.htmlContent` updated, `Draft.pendingConflict` cleared, revision created
-  - Click Cancel after conflict card → no change, `Draft.pendingConflict` cleared
-  - Restore prior revision → `DraftRevision.htmlSnapshot` re-rendered via Puppeteer → `Draft.exportUrl` updated, design preview changes
-  - Undo panel shows revision history in order
+- Immediate publish: `POST /api/posts` with `scheduledAt = null` → status = PUBLISHED
+- Scheduled publish: `POST /api/posts` with future `scheduledAt` → status = SCHEDULED → worker tick → PUBLISHED
+- FAILED post retry: mock publisher failure → status = FAILED → `POST /api/posts/[id]/publish` → PUBLISHED
 
-  **Test infrastructure:** tests run against `docker-compose.test.yml` (same services, isolated DB + MinIO). AI provider calls (copy, image, design agent) mocked via fixture implementations that return deterministic responses. Puppeteer `renderHtmlToPng` replaced with a fixture that returns a pre-built test buffer (avoids headless Chromium dependency in CI). Social publisher calls mocked similarly.
+**`brand-kit.test.ts`**
+
+- Create kit with color palette, fonts, logo, and HTML template
+- Edit kit → HTML template updated, colors/fonts persisted
+- Brand voice prompt versioning: new version saves, active version is promoted explicitly
+- AI-assisted generate and improve return draft prompts — not auto-saved
+- Artifacts upload to MinIO, feedToAI toggle persists
+- Soft delete → kit excluded from brief picker
+
+**`provider-registration.test.ts`**
+
+- Register provider with `sk-ant-` prefix → providerName auto-populated as "Anthropic", no manual entry required
+- Register provider with `sk-` prefix → auto-populated as "OpenAI"
+- Register provider with unknown prefix → admin supplies name manually, proceeds without block
+- Invalid key → API validation fails → 422, row not created
+- Registered provider appears in brief model selector with correct label + provider name
+- Full API key never returned in any GET response — only keyPrefix shown
+- Disable provider → removed from `GET /api/providers/available` immediately
+
+**`agui-refinement.test.ts`**
+
+- Submit refinement instruction → Claude design agent applies change → `Draft.htmlContent` updated → `DraftRevision` row created with non-null `htmlSnapshot`
+- Submit instruction that violates brand kit → reply returned, `Draft.htmlContent` unchanged, no revision created
+- Click Override after conflict card → change applied, `Draft.htmlContent` updated, `Draft.pendingConflict` cleared, revision created
+- Click Cancel after conflict card → no change, `Draft.pendingConflict` cleared
+- Restore prior revision → `DraftRevision.htmlSnapshot` re-rendered via Puppeteer → `Draft.exportUrl` updated, design preview changes
+- Undo panel shows revision history in order
+
+**Test infrastructure:** tests run against `docker-compose.test.yml` (same services, isolated DB + MinIO). AI provider calls (copy, image, design agent) mocked via fixture implementations that return deterministic responses. Puppeteer `renderHtmlToPng` replaced with a fixture that returns a pre-built test buffer (avoids headless Chromium dependency in CI). Social publisher calls mocked similarly.
 
 ---
 
@@ -194,15 +200,18 @@ Ship the remaining admin surface (provider settings with API key registration + 
 Exposes bistec-studio as an MCP server so Claude (or any MCP-compatible model) can call it from the terminal or from an agentic pipeline. Primary v1 use case: an admin uses Claude in the terminal to set up brand kits without touching the UI (e.g. read brand data from an external source, write it into bistec-studio conversationally). Secondary use: agentic generation workflows.
 
 **Admin tools** (require admin API key — gated in `src/mcp/auth.ts`):
+
 - `create_brand_kit(name, colors, fonts, logoUrl)` → `{ brandKitId }`
 - `set_brand_kit_prompt(brandKitId, content)` → `{ promptId }`
 - `upload_brand_template(brandKitId, name, htmlTemplate)` → `{ templateId }`
 
 **Read tools** (any authenticated caller):
+
 - `list_brand_kits()` → `{ kits }`
 - `get_brand_kit(id)` → `{ kit, templates, activePrompt }`
 
 **Generation tools** (any authenticated caller):
+
 - `generate_post(brief)` → `{ draftId, exportUrl, htmlContent }`
 - `get_draft(id)` → `{ copyText, imageUrl, exportUrl, status }`
 - `publish_post(draftId, channel)` → `{ platformId }`

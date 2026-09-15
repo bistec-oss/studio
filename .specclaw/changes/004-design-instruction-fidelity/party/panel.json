@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "3414282302 7893",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "The refine prompt is structurally rewritten with taxonomy-based instruction semantics, a new verification gate is inserted into the refine path that all draft actions depend on, and three open questions about verification scope and element-targeted editing method change what is built. Dockerfile release machinery is modified for font coverage.",
+  "domains": ["ops"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

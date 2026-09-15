@@ -64,4 +64,4 @@ Log in with username `adminBTG` — the initial password is printed once by the 
 - **[docs/e2e-test-plan.md](docs/e2e-test-plan.md)** — E2E test catalog (103 passing tests)
 - **[docs/code-review-findings.md](docs/code-review-findings.md)** — Code review & remediation status
 - **[docs/ui-reference/DESIGN_SYSTEM.md](docs/ui-reference/DESIGN_SYSTEM.md)** — UI/design system
-- **[.specclaw/changes/marketing-post-studio-v1/design.md](.specclaw/changes/marketing-post-studio-v1/design.md)** — Architecture, Prisma schema, API routes, provider abstraction
+- **[.specclaw/changes/001-marketing-post-studio-v1/design.md](.specclaw/changes/001-marketing-post-studio-v1/design.md)** — Architecture, Prisma schema, API routes, provider abstraction

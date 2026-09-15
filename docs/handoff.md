@@ -364,7 +364,7 @@ Small UI-only change set (no schema, no API changes, no migrations, no new env v
 
 ## 2026-07-17 (latest) — Async draft actions (202+poll) + brand-kit logo URL hygiene
 
-**Specclaw change `async-draft-actions`** (spec/design/tasks in `.specclaw/changes/async-draft-actions/`). Two coupled improvements from one incident: a regenerate-design against the Hearts Academy kit timed out at 300s (CLI mode) because its **136,050-char base64 `logoUrl`** entered the design prompt **twice** — via `buildBrandKitSystemContext` AND the `feedToAI` artifact URL list in `pathB.ts` — producing a 277k-char prompt. Part B stops base64 ever reaching prompts again; Part A converts the three synchronous draft actions to the F1 async pattern so long-running actions survive tab switches and can't interleave.
+**Specclaw change `async-draft-actions`** (spec/design/tasks in `.specclaw/changes/003-async-draft-actions/`). Two coupled improvements from one incident: a regenerate-design against the Hearts Academy kit timed out at 300s (CLI mode) because its **136,050-char base64 `logoUrl`** entered the design prompt **twice** — via `buildBrandKitSystemContext` AND the `feedToAI` artifact URL list in `pathB.ts` — producing a 277k-char prompt. Part B stops base64 ever reaching prompts again; Part A converts the three synchronous draft actions to the F1 async pattern so long-running actions survive tab switches and can't interleave.
 
 ### Part A — async draft actions (regenerate-design / regenerate-copy / refine)
 
@@ -483,7 +483,7 @@ Notes for the importing session: re-running the import is safe (skips existing);
 
 ## 2026-07-13 — Brief draft autosave & recovery + two dashboard/UI fixes
 
-**Merged to `main`** (specclaw change `brief-draft-recovery`; spec/design/tasks under `.specclaw/changes/brief-draft-recovery/`). Gates: tsc, lint 0 errors (7 pre-existing warnings), **156/156 unit**, full mock **E2E 132 passed / 7 skipped** (new §P suite), production build.
+**Merged to `main`** (specclaw change `brief-draft-recovery`; spec/design/tasks under `.specclaw/changes/002-brief-draft-recovery/`). Gates: tsc, lint 0 errors (7 pre-existing warnings), **156/156 unit**, full mock **E2E 132 passed / 7 skipped** (new §P suite), production build.
 
 1. **Brief draft recovery** — the wizard's working state (every field, step index, uploaded-image refs) autosaves to a new `BriefDraft` table (migration `20260713124851`) via a 1.5s-debounced `PUT /api/brief-drafts` once non-trivial (topic OR prompt OR an image); unfinished briefs appear as leading rows in the dashboard Recent Drafts card with Resume (`/brief?resume=<id>`, full rehydration incl. step) and confirm-guarded Discard. Lifecycle lives ONLY in `src/lib/brief/briefDrafts.ts`: 5/user cap (oldest evicted), 7-day lazy TTL sweep on read (F1's stale-draft precedent — no worker), MinIO image cleanup locked to the owner's `briefs/<userId>/` prefix. Generate-success deletes the row with `?keepImages=true` (the created Brief references those images); a PUT with an unknown id 404s so a late debounce can't resurrect a generated brief. **Owner-only, no admin override** (foreign ids 404 — deliberate, unlike generated drafts). Client-safe zod schema/helpers in `briefDraftPayload.ts` (64 KB payload cap, decode-then-recheck traversal guard on image URLs).
 2. **Modal-centering bug (the "publish dialog bleeds off-screen" report)** — root cause: `scaleIn`'s keyframe `transform` + `fill: both` permanently overrode the `-translate-x/y-1/2` centering classes on `Modal`, parking the dialog's top-left corner at the viewport center (fixed-position ⇒ unreachable by scrolling). Fix: `modalIn` keyframes that carry `translate(-50%,-50%)` through every frame (`globals.css`), used by `Modal.tsx`. Rule of thumb: never animate `transform` on a transform-centered element without including the base transform in the keyframes. (`ImageLightbox` is flex-centered — never affected.)
@@ -1225,19 +1225,19 @@ The design orchestrator is NOT user-selectable — env-configured only.
 
 ## Specclaw files (all committed)
 
-| File                          | Location                                      |
-| ----------------------------- | --------------------------------------------- |
-| `proposal.md`                 | `.specclaw/changes/marketing-post-studio-v1/` |
-| `spec.md`                     | `.specclaw/changes/marketing-post-studio-v1/` |
-| `design.md`                   | `.specclaw/changes/marketing-post-studio-v1/` |
-| `tasks.md`                    | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-1-scaffold.md`          | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-2-providers.md`         | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-3-canva-minio.md`       | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-3b-brand-data-layer.md` | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-4-generation.md`        | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-5-publishing.md`        | `.specclaw/changes/marketing-post-studio-v1/` |
-| `wave-6-admin-e2e.md`         | `.specclaw/changes/marketing-post-studio-v1/` |
+| File                          | Location                                          |
+| ----------------------------- | ------------------------------------------------- |
+| `proposal.md`                 | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `spec.md`                     | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `design.md`                   | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `tasks.md`                    | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-1-scaffold.md`          | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-2-providers.md`         | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-3-canva-minio.md`       | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-3b-brand-data-layer.md` | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-4-generation.md`        | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-5-publishing.md`        | `.specclaw/changes/001-marketing-post-studio-v1/` |
+| `wave-6-admin-e2e.md`         | `.specclaw/changes/001-marketing-post-studio-v1/` |
 
 `tasks.md` is the canonical task source. The wave files are detailed execution proposals derived from it — one per wave, each with full task specs, parallelism diagrams, and completion checklists.
 

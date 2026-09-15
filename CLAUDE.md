@@ -124,7 +124,7 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 - Gates: tsc, lint (0 errors, 7 pre-existing warnings), **161/161 unit**, full mock **E2E 135 passed / 4 skipped / 0 failed**, production build. **⚠️ Deploy:** `npx prisma migrate deploy` (1 new migration `20260714051500`); no new env vars.
 - **Ops (this machine):** MinIO credentials rotated off `minioadmin` (the prod env gate rejects the default — symptom was 500s on every route incl. login). They live in `.env` AND `.env.test`; keep both in sync or storage E2E cases fail on MinIO auth. New vision surfaces are MOCK-verified only.
 
-**✅ Brief draft autosave/recovery + modal-centering fix + expandable Recent Drafts — 2026-07-13** (specclaw change `brief-draft-recovery`; spec/design/tasks in `.specclaw/changes/brief-draft-recovery/`):
+**✅ Brief draft autosave/recovery + modal-centering fix + expandable Recent Drafts — 2026-07-13** (specclaw change `brief-draft-recovery`; spec/design/tasks in `.specclaw/changes/002-brief-draft-recovery/`):
 
 - **Brief draft recovery.** The brief wizard autosaves its working state (all fields, step position, uploaded-image refs) to a new **`BriefDraft`** table via a 1.5s-debounced `PUT /api/brief-drafts` once non-trivial (topic OR prompt OR an image); a half-written brief now survives tab close / refresh / device switch. Unfinished briefs surface as leading rows in the dashboard's **Recent Drafts** card ("Unfinished" chip + **Resume**/**Discard**); Resume opens `/brief?resume=<id>` and rehydrates everything (dangling template/kit ids are cleared by the wizard's existing consistency effect). Lifecycle rules live in **`src/lib/brief/briefDrafts.ts`** only: **5 rows/user** (oldest evicted), **7-day lazy TTL sweep** on read (F1's stale-draft precedent — no worker), image cleanup strictly scoped to `briefs/<userId>/` in the IMAGES bucket. Generate-success deletes the row **keeping** images (`DELETE …?keepImages=true` — the new `Brief.briefImages` references them); Discard/eviction/expiry delete images too. Routes are **owner-only with NO admin override** (private working state; foreign ids 404), and a PUT with an unknown id is 404 so a stale autosave can't resurrect a generated brief. Client-safe schema/helpers split into `briefDraftPayload.ts` (zod, 64 KB cap, traversal-guarded URL→key). Migration `20260713124851_brief_draft`.
 - **Modal bleed fix (all centered modals — reported on the publish dialog).** `Modal` centers with `left/top 50% + -translate-x/y-1/2`, but `animate-scale-in`'s keyframe `transform` (with `fill: both`) **permanently replaced** the class transform, wiping the centering — the dialog's top-left corner sat at the viewport center and tall dialogs bled off-screen, unreachable by scroll. New `modalIn` keyframes (`globals.css`) carry `translate(-50%,-50%)` through every frame; `Modal.tsx` uses `animate-modal-in`. `ImageLightbox` (flex-centered) was never affected. **Never use `animate-scale-in` on a transform-centered element.**
@@ -271,7 +271,7 @@ Before building or modifying any page, read the design system:
 
 Before writing any backend code, API routes, Prisma models, or provider logic, read the design document:
 
-- **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — authoritative source for the Prisma schema, all API route contracts, the AI provider abstraction layer (`CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces), the Claude design agent harness, the Puppeteer renderer, MinIO integration, AGUI backend flow, provider registration encryption, and the full file/folder structure of the real app. Any implementation that touches data models, API routes, or provider logic must align with this document.
+- **[`.specclaw/changes/001-marketing-post-studio-v1/design.md`](.specclaw/changes/001-marketing-post-studio-v1/design.md)** — authoritative source for the Prisma schema, all API route contracts, the AI provider abstraction layer (`CopyProvider`, `ImageProvider`, `DesignOrchestrator` interfaces), the Claude design agent harness, the Puppeteer renderer, MinIO integration, AGUI backend flow, provider registration encryption, and the full file/folder structure of the real app. Any implementation that touches data models, API routes, or provider logic must align with this document.
 - **[`docs/mcp-acp-guide.md`](docs/mcp-acp-guide.md)** — how the MCP (stdio) and ACP (HTTP) machine-access surfaces work: `bstk_` team API keys (mint/resolve/revoke), the MCP tool set + client config (incl. **where `MCP_API_KEY` goes**), the ACP capabilities + curl examples, team-scoping guardrails, and the CLI prompt-injection / SSRF hardening. Read before touching `src/mcp/*`, `src/app/api/acp/*`, or the API-key routes.
 
 ### Code review & remediation status
@@ -287,22 +287,22 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 ### Specification & planning
 
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary
-- **[`.specclaw/changes/marketing-post-studio-v1/spec.md`](.specclaw/changes/marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements
-- **[`.specclaw/changes/marketing-post-studio-v1/design.md`](.specclaw/changes/marketing-post-studio-v1/design.md)** — architecture, Prisma schema, API routes, provider abstraction layer, file tree
-- **[`.specclaw/changes/marketing-post-studio-v1/tasks.md`](.specclaw/changes/marketing-post-studio-v1/tasks.md)** — 28 tasks across 6 waves with estimates and dependencies
-- **[`.specclaw/changes/marketing-post-studio-v1/proposal.md`](.specclaw/changes/marketing-post-studio-v1/proposal.md)** — original proposal + post-proposal decisions log
+- **[`.specclaw/changes/001-marketing-post-studio-v1/spec.md`](.specclaw/changes/001-marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements
+- **[`.specclaw/changes/001-marketing-post-studio-v1/design.md`](.specclaw/changes/001-marketing-post-studio-v1/design.md)** — architecture, Prisma schema, API routes, provider abstraction layer, file tree
+- **[`.specclaw/changes/001-marketing-post-studio-v1/tasks.md`](.specclaw/changes/001-marketing-post-studio-v1/tasks.md)** — 28 tasks across 6 waves with estimates and dependencies
+- **[`.specclaw/changes/001-marketing-post-studio-v1/proposal.md`](.specclaw/changes/001-marketing-post-studio-v1/proposal.md)** — original proposal + post-proposal decisions log
 
 ### Per-wave execution plans
 
-| Wave | File                                                                                                  | Scope                                                  |
-| ---- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| 1    | [wave-1-scaffold.md](.specclaw/changes/marketing-post-studio-v1/wave-1-scaffold.md)                   | App scaffold, Docker Compose, Prisma, Clerk            |
-| 2    | [wave-2-providers.md](.specclaw/changes/marketing-post-studio-v1/wave-2-providers.md)                 | AI provider abstraction layer                          |
-| 3    | [wave-3-canva-minio.md](.specclaw/changes/marketing-post-studio-v1/wave-3-canva-minio.md)             | HTML renderer (Puppeteer) + Claude design agent, MinIO |
-| 3b   | [wave-3b-brand-data-layer.md](.specclaw/changes/marketing-post-studio-v1/wave-3b-brand-data-layer.md) | Brand kit data layer                                   |
-| 4    | [wave-4-generation.md](.specclaw/changes/marketing-post-studio-v1/wave-4-generation.md)               | Brief → generation pipeline (Path A + B)               |
-| 5    | [wave-5-publishing.md](.specclaw/changes/marketing-post-studio-v1/wave-5-publishing.md)               | Publishing + scheduler                                 |
-| 6    | [wave-6-admin-e2e.md](.specclaw/changes/marketing-post-studio-v1/wave-6-admin-e2e.md)                 | Admin settings, AGUI refinement, E2E tests             |
+| Wave | File                                                                                                      | Scope                                                  |
+| ---- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1    | [wave-1-scaffold.md](.specclaw/changes/001-marketing-post-studio-v1/wave-1-scaffold.md)                   | App scaffold, Docker Compose, Prisma, Clerk            |
+| 2    | [wave-2-providers.md](.specclaw/changes/001-marketing-post-studio-v1/wave-2-providers.md)                 | AI provider abstraction layer                          |
+| 3    | [wave-3-canva-minio.md](.specclaw/changes/001-marketing-post-studio-v1/wave-3-canva-minio.md)             | HTML renderer (Puppeteer) + Claude design agent, MinIO |
+| 3b   | [wave-3b-brand-data-layer.md](.specclaw/changes/001-marketing-post-studio-v1/wave-3b-brand-data-layer.md) | Brand kit data layer                                   |
+| 4    | [wave-4-generation.md](.specclaw/changes/001-marketing-post-studio-v1/wave-4-generation.md)               | Brief → generation pipeline (Path A + B)               |
+| 5    | [wave-5-publishing.md](.specclaw/changes/001-marketing-post-studio-v1/wave-5-publishing.md)               | Publishing + scheduler                                 |
+| 6    | [wave-6-admin-e2e.md](.specclaw/changes/001-marketing-post-studio-v1/wave-6-admin-e2e.md)                 | Admin settings, AGUI refinement, E2E tests             |
 
 ## Architecture decisions to remember
 

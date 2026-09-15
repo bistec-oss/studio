@@ -134,6 +134,7 @@ T18 and T19 can be built in parallel once T17 is done.
 ## Social API prerequisites (out of scope for code, but blockers)
 
 Before T16 can be tested end-to-end:
+
 - **Instagram:** Meta Business app created, Instagram Graph API with `instagram_basic`, `instagram_content_publish` permissions, app review approved, access token generated.
 - **LinkedIn:** LinkedIn app with `w_member_social` or `w_organization_social` permission, organization ID confirmed.
 

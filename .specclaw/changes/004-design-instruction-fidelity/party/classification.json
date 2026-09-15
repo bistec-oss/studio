@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["ops"],
+  "rationale": "The refine prompt is structurally rewritten with taxonomy-based instruction semantics, a new verification gate is inserted into the refine path that all draft actions depend on, and three open questions about verification scope and element-targeted editing method change what is built. Dockerfile release machinery is modified for font coverage.",
+  "signals": {
+    "blast_radius": "Refine prompt rewritten with taxonomy-based add/replace/remove/constrain semantics; refine route gains post-refine verification and retry logic; element-targeted editing UI added to draft page; Dockerfile runner stage modified for symbol/emoji fonts; inline-asset recovery added; rasterizing E2E case added (~12-18 files)",
+    "unresolved": "Three structural decisions that change implementation-verification scope (every refine vs selective classes only), element-targeted editing method (direct DOM edit vs scoped instruction), and symbol/emoji font type (colour vs monochrome)-whose answers affect the file list and architecture",
+    "irreversibility": "Most changes reversible via git; element-targeted editing is a capability-add that becomes a user dependency once deployed"
+  }
+}

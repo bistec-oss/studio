@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["ops"],
+  "rationale": "Reverses an architectural decision (COPY slot reinstatement), fixes a live prod bug (isDefault) that changes behavior for existing teams, and has three unresolved design questions (Alpine sandbox mechanism, per-provider capability map, warning-vs-failure) whose answers materially affect scope and implementation.",
+  "signals": {
+    "blast_radius": "Provider resolution core logic, /team and /settings UI surfaces, COPY slot reinstatement in CLI mode, CLI sandbox integration, new Gemini provider support, ~15-25 files estimated",
+    "unresolved": "Which Alpine sandbox mechanism (seccomp, bind-mount, unprivileged user, separate container?) materially changes implementation size; per-provider capability map for image size/aspect-ratio support; whether skipped AI background is a visible warning or hard failure",
+    "irreversibility": "The isDefault fix changes behavior for prod teams currently getting no backgrounds; COPY slot reinstatement is Git-revertible but alters the provider UX users will experience; behavior changes are not purely Git-revertible"
+  }
+}

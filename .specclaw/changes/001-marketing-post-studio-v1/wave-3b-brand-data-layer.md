@@ -24,6 +24,7 @@ Build the admin-facing brand kit management (CRUD + color palette + font managem
 #### UI flows
 
 **Add Brand Kit modal** — triggered by "Add Kit" button in Settings.
+
 1. Name field
 2. **Color palette input** — admin enters hex values (e.g. `#1A2B3C`); stored as an array in `BrandKit.colors Json?`
 3. **Font management** — admin uploads font files (TTF/WOFF2); each uploaded to MinIO `brandkits` bucket; stored as `{ name, url }[]` in `BrandKit.fonts Json?`
@@ -31,12 +32,14 @@ Build the admin-facing brand kit management (CRUD + color palette + font managem
 5. **HTML template management** — admin pastes or uploads an HTML/CSS template string; stored in `BrandKitTemplate.htmlTemplate @db.Text`
 
 **Edit Brand Kit modal** — pencil button on each kit card; separate from prompt versioning and artifact management.
+
 - Pre-populated with all existing values
 - Calls `PATCH /api/admin/brandkits/[id]` on save
 - Color palette, fonts, logo, and HTML templates are all editable
 - Template list seeded from existing `BrandKitTemplate` rows
 
 **Kit card (expanded)**
+
 - Shows name, color swatches, font list, logo thumbnail
 - Brand Templates section: lists linked HTML templates
 - Brand Voice Prompt section: shows active prompt version; Add / version history
@@ -44,22 +47,22 @@ Build the admin-facing brand kit management (CRUD + color palette + font managem
 
 #### API routes
 
-| Method | Route | Action |
-|---|---|---|
-| GET | `/api/admin/brandkits` | list all |
-| POST | `/api/admin/brandkits` | create |
-| GET | `/api/admin/brandkits/[id]` | get one |
-| PATCH | `/api/admin/brandkits/[id]` | edit name / colors / fonts / logoUrl |
-| DELETE | `/api/admin/brandkits/[id]` | soft delete |
-| GET | `/api/admin/brandkits/[id]/templates` | list linked HTML templates |
-| POST | `/api/admin/brandkits/[id]/templates` | link templates (replaces all) |
-| PATCH | `/api/admin/brandkits/[id]/templates/[tid]` | update htmlTemplate or name |
-| POST | `/api/admin/brandkits/[id]/prompts` | add new prompt version |
-| POST | `/api/admin/brandkits/[id]/prompts/generate` | Claude-generated prompt (empty state) |
-| POST | `/api/admin/brandkits/[id]/prompts/improve` | Claude-improved prompt (existing prompt) |
-| POST | `/api/admin/brandkits/[id]/artifacts` | upload artifact to MinIO |
-| PATCH | `/api/admin/brandkits/[id]/artifacts/[aid]` | toggle feedToAI |
-| DELETE | `/api/admin/brandkits/[id]/artifacts/[aid]` | remove artifact |
+| Method | Route                                        | Action                                   |
+| ------ | -------------------------------------------- | ---------------------------------------- |
+| GET    | `/api/admin/brandkits`                       | list all                                 |
+| POST   | `/api/admin/brandkits`                       | create                                   |
+| GET    | `/api/admin/brandkits/[id]`                  | get one                                  |
+| PATCH  | `/api/admin/brandkits/[id]`                  | edit name / colors / fonts / logoUrl     |
+| DELETE | `/api/admin/brandkits/[id]`                  | soft delete                              |
+| GET    | `/api/admin/brandkits/[id]/templates`        | list linked HTML templates               |
+| POST   | `/api/admin/brandkits/[id]/templates`        | link templates (replaces all)            |
+| PATCH  | `/api/admin/brandkits/[id]/templates/[tid]`  | update htmlTemplate or name              |
+| POST   | `/api/admin/brandkits/[id]/prompts`          | add new prompt version                   |
+| POST   | `/api/admin/brandkits/[id]/prompts/generate` | Claude-generated prompt (empty state)    |
+| POST   | `/api/admin/brandkits/[id]/prompts/improve`  | Claude-improved prompt (existing prompt) |
+| POST   | `/api/admin/brandkits/[id]/artifacts`        | upload artifact to MinIO                 |
+| PATCH  | `/api/admin/brandkits/[id]/artifacts/[aid]`  | toggle feedToAI                          |
+| DELETE | `/api/admin/brandkits/[id]/artifacts/[aid]`  | remove artifact                          |
 
 #### AI-assisted brand voice prompt (FR-26c)
 
