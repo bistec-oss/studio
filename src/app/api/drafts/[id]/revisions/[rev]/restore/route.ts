@@ -7,14 +7,21 @@ import { canAccessContent } from '@/lib/authz/visibility'
 import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
 import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
+import { findChainRevision, parseChainRevisionNumber } from '@/lib/drafts/revisions'
 
 export const maxDuration = 120
 
 type Params = { id: string; rev: string }
 
 export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
-  const revisionNumber = Number(params.rev)
-  if (!Number.isInteger(revisionNumber)) {
+  // Both halves of this guard matter. `rev` is client-supplied, and a rejected
+  // render (a refine the verifier threw away) is retained as a real row with a
+  // NEGATIVE revisionNumber — so the old Number.isInteger check accepted
+  // `.../revisions/-1/restore` and would have restored that render into the live
+  // draft. parseChainRevisionNumber rejects anything below 1 here; the lookup
+  // below is filtered independently, so neither is load-bearing alone.
+  const revisionNumber = parseChainRevisionNumber(params.rev)
+  if (revisionNumber === null) {
     return NextResponse.json({ error: 'Invalid revision number' }, { status: 400 })
   }
 
@@ -36,9 +43,7 @@ export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
     )
   }
 
-  const revision = await prisma.draftRevision.findFirst({
-    where: { draftId: params.id, revisionNumber },
-  })
+  const revision = await findChainRevision(params.id, revisionNumber)
   if (!revision) return NextResponse.json({ error: 'Revision not found' }, { status: 404 })
 
   // Switching versions just moves the pointer and reuses the revision's ALREADY

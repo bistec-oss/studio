@@ -28,6 +28,25 @@ export default defineConfig([
       // are refactored to useSyncExternalStore.
       "react-hooks/set-state-in-effect": "warn",
 
+      // A rejected DraftRevision (migration 20260915140000) is retained
+      // out-of-chain and must never reach a chain consumer — the version-switch
+      // list, restore/Undo, the revision count, or next-number allocation. The
+      // filtered chain reads live in src/lib/drafts/revisions.ts; reading
+      // DraftRevision directly anywhere else silently reintroduces the leak,
+      // so it is a lint error a new consumer has to opt out of in writing
+      // rather than a convention it can forget. Writes are unaffected
+      // (`rejected` defaults to false) and the draft-delete sweep must stay
+      // unfiltered, so only find* is restricted.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression > MemberExpression[property.name=/^find(Many|First|Unique)(OrThrow)?$/][object.property.name='draftRevision']",
+          message:
+            "Read DraftRevision through listChainRevisions / findChainRevision in src/lib/drafts/revisions.ts — a direct query returns rejected (out-of-chain) rows too.",
+        },
+      ],
+
       "@typescript-eslint/no-unused-vars": [
         "error",
         {

@@ -7,6 +7,7 @@ import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { planDraftRecovery, STUCK_ACTION_REASON, STUCK_REASON } from '@/lib/drafts/recovery'
+import { CHAIN_REVISION_COUNT_FILTER } from '@/lib/drafts/revisions'
 
 type Params = { id: string }
 
@@ -106,7 +107,11 @@ async function loadDraft(id: string) {
           publishedAt: true,
         },
       },
-      _count: { select: { revisions: true } },
+      // Filtered relation count — this feeds revisionCount on the poll, which
+      // labels the version-switch UI, so it must count the CHAIN only. A
+      // rejected render is a retained out-of-chain row; counting it would
+      // promise the user a version that is not in the list.
+      _count: { select: { revisions: CHAIN_REVISION_COUNT_FILTER } },
     },
   })
   if (!draft) return null
@@ -253,6 +258,10 @@ export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
 
   const briefDeleted = await prisma.$transaction(async (tx) => {
     await tx.post.deleteMany({ where: { draftId: draft.id } })
+    // DELIBERATELY UNFILTERED — the one DraftRevision access that must NOT
+    // exclude rejected rows. They are FK children of the draft like any other
+    // revision, so a `rejected: false` here would leave them behind and the
+    // draft delete below would fail on the foreign key.
     await tx.draftRevision.deleteMany({ where: { draftId: draft.id } })
     await tx.draft.delete({ where: { id: draft.id } })
 

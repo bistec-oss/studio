@@ -136,6 +136,26 @@ test.describe('AGUI design refinement', () => {
     expect(restored.exportUrl).toMatch(/^https?:\/\//)
   })
 
+  // A rejected refine render (one the verifier threw away) is retained
+  // out-of-chain as a revision with a NEGATIVE number. The route used to accept
+  // any integer `rev`, so naming that number directly would have restored the
+  // rejected HTML into the live draft. Chain numbers start at 1 — anything below
+  // that is rejected at the param, before the (independently filtered) lookup.
+  test('restore refuses a non-positive revision number (out-of-chain space)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+
+    for (const rev of ['-1', '-2', '0']) {
+      const res = await api.post(`/api/drafts/${draft.id}/revisions/${rev}/restore`, {})
+      expect(res.status()).toBe(400)
+    }
+
+    // …and the draft is untouched.
+    const after = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    expect(after.htmlContent).toBe(draft.htmlContent)
+  })
+
   // F2 — the design history is an append-only log with a "current version"
   // pointer, so reverting can move BACK and then FORWARD again (the old flow
   // lost the forward state). Generation records v1 up front.

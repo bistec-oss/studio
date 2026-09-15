@@ -3,6 +3,64 @@ import { prisma } from '@/lib/prisma'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 import { getFontSetId } from '@/lib/renderer/fontSet'
 
+// A rejected revision (migration 20260915140000) is a render the refine
+// verifier threw away, retained OUT OF CHAIN for diagnosis. It is numbered
+// negatively so it can neither collide with nor consume a chain number, but
+// nothing in the schema keeps it out of a chain READ — an unfiltered
+// `draftRevision.find*` returns it like any other row, and it would then show up
+// in the version-switch list, be restorable by number, inflate the revision
+// count, or be handed to Undo.
+//
+// So the chain reads live HERE, next to the filter that defines them, and a
+// consumer that needs the chain calls one of them instead of writing its own
+// query. An eslint `no-restricted-syntax` rule turns a `draftRevision.find*`
+// outside this file into a lint error, so a future tenth consumer cannot
+// reintroduce the leak by simply forgetting — it has to opt out in writing.
+// Writes are unaffected: `rejected` defaults to false, so every revision
+// committed through this module is in-chain by construction.
+const CHAIN_ONLY = { rejected: false } as const
+
+// The same filter as a relation-count fragment, for the one chain read that is
+// not a query on DraftRevision itself (the draft GET's `_count.revisions`).
+export const CHAIN_REVISION_COUNT_FILTER = { where: CHAIN_ONLY }
+
+// Restore/Undo addresses a revision by NUMBER taken straight from the URL, and
+// a rejected render HAS a number — a negative one. `Number.isInteger` alone
+// therefore accepts `POST /api/drafts/[id]/revisions/-1/restore`, which would
+// pull a rejected render into the live draft. Chain numbers start at 1, so the
+// guard is positivity, not just integrality. Pure, so it is testable without a
+// route; the query filter below is the second, independent half of the fix.
+export function parseChainRevisionNumber(raw: string): number | null {
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1) return null
+  return n
+}
+
+// The version-switch list: chain revisions only, newest first.
+export function listChainRevisions(draftId: string) {
+  // eslint-disable-next-line no-restricted-syntax -- this file IS the chokepoint
+  return prisma.draftRevision.findMany({
+    where: { draftId, ...CHAIN_ONLY },
+    orderBy: { revisionNumber: 'desc' },
+    select: {
+      id: true,
+      revisionNumber: true,
+      instruction: true,
+      exportUrl: true,
+      createdAt: true,
+    },
+  })
+}
+
+// Lookup by number for restore / Undo. Returns null for a rejected row even if
+// its number is named directly, so the route guard and the query agree.
+export function findChainRevision(draftId: string, revisionNumber: number) {
+  // eslint-disable-next-line no-restricted-syntax -- this file IS the chokepoint
+  return prisma.draftRevision.findFirst({
+    where: { draftId, revisionNumber, ...CHAIN_ONLY },
+  })
+}
+
 // Allocates the next revisionNumber for a draft and runs `body` inside a
 // transaction with it. The @@unique([draftId, revisionNumber]) constraint
 // serializes concurrent refines; each loser recomputes and retries on P2002.
@@ -19,8 +77,13 @@ export async function withNextRevisionNumber<T>(
   for (let attempt = 1; ; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
+        // CHAIN_ONLY is required, not decorative: MAX(revisionNumber) over a
+        // draft that has any chain revision is unaffected by the negative
+        // rejected rows, but a draft whose ONLY revisions are rejected would
+        // yield -1 here and mint revision 0 — outside the chain's numbering.
+        // eslint-disable-next-line no-restricted-syntax -- this file IS the chokepoint
         const last = await tx.draftRevision.findFirst({
-          where: { draftId },
+          where: { draftId, ...CHAIN_ONLY },
           orderBy: { revisionNumber: 'desc' },
           select: { revisionNumber: true },
         })

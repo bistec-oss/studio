@@ -110,7 +110,15 @@ async function main() {
           referenceTemplate: { select: { name: true } },
         },
       },
-      revisions: { orderBy: { revisionNumber: "asc" } },
+      // Chain revisions only. A rejected revision (a refine render the verifier
+      // threw away, retained out-of-chain with a negative number) is diagnostic
+      // state belonging to the run that produced it, not library content — and
+      // exporting one would LAUNDER it into the chain on the far side: the
+      // importer writes a fixed column whitelist that does not include
+      // `rejected`, so the row would arrive with rejected=false and a negative
+      // revisionNumber, pass the rejected-only CHECK constraint, and thereafter
+      // be indistinguishable from a real revision.
+      revisions: { where: { rejected: false }, orderBy: { revisionNumber: "asc" } },
       posts: true,
     },
   })

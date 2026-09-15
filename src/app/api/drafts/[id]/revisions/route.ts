@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { listChainRevisions } from '@/lib/drafts/revisions'
 import { getDraftAccessInfo } from '@/lib/auth'
 import { withTeamAuth } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
@@ -13,17 +13,11 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
     return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   }
 
-  const revisions = await prisma.draftRevision.findMany({
-    where: { draftId: params.id },
-    orderBy: { revisionNumber: 'desc' },
-    select: {
-      id: true,
-      revisionNumber: true,
-      instruction: true,
-      exportUrl: true,
-      createdAt: true,
-    },
-  })
+  // This is the version-switch list, so it must be the CHAIN and nothing else —
+  // a rejected render (retained out-of-chain with a negative number) appearing
+  // here would offer the user a version to switch to that was deliberately not
+  // applied. The filter lives in listChainRevisions, not in this route.
+  const revisions = await listChainRevisions(params.id)
 
   // exportUrl is stored as an EXPORTS object key — sign each for the browser.
   const signed = await Promise.all(
