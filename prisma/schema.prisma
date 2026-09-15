@@ -455,6 +455,12 @@ model Draft {
   // Prompt revision that produced the current design (prompts/shared.ts
   // PROMPT_VERSION) — lets output quality be correlated with prompt changes.
   promptVersion   String?
+  // Digest of the font files installed on the host that rendered the current
+  // design (renderer/fontSet.ts) — the glyph half of the same attribution
+  // question promptVersion answers. Null for drafts rendered before this field
+  // existed, and for hosts whose font directories are unreadable: absent, not
+  // wrong — never read null as "no fonts".
+  fontSetId       String?
   status          DraftStatus     @default(IN_PROGRESS)
   // Why the last generation attempt FAILED (model error, timeout, interruption).
   // Shown on the preview page's inline error card; cleared on a successful retry.

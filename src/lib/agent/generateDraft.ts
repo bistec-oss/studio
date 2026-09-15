@@ -7,6 +7,7 @@ import { buildBriefInput } from '@/lib/agent/briefInput'
 import { runPathADesign, assertTemplateMatchesBrief } from '@/lib/agent/pathA'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { getFontSetId } from '@/lib/renderer/fontSet'
 import { humanizeGenerationError } from '@/lib/agent/generationErrors'
 import type { GenerationActor } from '@/lib/agent/types'
 
@@ -113,6 +114,7 @@ async function finalizeDraftV1(
         imageUrl: design.backgroundImageUrl,
         status: 'EXPORTED',
         promptVersion: PROMPT_VERSION,
+        fontSetId: getFontSetId(),
         currentRevisionNumber: 1,
         failureReason: null,
       },
@@ -163,6 +165,7 @@ export async function generateDraftForBrief(
         imageUrl: design.backgroundImageUrl,
         status: 'EXPORTED',
         promptVersion: PROMPT_VERSION,
+        fontSetId: getFontSetId(),
         currentRevisionNumber: 1,
       },
     })

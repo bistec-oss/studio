@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { getFontSetId } from '@/lib/renderer/fontSet'
 
 // Allocates the next revisionNumber for a draft and runs `body` inside a
 // transaction with it. The @@unique([draftId, revisionNumber]) constraint
@@ -87,6 +88,7 @@ export async function commitDraftRevision(
         currentRevisionNumber: revisionNumber,
         pendingConflict: Prisma.JsonNull,
         promptVersion: PROMPT_VERSION,
+        fontSetId: getFontSetId(),
         ...(backgroundImageUrl ? { imageUrl: backgroundImageUrl } : {}),
       },
     })

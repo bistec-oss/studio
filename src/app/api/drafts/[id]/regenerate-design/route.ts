@@ -7,6 +7,7 @@ import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { runPathBDesign } from '@/lib/agent/pathB'
 import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { getFontSetId } from '@/lib/renderer/fontSet'
 import { withNextRevisionNumber } from '@/lib/drafts/revisions'
 import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
 
@@ -110,6 +111,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
           currentRevisionNumber: revisionNumber,
           pendingConflict: Prisma.JsonNull,
           promptVersion: PROMPT_VERSION,
+          fontSetId: getFontSetId(),
         },
       })
       return revisionNumber
