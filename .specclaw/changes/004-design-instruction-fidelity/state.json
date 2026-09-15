@@ -1,11 +1,13 @@
 {
   "change": "004-design-instruction-fidelity",
-  "phase": "tasks",
-  "branch": "",
+  "phase": "verify",
+  "branch": "specclaw/004-design-instruction-fidelity",
   "phases": {
     "proposal": { "status": "approved", "at": "2026-09-15T06:38:04Z" },
     "spec": { "status": "done", "at": "2026-09-15T06:41:03Z" },
     "design": { "status": "done", "at": "2026-09-15T06:42:05Z" },
-    "tasks": { "status": "done", "at": "2026-09-15T06:43:12Z" }
+    "tasks": { "status": "done", "at": "2026-09-15T06:43:12Z" },
+    "build": { "status": "in-progress", "at": "2026-09-15T15:25:57Z" },
+    "verify": { "status": "partial", "at": "2026-09-15T17:34:01Z", "verdict": "PARTIAL" }
   }
 }
