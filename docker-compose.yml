@@ -50,7 +50,9 @@ services:
     # format is "xl meta version 3", which pre-2025 images (e.g. the previous
     # RELEASE.2024-10-13 pin) cannot read — they crash-loop with
     # "Unable to initialize backend: decodeXLHeaders: Unknown xl meta version 3".
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # quay.io is MinIO's own registry; docker.io/minio/minio was withdrawn
+    # (Hub 404 / registry 401), so a Hub-sourced pull no longer resolves.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     ports:
       - "127.0.0.1:9001:9001"
