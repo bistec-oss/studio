@@ -31,3 +31,6 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# specclaw gate-command logs — transient build output, regenerated on every run.
+.specclaw/changes/*/logs/
