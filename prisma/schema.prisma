@@ -470,6 +470,16 @@ model Draft {
   pendingAction   DraftAction?
   // Error from the last action run; cleared when the next action starts.
   pendingActionError String?
+  // Why the last refine could not be APPLIED — the verifier's stated miss after
+  // a refine that ran cleanly twice and still did not do what was asked. Kept
+  // deliberately separate from pendingActionError: "the model did not do what
+  // you asked" is a different outcome from "the run crashed", and the UI must
+  // read it as its own hard failure rather than as a warning on a committed
+  // revision. Set only on the twice-failed path, which leaves the revision
+  // chain and currentRevisionNumber untouched; cleared when the next action
+  // starts. The render that was rejected is retained as a DraftRevision row
+  // flagged `rejected` (see that model), not referenced by the pointer.
+  notAppliedReason   String?
   createdAt       DateTime        @default(now())
   // @default(now()) keeps the added column valid for pre-existing rows
   updatedAt       DateTime        @default(now()) @updatedAt
@@ -629,10 +639,34 @@ model DraftRevision {
   id             String   @id @default(cuid())
   draftId        String
   draft          Draft    @relation(fields: [draftId], references: [id])
+  // Position in the design chain, allocated by withNextRevisionNumber
+  // (src/lib/drafts/revisions.ts) — ALWAYS positive for a chain revision. A
+  // rejected row carries a NEGATIVE number instead, so the two never share a
+  // numbering space: a rejected render can neither collide with a chain number
+  // nor consume one, and (draftId, revisionNumber) still identifies exactly one
+  // row, so no lookup by number is ever ambiguous. A DB CHECK constraint
+  // enforces it (DraftRevision_rejected_offchain_check, migration
+  // 20260915140000_refine_not_applied_outcome).
   revisionNumber Int
   instruction    String
   htmlSnapshot   String   @db.Text
   exportUrl      String?
+  // A render the refine verifier REJECTED, retained out-of-chain for diagnosis:
+  // currentRevisionNumber never points at it, and EVERY consumer of the revision
+  // chain must filter it out explicitly (`rejected: false`) — the listing, the
+  // restore lookup, the revision count, Undo, and the next-number allocation
+  // alike. Nothing else in the schema keeps such a row out of a chain read, so
+  // an unfiltered query is a bug.
+  rejected       Boolean  @default(false)
+  // The verifier's stated miss: why this render did not do what the instruction
+  // asked. Null on every chain revision.
+  rejectionReason String?
+  // The instruction classes (add / replace / remove / constrain) this render was
+  // verified against, stored as plain strings rather than a Prisma enum —
+  // agent/instructionClasses.ts is the single definition of that table, and a DB
+  // enum would be a second one that could drift from it. Empty on revisions
+  // committed before classification existed.
+  instructionClasses String[]
   createdAt      DateTime @default(now())
 
   @@unique([draftId, revisionNumber])
