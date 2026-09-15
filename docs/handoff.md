@@ -1,13 +1,74 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-28 (latest: a copy edit was flipping `Draft.status` to `IN_PROGRESS`, breaking the library, Refine, regenerate-copy and the copy field at once — fixed, with a read-time + migration heal for stranded drafts. Earlier: team-admin brand-kit access + Sinhala font rendering; **PR #39** made deploys apply migrations; **PR #40** removed the wizard's stale COPY-provider gate.)
+**Date:** 2026-09-15 (latest: **specclaw change 004 — design instruction fidelity — built, gated green, verified PARTIAL, on an unmerged branch by request.** Earlier 2026-07-28: a copy edit was flipping `Draft.status` to `IN_PROGRESS`, breaking the library, Refine, regenerate-copy and the copy field at once — fixed, with a read-time + migration heal for stranded drafts. Earlier: team-admin brand-kit access + Sinhala font rendering; **PR #39** made deploys apply migrations; **PR #40** removed the wizard's stale COPY-provider gate.)
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` — **PR #40** `21f95035` (brief-wizard CLI copy gate) on top of **PR #39** `16e1a069` (migrate on boot), **PR #38** `b35d96bd` (team-name reuse), PR #37 `fb8216c3`, PR #35 `d01ac4d2`, PR #36 `3dcac485`, prod-fix PR #30 `4e8e6e3e`, team-tenancy PR #29 `2a118a73`. All merged; no open branches.
+**Branch:** `specclaw/004-design-instruction-fidelity` (21 commits ahead of `main`, **no PR — shipping with 005/006/007**). Behind it, `main` — **PR #40** `21f95035` (brief-wizard CLI copy gate) on top of **PR #39** `16e1a069` (migrate on boot), **PR #38** `b35d96bd` (team-name reuse), PR #37 `fb8216c3`, PR #35 `d01ac4d2`, PR #36 `3dcac485`, prod-fix PR #30 `4e8e6e3e`, team-tenancy PR #29 `2a118a73`. All merged; no open branches.
 **Production:** `https://studio.bistecglobal.com`
 
 ---
 
-## ⏸️ 2026-07-28 (latest) — PICK UP HERE
+## ⏸️ 2026-09-15 (latest) — PICK UP HERE
+
+### Where things stand in one line
+
+**Change 004 "design instruction fidelity" is built, gated green, verified PARTIAL, and sitting on an unmerged branch on purpose** — `specclaw/004-design-instruction-fidelity`, 21 commits, 16/16 tasks, **no PR** because the user is shipping 004 alongside 005/006/007 as a single release. Nothing is broken and nothing is half-applied; the branch is a complete, self-consistent unit awaiting three verification steps that cannot be done on this machine.
+
+| Document                                                                                                                                      | What it holds                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [`.specclaw/changes/004-design-instruction-fidelity/verify-report.md`](../.specclaw/changes/004-design-instruction-fidelity/verify-report.md) | **Start here.** Per-criterion evidence for all 26 ACs, what is proven vs merely read, and the exact commands to close each gap. |
+| `.specclaw/changes/004-design-instruction-fidelity/{spec,design,tasks}.md`                                                                    | The 26 ACs, the three-phase design, the 16 tasks.                                                                               |
+| `.specclaw/learnings.md` L6–L13                                                                                                               | Eight findings from the build, several of which qualify an AC.                                                                  |
+| [`docs/e2e-test-plan.md`](e2e-test-plan.md) §E2, §E3                                                                                          | The 15 new E2E cases, each annotated with what it can and cannot prove.                                                         |
+
+### The one thing to internalise before touching this work
+
+**A green E2E run on change 004 would prove less than it appears to.** `.env.test:27` and `.github/workflows/e2e.yml:55` both set `DESIGN_PROVIDER=claude-html`. `isCliMode()` is therefore false, the refine route takes its **API branch**, and that branch hardcodes `classes=['add']`, `supersedes=[]` on every refine regardless of what the user typed. The envelope parser, `resolveEffectiveClasses`, and the `remove`/`replace`/`constrain` post-conditions — the entire point of the change — are **CLI-mode-only and unreachable from the suite, locally and in CI.**
+
+**Production runs CLI mode.** So the suite is green against a code path prod never takes.
+
+This is the third time this repo has been bitten by the same shape. PR #40: a seeded `cli` COPY row made the wizard gate pass locally, so a dead Generate button shipped. The 2026-08-03 preamble incident: `MOCK_AI` returns clean HTML and `MOCK_PUPPETEER` never rasterizes, so nothing between the model and the pixels was exercised. Now this. **Generalised rule worth applying to every future change: when a value in `.env.test` differs from prod, write down what that difference makes untestable — before trusting the suite.**
+
+### Three steps to finish verifying 004 (none require code changes)
+
+1. **AC-01 — the font.** Needs Docker running. `docker build` then run the glyph assertion **inside the image**; record the method as `docker-build-local` or `ci-docker-build`. **Never record `local`** — host Chromium on Windows covers ★ via Segoe UI Symbol whether or not the Dockerfile was ever touched, so a local pass is a documented false green. Note also that `docker-publish.yml` builds the image but never asserts anything inside it, and `e2e.yml` does not build the image at all — so **nothing in CI currently proves the font fix**, before or after merge. Adding an in-image assertion step is a small, high-value follow-up.
+2. **The E2E suite.** `docker compose up -d postgres minio` → `npm run test:e2e:db` → `npm run test:e2e:serve` (separate terminal, :3001) → `npm run test:e2e:mock`. **15 new cases have never executed.** Treat first-run failures as likely-ours.
+3. **One live CLI-mode refine — the highest-value hour on this change.** `rm -rf .next && DESIGN_PROVIDER=cli npm run dev`, then against a real EXPORTED draft run the two originally-reported instructions: **"reduce the text"** (expect `REFINE-CLASSES: remove` with a non-empty `REFINE-SUPERSEDES`, and `targetTextShorter` to measure it) and **"use the uploaded image as the background"** (expect `replace`, superseded element absent — this is the duplicate-image defect). Watch for `[refine] … downgraded to add (FR-04)` and `classification defaulted` in the log; a high rate of either means the model is not complying with the envelope format, which is `design.md`'s own **still-open** risk: _"Envelope output protocol degrades reply quality vs plain HTML — verify on a real run before Phase 2 merges."_ This closes AC-08/09/10/11/12/13, which the suite cannot.
+
+### What 004 actually changed
+
+Four reported refine failures, four confirmed defects. The refine prompt was structurally additive — "Preserve everything the instruction does not touch", which applied to a _replacement_ licensed the model to keep the old visual **and** add the new one, which is exactly the duplicate-image bug. Nothing verified that an instruction had been applied. Font coverage was Sinhala-only. And the mock suite never rasterizes, so none of it was visible to a green run.
+
+- **Phase 1 (no behavioural change, deletable in one commit).** `font-noto-symbols` on the Alpine runner stage; `Draft.fontSetId` stamped beside `promptVersion` so a render's glyph environment is attributable after the fact; `reconcileInlineAssets` upgrading placeholder handling from _detection_ to _reconciliation_; and **`tests/e2e/helpers/rasterize.ts`** — a real-render harness with a glyph-agnostic tofu check, dependency-free PNG decoding, and measured thresholds (covered glyphs 0.004–0.328, uncovered 0.994). It runs with **no DB and no server** and is the compounding asset: proposal 007 and every future font/render question reuse it.
+- **Phase 2 (a removable wrapper).** One table (`instructionClasses.ts`) generates **both** the prompt semantics and the verifier criteria, so they cannot drift. The refine model declares `{classes, supersedes, html}` in a two-line header before the document (chosen over JSON because a model asked to escape a 100 KB document inside a JSON string will eventually slip; the header lands outside the document, in the region `extractHtmlDocument` already isolates). Verification sits above `runDesignAgentCli` **in the refine route only**; `remove`/`constrain`/`replace` are checked structurally with **zero** model calls, only `add` spends one. Fail-closed throughout: `unavailable` routes exactly as `miss`. Retry once, hard cap of 2+2 enforced by arithmetic on the verifier's own reported call count. A twice-failed refine writes `Draft.notAppliedReason`, leaves the chain untouched, and retains the rejected render **out-of-chain with a negative revision number** (enforced by a DB CHECK) so no chain consumer can reach it.
+- **Phase 3 (the only durable surface).** Element-targeted editing that needs no model: a closed input grammar (colour re-serialized to hex/`rgb()`, size to number + unit from `px/rem/em/%`, everything else **rejected**), and a write path whose address is **content, not a position** — the payload has no selector field to supply, so a client-supplied selector is structurally unrepresentable rather than merely ignored.
+
+### Known gaps in 004, recorded rather than buried
+
+- **AC-06's wording is unachievable** at the signature the plan mandated. `reconcileInlineAssets(sentTokens, replyHtml)` has neither the sent HTML nor the assets map, so a dropped placeholder cannot be positionally re-inserted. `restored` means "reconciles as a clean subset, the splice is safe, the revision commits, the dropped token is named in logs" — the asset is still absent from that render, exactly as before. True re-insertion is the follow-up CLAUDE.md already names ("auto-reinsert is a candidate follow-up") and needs the sent HTML in the signature.
+- **AC-17's rejected render has no HTTP read surface** — correct per the chain-exclusion design (`listChainRevisions` filters it, the poll count filters it, restore rejects negative numbers), but "retrievable" in the AC implies more than exists. It is DB-readable only.
+- **AC-20's "byte-identical"** holds with two declared deltas: the `fontSetId` stamp on `regenerate-design` (+2 lines) and `claimDraftAction` now clearing the new `notAppliedReason` column. Neither adds a verification step nor a new failure outcome — the AC's actual intent — and both touch only columns that did not exist before.
+
+### Two defects found and fixed mid-build, both between task boundaries
+
+Worth knowing because neither was visible from inside any single file, and both would have shipped silently.
+
+- **The `MOCK_AI` stub returned byte-identical HTML.** `buildMockHtml` keyed only off the first `#RRGGBB` in the prompt, and every refine prompt opens with the same brand-kit colour line. Harmless for a year — but the moment verification landed, an unchanged document reads as a legitimate miss, so **every** mocked refine would have gone miss → retry → miss → not-applied, taking `agui-refinement`, §Q and TC-REG-H7a down and leaving the forced-miss seam unreachable. Fixed by folding a digest of the whole prompt in: still fully deterministic, but successive refines now differ.
+- **A stale "couldn't apply" card survived a successful regenerate.** `claimDraftAction` cleared only `pendingActionError`, so after a refine missed twice, a subsequent **successful** Regenerate design left the red "your design is unchanged" card standing over a brand-new design it never described. Fixed centrally in `claimDraftAction`, which covers `regenerate-copy` and `regenerate-design` too.
+
+### Incidental cautions for anyone working in this repo
+
+- **`tsc`, `eslint` and `playwright --list` all pass a source file containing a raw NUL byte.** Caught only by `git diff` reporting "Binary file".
+- **Playwright 1.61 does not apply the `@/*` alias to imports made inside `src/` modules** on Node ≥ 22.15 — its CJS resolve hook installs only on the out-of-process-loader path. The shim lives in `tests/e2e/helpers/rasterize.ts`; reuse it for any future suite that imports from `src/`.
+- **The E2E suite is single-process** (`workers:1`, `fullyParallel:false`), so a test that flips `MOCK_AI`/`MOCK_PUPPETEER` leaks into every suite sorting after it. Save and restore in a `finally`, and assert the restore.
+- **`scripts/export-posts.mjs` + `import-posts.mjs` are a laundering path for any new row flag.** The importer re-creates revisions from a fixed column whitelist, so a flag it does not know about arrives as its default. Fixed for `rejected` at the export side; remember it when adding the next flag.
+
+### Everything below this line predates 004 and is unchanged
+
+The prod items in [`CLAUDE.md`](../CLAUDE.md) — **B4** (scheduler resource not running; see [`docs/scheduler-b4-diagnosis-2026-08-03.md`](scheduler-b4-diagnosis-2026-08-03.md), the code side is audited clean so it is Coolify config) and **no team Claude token on either prod team** — are still open and untouched by this work.
+
+---
+
+## ⏸️ 2026-07-28 — previously PICK UP HERE
 
 ### The through-line: a merged, deployed, CI-green fix can be completely inert
 
