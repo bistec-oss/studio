@@ -65,7 +65,13 @@ WORKDIR /app
 # ships only Latin-capable fonts, so without this Sinhala copy rasterizes as tofu
 # boxes. Installed OS-wide so Chromium's fontconfig fallback picks it up for any
 # Sinhala codepoint automatically — no CSS/@import required in the generated HTML.
-RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala
+# font-noto-symbols: same mechanism, for symbol codepoints. Noto Sans Symbols +
+# Symbols 2 cover the Miscellaneous Symbols / Dingbats / arrow / geometric-shape
+# ranges a design agent reaches for (★ U+2605, ✓, →, ▶…), which Alpine's
+# Latin-only default set rasterizes as tofu. Deliberately MONOCHROME (FR-21):
+# this is glyph coverage, not a colour emoji set — narrowest fix for the
+# reported defect, and it keeps the visual delta on already-approved drafts small.
+RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala font-noto-symbols
 
 # Claude Code CLI — CLI-mode generation (DESIGN_PROVIDER=cli) spawns `claude -p`
 # per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN env (the shared server
