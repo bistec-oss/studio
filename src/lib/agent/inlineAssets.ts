@@ -63,3 +63,67 @@ export function restoreInlineAssets(html: string, assets: Record<string, string>
 export function missingTokens(modelHtml: string, assets: Record<string, string>): string[] {
   return Object.keys(assets).filter((token) => !modelHtml.includes(token))
 }
+
+export type InlineAssetReconciliation =
+  /** Every token sent came back exactly once. Splice and commit. */
+  | { outcome: "clean" }
+  /**
+   * The reply carries a subset of what went out — nothing invented, nothing
+   * doubled. Safe to splice and commit; `absent` names the placeholders the
+   * model dropped so the caller can log which assets that revision lost.
+   */
+  | { outcome: "restored"; absent: string[] }
+  /**
+   * The reply carries a token that was never sent, or sent once and returned
+   * more than once. The edit is not applied — a renamed token can't be spliced
+   * and a doubled one would duplicate a multi-megabyte asset. `unexpected`
+   * names the offending tokens: a narrating model is worth seeing in the logs.
+   */
+  | { outcome: "mismatch"; unexpected: string[] }
+
+// Anything token-SHAPED, not only the tokens we actually minted. Scanning for
+// just the sent tokens would read a reply that renamed __INLINE_ASSET_0__ to
+// __INLINE_ASSET_00__ or __INLINE_ASSET_X__ as a clean absence, when in fact the
+// model invented a placeholder nothing can be spliced into. The trailing (?!_)
+// stops a suffix-mangled token from matching the shorter real one inside it.
+const TOKEN_SHAPE_RE = /__INLINE_ASSET_[A-Za-z0-9_]*?__(?!_)/g
+
+function tally(tokens: Iterable<string>): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const token of tokens) counts.set(token, (counts.get(token) ?? 0) + 1)
+  return counts
+}
+
+// Reconciliation, not detection: the multiset of tokens sent out must equal the
+// multiset that comes back. missingTokens() only answers "did the model drop
+// one?" — enough to log a warning, not enough to decide whether the reply is
+// applicable at all, which is what a refine needs before it commits a revision.
+//
+// Multiplicity is the subtle half. extractInlineAssets mints a FRESH token per
+// `data:` occurrence, so every token goes out exactly once by construction; a
+// token coming back twice therefore means the model copied a placeholder rather
+// than filling the template, and splicing it would inline the same asset twice.
+//
+// `sentTokens` is the token list handed out (Object.keys of ExtractedAssets), so
+// this stays pure token arithmetic — it never sees the `data:` URIs and does not
+// return HTML. On clean/restored the caller splices with restoreInlineAssets as
+// it already does; on mismatch it does not splice at all.
+export function reconcileInlineAssets(
+  sentTokens: readonly string[],
+  replyHtml: string,
+): InlineAssetReconciliation {
+  const sent = tally(sentTokens)
+  const back = tally(replyHtml.match(TOKEN_SHAPE_RE) ?? [])
+
+  // Checked before absence: a reply that both dropped one token and invented
+  // another is a mismatch, not a restorable subset.
+  const unexpected = [...back]
+    .filter(([token, count]) => count > (sent.get(token) ?? 0))
+    .map(([token]) => token)
+  if (unexpected.length > 0) return { outcome: "mismatch", unexpected }
+
+  const absent = [...sent]
+    .filter(([token, count]) => (back.get(token) ?? 0) < count)
+    .map(([token]) => token)
+  return absent.length > 0 ? { outcome: "restored", absent } : { outcome: "clean" }
+}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { extractInlineAssets, restoreInlineAssets, missingTokens } from '@/lib/agent/inlineAssets'
+import {
+  extractInlineAssets,
+  restoreInlineAssets,
+  missingTokens,
+  reconcileInlineAssets,
+} from '@/lib/agent/inlineAssets'
 
 // A few fake base64 payloads, long enough that extraction visibly shrinks the HTML.
 const PNG_A = `data:image/png;base64,${'A'.repeat(5000)}`
@@ -73,5 +78,93 @@ describe('missingTokens', () => {
   it('returns empty when all tokens survive', () => {
     const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
     expect(missingTokens(html, assets)).toEqual([])
+  })
+})
+
+describe('reconcileInlineAssets', () => {
+  // The real shape: extract, hand the tokens to the model, reconcile the reply.
+  const sent = extractInlineAssets(HTML_WITH_ASSETS)
+  const sentTokens = Object.keys(sent.assets)
+
+  it('is clean when the reply returns every token exactly once', () => {
+    expect(reconcileInlineAssets(sentTokens, sent.html)).toEqual({ outcome: 'clean' })
+  })
+
+  it('is clean when nothing was sent and nothing comes back', () => {
+    const plain = '<html><body><p>no assets here</p></body></html>'
+    expect(reconcileInlineAssets([], plain)).toEqual({ outcome: 'clean' })
+  })
+
+  it('restores a dropped placeholder and names it', () => {
+    const reply = sent.html.split(sentTokens[0]).join('')
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'restored',
+      absent: [sentTokens[0]],
+    })
+  })
+
+  it('names every dropped placeholder when more than one is absent', () => {
+    const reply = sent.html.split(sentTokens[0]).join('').split(sentTokens[2]).join('')
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'restored',
+      absent: [sentTokens[0], sentTokens[2]],
+    })
+  })
+
+  it('mismatches on a renamed token', () => {
+    const reply = sent.html.split(sentTokens[0]).join('__INLINE_ASSET_X__')
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: ['__INLINE_ASSET_X__'],
+    })
+  })
+
+  it('mismatches on a reindexed token', () => {
+    const reply = sent.html.split('__INLINE_ASSET_0__').join('__INLINE_ASSET_00__')
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: ['__INLINE_ASSET_00__'],
+    })
+  })
+
+  it('mismatches on an invented token that was never sent', () => {
+    const reply = `${sent.html}<img src="__INLINE_ASSET_7__">`
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: ['__INLINE_ASSET_7__'],
+    })
+  })
+
+  it('mismatches on a duplicated token — multiplicity, not just presence', () => {
+    // Every token is minted per data: occurrence, so one sent token coming back
+    // twice means the model copied a placeholder rather than filling the slot.
+    const reply = `${sent.html}<div style="background:url(${sentTokens[1]})"></div>`
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: [sentTokens[1]],
+    })
+  })
+
+  it('mismatches when a token is dropped AND another invented', () => {
+    const reply = `${sent.html.split(sentTokens[0]).join('')}<img src="__INLINE_ASSET_9__">`
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: ['__INLINE_ASSET_9__'],
+    })
+  })
+
+  it('is not fooled by a real data: URI the model added alongside the tokens', () => {
+    // A model is free to add its own inline asset; base64 never contains the
+    // token shape, so the scan must see the sent tokens and nothing else.
+    const reply = sent.html.replace('<body>', `<body><img src="${PNG_B}" alt="extra">`)
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({ outcome: 'clean' })
+  })
+
+  it('mismatches on a suffix-mangled token rather than reading the real one inside it', () => {
+    const reply = sent.html.split('__INLINE_ASSET_1__').join('__INLINE_ASSET_1___')
+    expect(reconcileInlineAssets(sentTokens, reply)).toEqual({
+      outcome: 'mismatch',
+      unexpected: ['__INLINE_ASSET_1___'],
+    })
   })
 })
