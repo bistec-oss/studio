@@ -321,18 +321,23 @@ export const POST = withTeamAuth<{ id: string }>(async (req, { params }, user) =
         exportUrl = result.exportUrl
       }
 
-      // MOCK_AI is a STUB, not a model: buildMockHtml is a deterministic
-      // function of the prompt, and both the generation and the refine prompt
-      // open with the same brand-kit colour list, so a mocked refine hands back
-      // the document it was given, byte for byte. In production an unchanged
-      // document is a miss ("nothing was applied") and must stay one; under the
-      // stub it carries no information at all, and verifying it would fail every
-      // mocked refine in suites that have nothing to do with this change.
+      // Backstop, and as of the buildMockHtml digest fix it should never fire.
       //
-      // Deliberately narrow: it needs MOCK_AI *and* exact identity, it is inert
-      // in production, and it retires itself the moment the stub varies its
-      // output per instruction (T12/FR-24) — after which the full verification,
-      // and its forced-miss seam, run on every mocked refine.
+      // MOCK_AI is a STUB, not a model. buildMockHtml USED to key only off the
+      // first #RRGGBB in the prompt, and every refine prompt opens with the same
+      // brand-kit colour line — so a mocked refine handed back the document it
+      // was given, byte for byte. Once verification landed, that identity read
+      // as a legitimate miss and would have failed every mocked refine in suites
+      // with nothing to do with this change. buildMockHtml now folds a digest of
+      // the whole prompt in, so the stub genuinely edits and this condition is
+      // false on every mocked refine — including the forced-miss seam's
+      // (testHooks.ts, FR-24), which needs a real document to verify.
+      //
+      // Kept because it is free and exactly as narrow as it was: it needs
+      // MOCK_AI *and* byte identity, so it is inert in production, where an
+      // unchanged document is a miss and must stay one. If a future stub change
+      // makes the mock stop varying, this fails the suite loudly at the seam
+      // rather than failing every unrelated mocked refine.
       if (MOCK_AI && before === after) {
         await commitRevision(draft.id, instruction, commitHtml, width, height, exportUrl, backgroundImageUrl)
         return

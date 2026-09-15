@@ -20,8 +20,21 @@ const EDITOR_PASSWORD = 'BistecStudio2026!'
 //   POST /refine {instruction, overrideConflictId} → SYNCHRONOUS 200
 //     {reply:'Design updated', revisionId, exportUrl} (commits stored HTML).
 //   GET  /revisions                        → BARE ARRAY [{id, revisionNumber, instruction, exportUrl, createdAt}]
+//     CHAIN ONLY — a rejected (not-applied) render is retained out of chain with
+//     a NEGATIVE revisionNumber and is filtered out of this list, out of the
+//     poll's revisionCount, and out of restore.
 //   POST /revisions/[revisionNumber]/restore → 200 {exportUrl} (409 while a
-//     pendingAction is in flight)
+//     pendingAction is in flight; 400 for a non-positive number)
+//
+// Design-instruction fidelity (change 004) — the third outcome of a refine:
+//   GET /api/drafts/[id] → notAppliedReason: string | null. Set when a refine
+//     ran cleanly TWICE and the verifier measured that the instruction was not
+//     applied. It is NOT pendingActionError (the run did not crash), and it is
+//     NOT a committed revision (the chain and currentRevisionNumber are frozen).
+//     claimDraftAction clears it when the NEXT action on the draft is claimed.
+//   The three poll outcomes are mutually exclusive and all three are asserted
+//   below: success (both null, new revision) / crashed (pendingActionError set)
+//   / not applied (notAppliedReason set).
 
 async function createExportedDraft(api: ApiClient) {
   const kitRes = await api.post('/api/admin/brandkits', { name: 'AGUI Test Kit', colors: ['#0284c7'] })
@@ -257,5 +270,286 @@ test.describe('AGUI design refinement', () => {
     } finally {
       await editor.dispose()
     }
+  })
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Design-instruction fidelity (change 004) — TC-AGUI-07 … TC-AGUI-13
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // ⚠️ READ THIS BEFORE ADDING OR STRENGTHENING A CASE HERE. What follows is the
+  // honest boundary of what this suite can prove, and every case below is
+  // written to stay inside it.
+  //
+  // 1. This suite runs in API mode. `.env.test` sets DESIGN_PROVIDER=claude-html,
+  //    so isCliMode() is false and the refine route takes its API branch — which
+  //    carries NO envelope (API-mode HTML arrives as a renderHtml tool argument,
+  //    with no surrounding text for the classification header to sit in). It
+  //    therefore always takes FR-05's preserving default: classes = ['add'],
+  //    supersedes = []. So NOTHING here exercises real classification. AC-10
+  //    (destructive-with-empty-supersedes downgrade), AC-11 (multi-class), and
+  //    the `remove`/`replace`/`constrain` post-conditions of AC-12 are CLI-mode
+  //    behaviour and are covered by the unit tests over resolveEffectiveClasses
+  //    and instructionClasses, not by anything in this file.
+  //
+  // 2. MOCK_AI is a STUB, not a model. buildMockHtml returns a fixed-shape
+  //    document keyed on a digest of the prompt: it makes a mocked refine
+  //    observably an EDIT (the document changes), but it does not obey the
+  //    instruction. A case asserting "reduce the text → the output is measurably
+  //    shorter" would be asserting something the stub cannot deliver, and would
+  //    fail for a reason that has nothing to do with the code under test.
+  //
+  // What IS genuinely reachable — and is what the cases below assert — is the
+  // OUTCOME CONTRACT around verification, driven by T12's deterministic seam
+  // (src/lib/testHooks.ts → shouldMockVerificationMiss), which substitutes a
+  // forced miss for the mock's stubbed pass:
+  //    __FAIL_VERIFY_ALWAYS__ in the instruction → miss on both attempts →
+  //      the twice-failed / not-applied path
+  //    __FAIL_VERIFY_ONCE__   in the instruction → miss once, pass on the retry
+  //      (must be UNIQUE PER DRAFT to isolate its state — the same discipline
+  //      the __FAIL_ONCE__ publish sentinel needs; each case below interpolates
+  //      the draft id for that reason)
+  //
+  // So: what the model DID is unobservable here; what the pipeline DOES ABOUT IT
+  // is fully observable. The measurement halves of AC-08 ("measurably shorter")
+  // and AC-09 ("the superseded element is absent", and the duplicate-image
+  // export failing it) can only be proven by a real CLI-mode run against the
+  // live Claude CLI. Each case repeats that split in its own comment.
+
+  // A signed EXPORTS URL carries a per-request signature, so two reads of the
+  // same stored object are different strings. The PATH is the object key.
+  const exportKeyOf = (url: unknown): string | null =>
+    typeof url === 'string' && url ? new URL(url).pathname : null
+
+  // TC-AGUI-07 — REGRESSION, reported defect #1: "reduce the text" came back
+  // with the text not reduced, and was committed anyway.
+  //
+  // Asserted here: a refine whose verification misses TWICE is NOT applied — the
+  // previous design is left byte-for-byte intact, the run is reported as a
+  // failure on its own poll field, and pendingActionError stays null because the
+  // run did not crash.
+  //
+  // NOT asserted here, and NOT assertable under MOCK_AI: that a real `remove`
+  // instruction produces visible text that is measurably shorter, and that the
+  // shortening is what the verifier measured. In this environment the class is
+  // the API-mode default `add`, and the miss is injected by the seam rather than
+  // measured. Needs a real CLI-mode run.
+  test('a refine whose verification misses twice is NOT applied (reduce-the-text regression)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+
+    const instruction = `Reduce the text __FAIL_VERIFY_ALWAYS__ [${draft.id}]`
+    const settled = await refineAndWait(api, draft.id as string, instruction)
+
+    expect(settled.pendingAction).toBeNull()
+    // The run completed cleanly — "the model didn't do what you asked" is NOT
+    // "the run crashed", and must not be reported on the crash channel.
+    expect(settled.pendingActionError).toBeNull()
+    expect(typeof settled.notAppliedReason).toBe('string')
+    expect(settled.notAppliedReason).toBeTruthy()
+
+    // The previous design survives untouched — this is the whole point of FR-12.
+    expect(settled.htmlContent).toBe(draft.htmlContent)
+    expect(settled.currentRevisionNumber).toBe(draft.currentRevisionNumber)
+
+    // …and the rejected attempt is not offered as a version to switch to.
+    const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
+    expect(revisions.some((r: { instruction: string }) => r.instruction === instruction)).toBe(false)
+  })
+
+  // TC-AGUI-08 — REGRESSION, reported defect #2: "use the uploaded image as the
+  // background" produced a design carrying BOTH images (the superseded one was
+  // never removed) and that duplicate-image render was exported.
+  //
+  // Asserted here: the rejected render never reaches the user — the draft still
+  // points at the PREVIOUS export object, not at the render the verifier threw
+  // away. (Object key, not the full signed URL: the signature differs per read.)
+  //
+  // NOT asserted here: that a real `replace` instruction's named superseded
+  // element is absent from the output — i.e. that the duplicate-image design
+  // actually FAILS verification on its own merits. Under MOCK_AI the class is
+  // the API-mode default `add`, no `supersedes` target is ever declared, and the
+  // miss comes from the seam. Needs a real CLI-mode run with the envelope.
+  test('a twice-missed refine leaves the draft pointing at the PREVIOUS export (use-the-uploaded-image regression)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+    const originalKey = exportKeyOf(draft.exportUrl)
+    expect(originalKey).toBeTruthy()
+
+    const instruction = `Use the uploaded image as the background __FAIL_VERIFY_ALWAYS__ [${draft.id}]`
+    const settled = await refineAndWait(api, draft.id as string, instruction)
+
+    expect(settled.notAppliedReason).toBeTruthy()
+    expect(settled.pendingActionError).toBeNull()
+    expect(settled.htmlContent).toBe(draft.htmlContent)
+    expect(exportKeyOf(settled.exportUrl)).toBe(originalKey)
+  })
+
+  // TC-AGUI-09 — the retry is real, and it is the LAST chance (FR-11/AC-15).
+  // __FAIL_VERIFY_ONCE__ misses the first verification and passes the retry's,
+  // so the refine commits normally: one new chain revision, the pointer
+  // advances, and no not-applied outcome is recorded.
+  //
+  // This is the case that proves the not-applied path above is a real second
+  // attempt rather than a single attempt reported twice — if the route did not
+  // retry, this instruction would land on the not-applied path too.
+  //
+  // The 2-refine/2-verifier hard cap itself (AC-15) has no HTTP surface; it is
+  // held by the route's bounded `for` and the verifier-call budget, and is
+  // covered by unit tests.
+  test('a refine that misses once and passes on the retry commits normally', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+    expect(draft.currentRevisionNumber).toBe(1)
+
+    // Unique per draft — the ONCE seam keys its state on the instruction string.
+    const instruction = `Reduce the text __FAIL_VERIFY_ONCE__ [${draft.id}]`
+    const settled = await refineAndWait(api, draft.id as string, instruction)
+
+    expect(settled.pendingActionError).toBeNull()
+    expect(settled.notAppliedReason).toBeNull()
+    expect(settled.htmlContent).not.toBe(draft.htmlContent)
+    expect(settled.currentRevisionNumber).toBe(2)
+
+    const revisions = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
+    expect(revisions.some((r: { instruction: string }) => r.instruction === instruction)).toBe(true)
+  })
+
+  // TC-AGUI-10 — AC-16. The chain is an append-only version history the user
+  // switches between; a refine that was deliberately NOT applied must leave no
+  // trace in it. The rejected render is retained out of chain with a NEGATIVE
+  // revisionNumber, so the assertions are: same length, same numbers, still
+  // contiguous from 1, all positive, count and pointer unmoved.
+  test('a twice-failed refine leaves the revision chain and the pointer untouched (AC-16)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+
+    // Put a real second version in the chain first, so "unchanged" is a
+    // non-trivial statement about a chain that has already moved once.
+    await refineAndWait(api, draft.id as string, 'Add a subtle gradient')
+    const before = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    const beforeRevs = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
+    expect(before.currentRevisionNumber).toBe(2)
+    expect(beforeRevs.length).toBe(2)
+
+    const settled = await refineAndWait(
+      api,
+      draft.id as string,
+      `Add a mascot in the corner __FAIL_VERIFY_ALWAYS__ [${draft.id}]`,
+    )
+    expect(settled.notAppliedReason).toBeTruthy()
+    expect(settled.currentRevisionNumber).toBe(before.currentRevisionNumber)
+    // revisionCount is a CHAIN-filtered relation count — the retained rejected
+    // row must not inflate it.
+    expect(settled.revisionCount).toBe(before.revisionCount)
+
+    const afterRevs = await (await api.get(`/api/drafts/${draft.id}/revisions`)).json()
+    expect(afterRevs.length).toBe(beforeRevs.length)
+    const numbers = afterRevs
+      .map((r: { revisionNumber: number }) => r.revisionNumber)
+      .sort((a: number, b: number) => a - b)
+    numbers.forEach((n: number, i: number) => expect(n).toBe(i + 1)) // positive + contiguous from 1
+
+    // AC-17 — the retained rejected render has NO read surface over HTTP by
+    // design (listChainRevisions filters it, revisionCount filters it, and
+    // restore rejects its number space), so this suite cannot assert its stored
+    // instruction/classes/rejectionReason. Verifying THAT needs a DB read; what
+    // is assertable here is the guarantee that matters to a user — the rejected
+    // render is unreachable, including by naming its number directly.
+    for (const rev of ['-1', '-2']) {
+      const res = await api.post(`/api/drafts/${draft.id}/revisions/${rev}/restore`, {})
+      expect(res.status()).toBe(400)
+    }
+    const stillThere = await (await api.get(`/api/drafts/${draft.id}`)).json()
+    expect(stillThere.htmlContent).toBe(before.htmlContent)
+  })
+
+  // TC-AGUI-11 — AC-18. The poll's three outcomes on ONE draft, in sequence, so
+  // they are compared against each other rather than each asserted in isolation:
+  //   success      → pendingActionError null, notAppliedReason null, new revision
+  //   crashed      → pendingActionError set,  notAppliedReason null
+  //   not applied  → pendingActionError null, notAppliedReason set
+  // The final step also covers claimDraftAction's clear: a later action must
+  // retire the previous refine's not-applied card rather than leave it standing
+  // over a design that has since changed.
+  test('the poll distinguishes success, a crashed run, and a not-applied refine (AC-18)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+    const id = draft.id as string
+
+    // 1 — success.
+    const ok = await refineAndWait(api, id, 'Make the background darker')
+    expect(ok.pendingActionError).toBeNull()
+    expect(ok.notAppliedReason).toBeNull()
+    expect(ok.currentRevisionNumber).toBe(2)
+
+    // 2 — the run itself throws (__FAIL_GEN_ALWAYS__ rides the instruction into
+    // the design agent's prompt, the same carrier the F1 retry cases use). That
+    // is the EXISTING error channel and must stay distinct from not-applied.
+    const crashed = await refineAndWait(api, id, 'Make it pop __FAIL_GEN_ALWAYS__')
+    expect(crashed.pendingActionError).toBeTruthy()
+    expect(crashed.notAppliedReason).toBeNull()
+
+    // 3 — ran fine, did not do what was asked.
+    const notApplied = await refineAndWait(api, id, `Make it pop __FAIL_VERIFY_ALWAYS__ [${id}]`)
+    expect(notApplied.notAppliedReason).toBeTruthy()
+    expect(notApplied.pendingActionError).toBeNull()
+    // The claim in step 3 cleared step 2's error — the two channels do not stack.
+    expect(notApplied.currentRevisionNumber).toBe(2)
+
+    // 4 — the next action clears the stale not-applied outcome.
+    const recovered = await refineAndWait(api, id, 'Add a subtle gradient')
+    expect(recovered.notAppliedReason).toBeNull()
+    expect(recovered.pendingActionError).toBeNull()
+    expect(recovered.currentRevisionNumber).toBe(3)
+  })
+
+  // TC-AGUI-12 — AC-20. regenerate-design and regenerate-copy share the action
+  // slot and the poll with refine, but they acquire NO verification step and no
+  // not-applied outcome: they produce a new design/copy by definition rather
+  // than applying a named instruction to an existing one, so there is nothing to
+  // verify against. Their 202 + poll contract is unchanged by this work.
+  test('regenerate-design and regenerate-copy gain no verification and no not-applied outcome (AC-20)', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api) // Path B (designMode GENERATE)
+    if (!draft) { test.skip(); return }
+    const id = draft.id as string
+
+    const designRes = await api.post(`/api/drafts/${id}/regenerate-design`, {})
+    expect(designRes.status()).toBe(202)
+    const afterDesign = await waitForAction(api, id)
+    expect(afterDesign.pendingActionError).toBeNull()
+    expect(afterDesign.notAppliedReason).toBeNull()
+    expect(afterDesign.htmlContent).toBeTruthy()
+
+    const copyRes = await api.post(`/api/drafts/${id}/regenerate-copy`, {})
+    expect(copyRes.status()).toBe(202)
+    const afterCopy = await waitForAction(api, id)
+    expect(afterCopy.pendingActionError).toBeNull()
+    expect(afterCopy.notAppliedReason).toBeNull()
+    expect(afterCopy.copyText).toBeTruthy()
+  })
+
+  // TC-AGUI-13 — the sentinels are TEST-ONLY seams, and an instruction that
+  // merely TALKS about verification must behave like any other instruction. This
+  // is the guard against the seam widening into a substring that real user copy
+  // could contain.
+  test('an ordinary instruction is unaffected by the verification seam', async () => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const draft = await createExportedDraft(api)
+    if (!draft) { test.skip(); return }
+
+    const settled = await refineAndWait(
+      api,
+      draft.id as string,
+      'Reduce the text and verify the layout still balances',
+    )
+    expect(settled.notAppliedReason).toBeNull()
+    expect(settled.pendingActionError).toBeNull()
+    expect(settled.currentRevisionNumber).toBe(2)
   })
 })
