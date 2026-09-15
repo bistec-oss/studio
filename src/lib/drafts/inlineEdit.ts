@@ -273,3 +273,336 @@ export function parseElementSize(raw: string): ParsedCssValue {
 
   return ok(`${amount}${match[2].toLowerCase()}`)
 }
+
+// ===========================================================================
+// Element-targeted edit — server-side addressing + the write (FR-17/18/19)
+// ===========================================================================
+//
+// The whole of this section is PURE: `html` in, `html` out. The route does the
+// auth, the guards and the single `commitDraftRevision` call; nothing here
+// touches the database, which is what makes the addressing rules below
+// unit-testable at all (a route module cannot be imported under vitest here).
+//
+// WHAT AN ADDRESS IS, AND WHY IT IS NOT A SELECTOR (FR-17 / AC-26)
+// ----------------------------------------------------------------
+// The click payload carries a tag name from a closed allow-list and the TEXT
+// THE USER SAW in that node at click time. It is a *description of content*,
+// not an instruction about where to write. The server ignores anything else the
+// client sends — there is no selector, id, XPath or document offset in
+// `ElementEditRequest`, so an extra `selector` key on the wire is structurally
+// unreadable here, not merely unused. Resolution re-scans the CURRENT
+// server-side HTML for that content and demands EXACTLY ONE match:
+//
+//   * zero matches  → the address is stale (a refine rewrote the markup, or
+//                     another edit landed first) → REJECTED, nothing written.
+//   * two or more   → the address is ambiguous  → REJECTED, nothing written.
+//
+// Both directions fail closed. Guessing between two candidates is precisely
+// AC-25's failure mode, so there is no "closest match" branch and no fallback
+// to document order. Nothing about the address is persisted anywhere: it is not
+// written to the draft, not written to the revision, and not put in the
+// instruction string (which is built from a closed set of literals below), so a
+// later refine cannot invalidate a stored address — there is none (FR-18).
+//
+// WHAT REGEX-LEVEL RESOLUTION CANNOT GUARANTEE — stated plainly, because T16's
+// E2E has to know where the honest edges are:
+//   * `[^>]*` for an opening tag's attributes ends at the first `>`, so a tag
+//     carrying `>` inside a quoted attribute value (`<p title="a>b">`) is
+//     mis-parsed and simply will not resolve. It fails closed, but it fails.
+//   * Only TEXT-LEAF nodes are addressable — the content pattern is `[^<]*`, so
+//     an element containing any child element never matches. This is deliberate
+//     (it removes same-tag nesting ambiguity outright) but it does mean "click
+//     any node" is a promise the server cannot keep; the client must only offer
+//     leaves.
+//   * Entity comparison decodes the SOURCE side only, against the DOM
+//     `textContent` the client observed. An exotic encoding the decoder below
+//     does not know simply fails to match — again closed, but a real miss.
+//   * Two nodes with identical visible text are indistinguishable here, by
+//     construction. That is the ambiguity rejection, not a bug to fix later.
+//   * `sanitizeInlineHtml` is deliberately NOT run in this mode. The base
+//     document is the server's own stored HTML, never client input, and
+//     sanitizing it would mutate bytes outside the clicked node — which FR-17
+//     forbids. The only client-derived bytes that enter are the escaped text
+//     run and the re-serialized declaration value.
+
+// Text-leaf-capable tags only. The exclusions matter more than the inclusions:
+// `script`, `style`, `title` and `textarea` are raw-text elements where
+// `escapeElementText` produces meaningless output rather than safe output (its
+// own doc comment says so), and `pre` is excluded because the whitespace
+// collapsing used for matching would misread significant whitespace. An
+// allow-list, not a deny-list, so a tag added to HTML later is not silently
+// addressable.
+export const ELEMENT_EDITABLE_TAGS = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'span',
+  'div',
+  'li',
+  'a',
+  'strong',
+  'em',
+  'small',
+  'blockquote',
+  'figcaption',
+  'label',
+  'td',
+  'th',
+] as const
+
+// The property allow-list (FR-16). T14's parsers validate a VALUE and say
+// nothing about which property it is written into — that ownership lands here.
+// One row per exposed edit; the CSS property name is a literal in this table and
+// is NEVER taken from the request, so no property-name escaping is needed or
+// possible to get wrong. Adding a row is a deliberate widening and needs its own
+// test; there is no free-form declaration path (FR-16).
+//
+// A Map for the same reason NAMED_COLORS above is one: a plain-object lookup
+// inherits from Object.prototype, so `kind: "constructor"` would resolve to a
+// truthy row whose `parse` is undefined — a crash on hostile input rather than a
+// refusal. A Map has no prototype keys, which removes the class.
+const ELEMENT_STYLE_PROPERTIES = new Map<
+  string,
+  { readonly property: string; readonly parse: (raw: string) => ParsedCssValue }
+>([
+  ['color', { property: 'color', parse: parseElementColor }],
+  ['fontSize', { property: 'font-size', parse: parseElementSize }],
+])
+
+export const ELEMENT_EDIT_KINDS = ['text', 'color', 'fontSize'] as const
+export type ElementEditKind = (typeof ELEMENT_EDIT_KINDS)[number]
+
+// Flat and all-strings on purpose: this is what arrives over the wire, so every
+// field is validated here rather than trusted by shape. There is deliberately no
+// selector/id/index field — see the AC-26 note above.
+export interface ElementEditRequest {
+  readonly tag: string
+  readonly text: string
+  readonly kind: string
+  readonly value: string
+}
+
+// `status` travels with the reason so the route does not have to re-derive it:
+// 400 means the input was malformed, 409 means the input was fine but the
+// document moved underneath it (stale or ambiguous address). Same discriminated
+// -union discipline as ParsedCssValue — `html` does not exist on the failing
+// member.
+export type ElementEditOutcome =
+  | { readonly ok: true; readonly html: string; readonly instruction: string }
+  | { readonly ok: false; readonly reason: string; readonly status: 400 | 409 }
+
+// A headline is not a document. The cap is on the replacement text (what gets
+// written) and, more loosely, on the address text (what gets compared), so an
+// oversized payload is refused before any scanning.
+const MAX_ELEMENT_TEXT = 2000
+const MAX_ADDRESS_TEXT = 4000
+
+const NAMED_ENTITIES = new Map<string, string>([
+  ['amp', '&'],
+  ['lt', '<'],
+  ['gt', '>'],
+  ['quot', '"'],
+  ['apos', "'"],
+  // Decoded to a PLAIN space, not U+00A0: the normalizer below collapses runs of
+  // whitespace and `\s` matches U+00A0, so both sides fold to the same string
+  // whichever the source used.
+  ['nbsp', ' '],
+])
+
+// Decode for COMPARISON ONLY — the result is never written back into the
+// document. A single pass with a callback, not chained replaces, because
+// chaining would decode `&amp;lt;` twice and turn a literal "&lt;" into "<".
+// An entity this table does not know is left verbatim, so it fails to match
+// rather than matching something else.
+function decodeTextEntities(input: string): string {
+  return input.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
+    const key = body.toLowerCase()
+    if (key.startsWith('#')) {
+      const code = key.startsWith('#x') ? parseInt(key.slice(2), 16) : Number(key.slice(1))
+      if (!Number.isInteger(code) || code < 1 || code > 0x10ffff) return whole
+      try {
+        return String.fromCodePoint(code)
+      } catch {
+        return whole
+      }
+    }
+    return NAMED_ENTITIES.get(key) ?? whole
+  })
+}
+
+// HTML collapses whitespace when it paints, and the client reads `textContent`
+// off a DOM that has already done so, so matching has to collapse too or a
+// pretty-printed source would never match what the user saw.
+function normalizeAddressText(input: string): string {
+  return input.replace(/\s+/g, ' ').trim()
+}
+
+export interface ElementMatch {
+  readonly attrs: string
+  readonly attrsStart: number
+  readonly attrsEnd: number
+  readonly innerStart: number
+  readonly innerEnd: number
+}
+
+/**
+ * Re-resolve a content address against the CURRENT html. Exported for tests —
+ * the uniqueness rule is the load-bearing half of AC-25 and deserves its own
+ * assertions independent of the write.
+ *
+ * `tag` must already be a member of ELEMENT_EDITABLE_TAGS; the regex is built
+ * from that closed list, never from raw input, so there is no pattern injection.
+ */
+export function findElementMatches(html: string, tag: string, text: string): ElementMatch[] {
+  // `[^<]*` for the content is what makes this unambiguous: an element holding
+  // any child element cannot match, so same-tag nesting has no say here.
+  const re = new RegExp(`<${tag}\\b([^>]*)>([^<]*)</${tag}\\s*>`, 'gi')
+  const wanted = normalizeAddressText(text)
+  const out: ElementMatch[] = []
+  for (let m = re.exec(html); m !== null; m = re.exec(html)) {
+    if (normalizeAddressText(decodeTextEntities(m[2])) !== wanted) continue
+    const attrsStart = m.index + 1 + tag.length
+    const attrsEnd = attrsStart + m[1].length
+    out.push({
+      attrs: m[1],
+      attrsStart,
+      attrsEnd,
+      // +1 steps over the `>` that closes the opening tag, so the span below is
+      // exactly the run between a `>` and a `<` — the text position
+      // escapeElementText documents as its only safe placement (FR-15/AC-21).
+      innerStart: attrsEnd + 1,
+      innerEnd: attrsEnd + 1 + m[2].length,
+    })
+  }
+  return out
+}
+
+// Matches a quoted style attribute. An UNQUOTED one (`style=color:red`) is not
+// matched on purpose — rewriting it would need unquoted-value rules, and
+// appending a second `style` attribute instead would be worse than useless
+// (HTML keeps the first, so the edit would silently not apply). That case is
+// rejected below rather than guessed at.
+const STYLE_ATTR_RE = /(\sstyle\s*=\s*)(?:"([^"]*)"|'([^']*)')/i
+const HAS_STYLE_ATTR_RE = /\sstyle\s*=/i
+
+/**
+ * Set one declaration inside an opening tag's attribute string, preserving every
+ * other attribute and every other declaration byte-for-byte.
+ *
+ * Existing declarations of the same property are dropped rather than left to be
+ * overridden by source order — otherwise repeated edits accumulate dead
+ * declarations in the saved HTML. The original quote character is preserved: a
+ * value inside a `'…'` attribute may legally contain `"`, so re-emitting with
+ * `"` could break the tag. The value we add cannot contain either quote — it
+ * comes back re-serialized from T14's closed grammars.
+ */
+export function setStyleDeclaration(
+  attrs: string,
+  property: string,
+  value: string,
+): { ok: true; attrs: string } | { ok: false; reason: string } {
+  const declaration = `${property}: ${value}`
+  const match = STYLE_ATTR_RE.exec(attrs)
+  if (!match) {
+    if (HAS_STYLE_ATTR_RE.test(attrs)) {
+      return { ok: false, reason: "This element's style could not be updated safely" }
+    }
+    return { ok: true, attrs: `${attrs} style="${declaration}"` }
+  }
+
+  const quote = match[2] !== undefined ? '"' : "'"
+  const existing = match[2] ?? match[3] ?? ''
+  const kept = existing
+    .split(';')
+    .map((d) => d.trim())
+    .filter((d) => d !== '' && d.slice(0, d.indexOf(':')).trim().toLowerCase() !== property)
+  const next = [...kept, declaration].join('; ')
+  return {
+    ok: true,
+    attrs:
+      attrs.slice(0, match.index) +
+      `${match[1]}${quote}${next}${quote}` +
+      attrs.slice(match.index + match[0].length),
+  }
+}
+
+function fail(reason: string, status: 400 | 409): ElementEditOutcome {
+  return { ok: false, reason, status }
+}
+
+/**
+ * Apply one element-scoped edit to `html` and return the new document.
+ *
+ * Confined to the clicked node (FR-17): a text edit rewrites only the span
+ * between that element's `>` and `</`, and a style edit rewrites only that
+ * element's attribute string. Every other byte of the document is carried
+ * through by slicing, so nothing outside the resolved match can change — which
+ * is also why the whole-document sanitizer is not run here.
+ */
+export function applyElementEdit(html: string, request: ElementEditRequest): ElementEditOutcome {
+  const { tag, text, kind, value } = request
+  if (
+    typeof tag !== 'string' ||
+    typeof text !== 'string' ||
+    typeof kind !== 'string' ||
+    typeof value !== 'string'
+  ) {
+    return fail('Invalid element edit request', 400)
+  }
+
+  const lowerTag = tag.toLowerCase()
+  if (!(ELEMENT_EDITABLE_TAGS as readonly string[]).includes(lowerTag)) {
+    return fail('That element cannot be edited directly', 400)
+  }
+  if (!text.trim()) return fail('Invalid element edit request', 400)
+  if (text.length > MAX_ADDRESS_TEXT) return fail('That element is too large to edit directly', 400)
+
+  const matches = findElementMatches(html, lowerTag, text)
+  // Fail closed in BOTH directions — see the AC-25 note at the top of this
+  // section. Neither branch writes anything.
+  if (matches.length === 0) {
+    return fail('That element is no longer in the design — reopen the editor and try again', 409)
+  }
+  if (matches.length > 1) {
+    return fail('That element could not be identified uniquely — edit it in the full editor', 409)
+  }
+  const target = matches[0]
+
+  if (kind === 'text') {
+    const next = value.trim()
+    if (!next) return fail('Enter some text', 400)
+    if (next.length > MAX_ELEMENT_TEXT) return fail('That text is too long', 400)
+    return {
+      ok: true,
+      // Spliced between the opening tag's `>` and the closing `<`, so the
+      // escaped run lands as a text node and markup in it cannot escape the
+      // element (FR-15 / AC-21).
+      html:
+        html.slice(0, target.innerStart) + escapeElementText(next) + html.slice(target.innerEnd),
+      instruction: 'Manual element edit (text)',
+    }
+  }
+
+  const rule = ELEMENT_STYLE_PROPERTIES.get(kind)
+  if (!rule) return fail('That kind of edit is not supported', 400)
+
+  const parsed = rule.parse(value)
+  // Narrowing on `ok` is mandatory, not stylistic: ParsedCssValue has no `value`
+  // on its failing member, so there is no `?? ''` to fall into here.
+  if (!parsed.ok) return fail(parsed.reason, 400)
+
+  const rewritten = setStyleDeclaration(target.attrs, rule.property, parsed.value)
+  if (!rewritten.ok) return fail(rewritten.reason, 409)
+
+  return {
+    ok: true,
+    html: html.slice(0, target.attrsStart) + rewritten.attrs + html.slice(target.attrsEnd),
+    // Built from a closed set of literals — the kind, never the address and
+    // never the user's value, so no address reaches the revision row (FR-18).
+    instruction: `Manual element edit (${kind === 'color' ? 'colour' : 'size'})`,
+  }
+}
