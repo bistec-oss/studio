@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+// buildMockHtml reads no env var, so it is safe to import statically (unlike the
+// sentinel helpers below, which snapshot MOCK_* at module load).
+import { buildMockHtml } from '@/lib/testHooks'
 
 // testHooks.ts snapshots its MOCK_* env vars at module load, and
 // shouldMockPublishFail keeps per-caption __FAIL_ONCE__ state at module level —
@@ -103,5 +106,30 @@ describe('buildMockCopy', () => {
     const copy = hooks.buildMockCopy('launch __FAIL_ONCE__ t1')
     expect(copy).toContain(hooks.MOCK_COPY_TEXT)
     expect(copy).toContain('__FAIL_ONCE__')
+  })
+})
+
+// buildMockHtml must produce a DIFFERENT document for a different prompt.
+//
+// This is load-bearing for the refine-verification work (change 004): the stub's
+// output used to depend only on the first #RRGGBB in the prompt, so a mocked
+// refine returned the draft's current HTML byte-for-byte. An unchanged document
+// is a legitimate verification miss, so every mocked refine would have failed
+// closed and the forced-miss seam would have been unreachable.
+describe('buildMockHtml determinism and variance', () => {
+  it('returns the same document for the same prompt', () => {
+    expect(buildMockHtml('brand #0f172a / instruction A')).toBe(buildMockHtml('brand #0f172a / instruction A'))
+  })
+
+  it('returns a different document when the prompt changes but the colour does not', () => {
+    const first = buildMockHtml('brand #0f172a / instruction A')
+    const second = buildMockHtml('brand #0f172a / instruction B')
+    expect(second).not.toBe(first)
+  })
+
+  it('still honours the brand colour and canvas size', () => {
+    const html = buildMockHtml('colors: #abcdef', 1080, 1350)
+    expect(html).toContain('#abcdef')
+    expect(html).toContain('height: 1350px')
   })
 })

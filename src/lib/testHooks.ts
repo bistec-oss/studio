@@ -243,15 +243,41 @@ export const MOCK_PNG_BUFFER = Buffer.from(
  * to the design agent (the colour reaches the agent via the brand-kit system
  * context). Falls back to a neutral colour when none is present.
  */
+// Deterministic 32-bit string digest (djb2). Deliberately NOT node:crypto —
+// this module is imported from code that is bundled for both runtimes, and the
+// digest is a change-detector, not a security primitive.
+function mockDigest(input: string): string {
+  let h = 5381
+  for (let i = 0; i < input.length; i += 1) h = ((h << 5) + h + input.charCodeAt(i)) >>> 0
+  return h.toString(16).padStart(8, '0')
+}
+
 export function buildMockHtml(promptContext: string, width = 1080, height = 1080): string {
   const hex = promptContext.match(/#[0-9a-fA-F]{6}/)?.[0] ?? '#0f172a'
+  // The digest is what makes a mocked REFINE observably an edit.
+  //
+  // Without it this function's output depended only on the first #RRGGBB in the
+  // prompt and the canvas size — and every refine prompt opens with the same
+  // brand-kit colour line, so a mocked refine returned a document BYTE-IDENTICAL
+  // to the draft's current HTML. Once refine verification landed (FR-08), an
+  // unchanged document is a legitimate miss: every mocked refine would have gone
+  // miss -> retry -> miss -> not-applied, taking agui-refinement, the §Q suite
+  // and TC-REG-H7a down with it, and leaving the forced-miss seam below
+  // (shouldMockVerificationMiss, FR-24) unreachable because verification would
+  // never get a document worth verifying.
+  //
+  // Folding the whole prompt in keeps the stub fully deterministic — same prompt
+  // in, same document out — while making successive refines differ, because each
+  // refine's prompt contains the previous HTML. It is self-propagating for
+  // repeated refines and needs no per-call state.
+  const digest = mockDigest(promptContext)
   return `<!DOCTYPE html>
 <html>
 <head><style>
 body { margin: 0; width: ${width}px; height: ${height}px; background: ${hex}; display: flex; align-items: center; justify-content: center; }
 .card { color: #ffffff; font-family: Inter, sans-serif; font-size: 48px; text-align: center; padding: 40px; }
 </style></head>
-<body><div class="card" data-mock="true">MOCK DESIGN</div></body>
+<body><div class="card" data-mock="true" data-mock-digest="${digest}">MOCK DESIGN</div></body>
 </html>`
 }
 
