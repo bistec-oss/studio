@@ -58,6 +58,12 @@ Labelled with the instruction, its classes, and the verifier's stated miss, reac
 **FR-14 — "Couldn't apply" is a hard failure surfaced in the UI.**
 Not a soft warning on a committed revision. The draft poll response carries a distinct outcome for it, separate from the existing error channel.
 
+**FR-14a — A rejected render can be adopted with "Use anyway". (added 2026-09-23)**
+The not-applied failure shows a preview of the retained rejected render and a **Use anyway** action. Adopting commits it as a normal revision through `commitDraftRevision`, recorded as user-accepted despite a failed check, and advances the pointer. Nothing enters the chain without that explicit action. Adoption is single-flight like every other draft action (a concurrent action 409s), and adopting an already-adopted or discarded render is a 409, never a second revision.
+
+**FR-14b — The verifier model is fixed; the retry uses the user's model. (added 2026-09-23)**
+The `add` verifier call always runs on Haiku, independent of any model the user selects (proposal 008). The single retry re-runs the refine on the model the user chose for it.
+
 **FR-15 — Element-targeted editing writes text as text content.**
 User text becomes a text node, never parsed as markup.
 
@@ -79,6 +85,9 @@ The set of `__INLINE_ASSET_n__` tokens sent out must equal the set returned, sam
 **FR-21 — The runner image carries monochrome symbol font coverage.**
 Narrowest coverage that fixes the reported defect. Not a full colour emoji set.
 
+**FR-21a — The design agent is told not to use emoji. (added 2026-09-23)**
+Colour emoji are not covered by FR-21, so the shared design prompt note instructs the agent to use symbols from the covered set and never emoji in the rendered design. Captions are not affected.
+
 **FR-22 — The installed font set is recorded per draft.**
 Stored alongside the existing `PROMPT_VERSION` stamp so a render's glyph environment is attributable after the fact.
 
@@ -87,6 +96,29 @@ It runs the real render path and asserts on real output, with a glyph-agnostic t
 
 **FR-24 — A deterministic seam forces a verification miss.**
 Distinct from the rasterizing harness, so the retry and twice-failed branches are reachable in tests.
+
+### Phase 0 — deploy pipeline (added 2026-09-23)
+
+**FR-P0-1 — Redeploy failures are self-explaining.**
+Each Coolify redeploy prints the HTTP status and a reason: 401/403 → "token rejected — rotate `COOLIFY_API_TOKEN` (docs/coolify-token-rotation.md)"; 404 → "resource UUID not found"; other → the response body. The secret value is never echoed.
+
+**FR-P0-2 — Both redeploys are always attempted.**
+A failed app redeploy does not skip the scheduler redeploy. The job fails at the end if either failed, reporting both outcomes.
+
+**FR-P0-3 — The image knows its commit.**
+The build passes the commit SHA into the image (build arg → env), readable by the running app.
+
+**FR-P0-4 — A public version endpoint.**
+`GET /api/health` returns `{ ok: true, commit }` with no authentication and no other data (no env, no DB detail). It is reachable through the auth proxy (`src/proxy.ts`).
+
+**FR-P0-5 — The workflow verifies the deploy.**
+After triggering the redeploys, CI polls the prod `/api/health` until `commit` equals the pushed SHA, or fails after a bounded wait long enough for a Coolify deploy + boot-time migrations. The scheduler has no HTTP surface, so its verification is the Coolify deployment status. Note that this proves the _deploy_, not that the worker _runs_; that is 006's heartbeat, and B4.
+
+**FR-P0-6 — Actions are on current majors.**
+`docker-publish.yml` uses the same current action majors `e2e.yml` already uses, plus current majors of the `docker/*` actions. No Node-20 deprecation warnings remain in either workflow.
+
+**FR-P0-7 — Node 22.**
+All three Dockerfile stages use `node:22-alpine`. CI `setup-node` uses 22. `package.json` `engines` requires ≥22. Chromium, the Prisma engines and the Claude Code CLI keep working inside the image.
 
 ### Non-Functional Requirements
 
@@ -106,6 +138,14 @@ Distinct from the rasterizing harness, so the retry and twice-failed branches ar
 
 Each criterion must pass for the change to be considered complete.
 
+**Phase 0** (proved on `main`, since the deploy steps only run there)
+
+- **AC-P0-1** — With a deliberately invalid token (a throwaway fork or a manual `workflow_dispatch` run is fine), the redeploy step fails with the "token rejected" reason and the scheduler redeploy is **still attempted**.
+- **AC-P0-2** — After the Coolify token is rotated, a merge to `main` ends green only when prod's `/api/health` reports the merged commit SHA.
+- **AC-P0-3** — `/api/health` responds 200 without a session and returns exactly `{ ok, commit }`.
+- **AC-P0-4** — Neither workflow logs a Node-20 deprecation warning.
+- **AC-P0-5** — On `node:22-alpine`: `docker build` succeeds; the full mock E2E suite passes; a real Path B render (real Chromium, not `MOCK_PUPPETEER`) produces a PNG inside the built image; and `claude --version` runs inside the image.
+
 **Phase 1**
 
 > ⚠️ **AC-01 cannot be verified on a developer machine.** The font is installed in the **Alpine runner stage of the Docker image**, and the glyph environment that matters is Chromium's inside that image. Running the harness against host Chromium proves the harness works — on Windows it will pass using Segoe UI Symbol whether or not `Dockerfile` was ever touched. That is a **false green**. AC-01 is proven only by `docker build` followed by running the assertion inside the built image, or by the CI docker-build job. Do not mark AC-01 met on a local run, and do not let a green local suite stand in for it.
@@ -117,6 +157,7 @@ Each criterion must pass for the change to be considered complete.
 - **AC-05** — Given HTML sent out with N inline-asset placeholders, a model reply returning the same N tokens reconciles clean and commits.
 - **AC-06** — A reply with a placeholder **absent** restores it and commits.
 - **AC-07** — A reply with a placeholder **renamed, duplicated, or reindexed** is treated as not applied; no revision is committed.
+- **AC-07a** — The shared design prompt note instructs the agent to use covered symbols and never emoji in the rendered design, and `PROMPT_VERSION` is bumped.
 
 **Phase 2**
 
@@ -133,6 +174,8 @@ Each criterion must pass for the change to be considered complete.
 - **AC-18** — The draft poll response exposes a not-applied outcome distinguishable from both success and the existing error channel, and the UI surfaces it as a failure.
 - **AC-19** — Editing the per-class table changes both the refine prompt text and the verifier criteria; no second definition exists to fall out of sync.
 - **AC-20** — `regenerate-design` and `regenerate-copy` request/response shapes and behaviour are byte-identical to before this change.
+- **AC-20a** — After a twice-failed refine, the UI shows a preview of the rejected render and a **Use anyway** action; choosing it produces exactly one new revision whose image is the rejected render, and advances the pointer. A second adopt of the same render returns 409 and creates nothing.
+- **AC-20b** — Every `add` verifier call is issued with the Haiku model, even when the refine itself was requested on Opus or Sonnet; the retry is issued on the requested refine model.
 
 **Phase 3**
 

@@ -2,17 +2,56 @@
 
 **Change:** 004-design-instruction-fidelity
 **Created:** 2026-09-15
-**Total Tasks:** 16
+**Total Tasks:** 24
 
 ## Summary
 
-16 tasks in 4 waves, mapping one-to-one onto the three reversibility phases (Wave 3 is Phase 2's wiring half, split from Wave 2 only because the route work depends on the modules landing first).
+24 tasks in 5 waves (16 planned 2026-09-15; T3a, T11a and Wave 0 — T0a–T0f, the deploy-pipeline fix — added 2026-09-23 from user decisions). Wave 0 ships first as its own PR to `main`; Waves 1–4 go on `v2`. Waves 1–4 map one-to-one onto the three reversibility phases (Wave 3 is Phase 2's wiring half, split from Wave 2 only because the route work depends on the modules landing first).
 
 Phase boundaries are hard: **Wave 2 must not start before Wave 1 lands; Wave 4 must not start before Wave 3 lands.** Each wave leaves the system working and independently revertible.
 
 Two migrations, one per phase, deliberately not merged — a single migration would couple Phase 1's revertibility to Phase 2.
 
 ## Tasks
+
+### Wave 0 — Phase 0: deploy pipeline _(added 2026-09-23 — own branch `fix/ci-deploy-pipeline` off `main`, PR to `main`, ships first)_
+
+- [ ] `T0a` — Coolify token rotation _(ops — blocked on the Coolify administrator)_
+  - Files: `docs/coolify-token-rotation.md` (the handoff)
+  - Estimate: small
+  - Kind: ops
+  - Notes: 401 on [run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569). The administrator creates a deploy-scoped token and updates `COOLIFY_API_TOKEN`. Claude never handles the value. Done when the failed job re-runs green. **AC-P0-2 cannot pass until this is done.**
+
+- [ ] `T0b` — Self-explaining, always-both redeploy step
+  - Files: `.github/workflows/docker-publish.yml`
+  - Estimate: small
+  - Kind: config
+  - Notes: FR-P0-1/2, AC-P0-1. One script step looping both UUIDs; status → reason mapping; both always attempted; fail at end. Never echo the token.
+
+- [ ] `T0c` — Commit SHA in the image + public `/api/health`
+  - Files: `Dockerfile` (runner `ARG`/`ENV GIT_SHA`), `.github/workflows/docker-publish.yml` (`build-args`), `src/app/api/health/route.ts` (new), `src/proxy.ts` (public allowlist)
+  - Estimate: small
+  - Kind: impl
+  - Notes: FR-P0-3/4, AC-P0-3. Returns exactly `{ ok, commit }`; no auth; nothing else exposed. E2E case: 200 without a session.
+
+- [ ] `T0d` — Post-deploy verification + current action majors
+  - Files: `.github/workflows/docker-publish.yml`
+  - Estimate: small
+  - Kind: config
+  - Depends: T0b, T0c
+  - Notes: FR-P0-5/6, AC-P0-2/4. Poll prod `/api/health` until `commit == github.sha` (~10 min cap, to cover boot-time migrations); scheduler verified via the Coolify deployment status. Bump `checkout` and the `docker/*` actions to current majors (match `e2e.yml`'s `checkout@v7`).
+
+- [ ] `T0e` — Node 20 → 22 _(separate commit, so it reverts alone)_
+  - Files: `Dockerfile` (3 `FROM` lines), `.github/workflows/e2e.yml` (3× `node-version`), `package.json` (`engines`)
+  - Estimate: medium
+  - Kind: config
+  - Notes: FR-P0-7, AC-P0-5. The risk is the native pieces in the runner image (Alpine `chromium`, Prisma linux-musl engines, the Claude Code CLI), not app code. Prove with `docker build` + full mock E2E + one **real** render inside the image + `claude --version` inside the image. Docker Desktop must be running locally.
+
+- [ ] `T0f` — Correct the deploy note in CLAUDE.md
+  - Files: `CLAUDE.md`
+  - Estimate: small
+  - Kind: docs
+  - Notes: CLAUDE.md currently states "a green `main` build **does** now redeploy prod". Record the 401 incident and that a deploy is only confirmed when `/api/health` reports the commit, so the next session doesn't trust a stale claim.
 
 ### Wave 1 — Phase 1: glyph coverage, real-render harness, placeholder reconciliation
 
@@ -37,6 +76,12 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Depends: T1
   - Notes: FR-23, AC-01/02/03. Runs real `renderHtmlToPng` with `MOCK_PUPPETEER` **off**. Tofu detection compares the candidate glyph against a known-covered control glyph at the same size rather than matching an absolute pattern — a replacement box has a uniform-rectangle signature no real glyph has. This harness is the compounding asset: proposal 007 and every future font/render question reuse it. Include a `★` case that fails without T1 and passes with it.
   - ⚠️ **Split what this proves.** AC-02 (the harness detects tofu) is provable locally. AC-01 (the runner image actually has the glyph) is **not** — see T1. The `★` case will pass locally on Windows regardless of T1, so a green local run is not evidence the font fix works. Make the harness runnable inside the image so CI and a local `docker build` can both execute it.
+
+- [ ] `T3a` — No-emoji guidance in the shared design prompt note _(added 2026-09-23)_
+  - Files: `src/lib/agent/prompts/shared.ts`, `src/lib/agent/prompts/*` (version constant)
+  - Estimate: small
+  - Kind: impl
+  - Notes: FR-21a, AC-07a. One line in `SCRIPT_SUPPORT_NOTE`: use symbols from the covered set (★ ✓ → etc.), never emoji, in the rendered design. Captions unaffected. Bump `PROMPT_VERSION`. User decision 2026-09-23: monochrome coverage only, so emoji must not be emitted into designs.
 
 - [ ] `T4` — Inline-asset reconciliation replacing detection
   - Files: `src/lib/agent/inlineAssets.ts`, unit tests
@@ -63,7 +108,7 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Estimate: large
   - Kind: impl
   - Depends: T5
-  - Notes: FR-08/09/10, AC-12/13/14. Result is `pass` | `miss` | `unavailable`, and **`unavailable` routes exactly as `miss`** — there is no default-commit path. Structural post-conditions for `remove`/`constrain`/`replace` spend zero model calls. Only `add` calls a model, receiving extracted facts (element presence, text lengths) plus delimited content declared as data, never the raw document as ground truth. Verdict must be machine-readable; unparseable is a miss.
+  - Notes: FR-08/09/10, FR-14b, AC-12/13/14/20b. The `add` verifier call is **pinned to Haiku** inside this module — it takes no model parameter, so proposal 008's model picker can never route it elsewhere. Result is `pass` | `miss` | `unavailable`, and **`unavailable` routes exactly as `miss`** — there is no default-commit path. Structural post-conditions for `remove`/`constrain`/`replace` spend zero model calls. Only `add` calls a model, receiving extracted facts (element presence, text lengths) plus delimited content declared as data, never the raw document as ground truth. Verdict must be machine-readable; unparseable is a miss.
 
 - [ ] `T8` — Phase 2 migration: not-applied outcome and rejected-render retention
   - Files: `prisma/schema.prisma`, `prisma/migrations/*`
@@ -94,6 +139,13 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Depends: T10
   - Notes: FR-14, AC-18. Name the poll field explicitly — party-architect's point is that client and server halves of one merge disagree without it. Hard failure, not a dismissible warning on a committed revision.
 
+- [ ] `T11a` — "Use anyway": adopt a rejected render _(added 2026-09-23)_
+  - Files: `src/app/api/drafts/[id]/revisions/[rev]/adopt/route.ts` (new), `src/lib/drafts/revisions.ts`, `src/components/drafts/RefinementPanel.tsx`, `prisma/schema.prisma` (fold into T8's migration)
+  - Estimate: medium
+  - Kind: impl
+  - Depends: T9, T11
+  - Notes: FR-14a, AC-20a. The not-applied failure shows the rejected render's preview + **Use anyway**. The route claims `pendingAction` (single-flight, 409 on contention), then commits the rejected row's snapshot + export as a **fresh** normal revision via `commitDraftRevision`, marked user-accepted, and advances the pointer. The rejected row is never itself pointed at — T9's filter invariant holds. Record the adoption on the rejected row so a second adopt is a 409. Team-scoped like every draft route (cross-team → 404).
+
 - [ ] `T12` — Deterministic verification-miss seam
   - Files: `src/lib/testHooks.ts`
   - Estimate: small
@@ -106,7 +158,7 @@ Two migrations, one per phase, deliberately not merged — a single migration wo
   - Estimate: large
   - Kind: test
   - Depends: T10, T11, T12
-  - Notes: AC-08 through AC-20. Must include the two reported failures as regression cases: "reduce the text" (a `remove` whose output must be measurably shorter) and "use the uploaded image as the background" (a `replace` whose superseded element must be absent — the duplicate-image export must fail this).
+  - Notes: AC-08 through AC-20b (incl. adopt-once and the Haiku-pinned verifier). Must include the two reported failures as regression cases: "reduce the text" (a `remove` whose output must be measurably shorter) and "use the uploaded image as the background" (a `replace` whose superseded element must be absent — the duplicate-image export must fail this).
 
 ### Wave 4 — Phase 3: element-targeted editing
 

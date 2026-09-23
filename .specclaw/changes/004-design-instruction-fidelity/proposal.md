@@ -47,6 +47,13 @@ Make the refine path state **what kind of change** is being asked for, **prove**
 
 Ordered by reversibility. Each phase is independently shippable and independently revertible; later phases must not start before the phase above them has landed.
 
+**Phase 0 — deploy pipeline (added 2026-09-23; own PR to `main`, ships first).**
+
+- Coolify token rotation (ops handoff, `docs/coolify-token-rotation.md`)
+- `docker-publish.yml`: readable redeploy failures, both redeploys always attempted, post-deploy commit verification, current action majors
+- A version/health endpoint and the commit SHA baked into the image, so "prod runs the new commit" is checkable
+- Node 20 → 22 across the Dockerfile, CI and `engines`
+
 **Phase 1 — no residue, deletable in one commit.**
 
 - `Dockerfile` — monochrome symbol font coverage in the runner stage, plus recording the installed font set beside `PROMPT_VERSION`
@@ -101,6 +108,18 @@ All dated 2026-09-15. Items marked **(panel)** were decided in response to a par
 - **One source, two consumers. (panel)** A single per-class table generates **both** the refine prompt's instruction-semantics block and the verifier's acceptance criterion. They cannot drift because there is one definition. This closes `party-visionary`'s silent-false-negative mode — a loosened refine prompt with an unchanged verifier producing "couldn't apply" on refines that in fact worked.
 - **Problem statement scoped to its evidence. (panel)** `party-ba`'s objection accepted: the claim is now four traced failures from one session, not a measured systemic failure, and the font generalization is labelled as inferred from the root cause. The root causes carry the argument; the larger claim was unnecessary and would have been the first thing a skeptical reviewer attacked.
 - **The rasterizing E2E is a reusable harness, not one case. (panel)** Its named first assertion is a glyph-agnostic **tofu/replacement-glyph check** against the real runner image — one check that would have caught both the 2026-07-28 Sinhala bug and today's `4.8⍰`. It is also where the verification-miss seam and the font-set assertion live.
+
+**Added 2026-09-23 (user decisions, made after proposals 008–011 were written):**
+
+- **Emoji stay out of scope; the design agent is told not to use them.** The user confirmed monochrome symbol coverage only (★, ✓, arrows) — no colour emoji font. Because a colour emoji the agent emits would then render mono or as tofu, the shared design prompt note (`SCRIPT_SUPPORT_NOTE` in `prompts/shared.ts`) gains one line: use symbols from the covered set, never emoji, in rendered designs. Captions are unaffected — emoji in post copy are published as text, not rasterized.
+- **A rejected refine can be adopted with "Use anyway".** This amends the failed-verification decision above. The pointer still does not advance and the rejected render is still retained out-of-chain — but the "couldn't apply" failure now shows a **preview** of the rejected attempt with a **Use anyway** action. Adopting it commits the retained render as a normal revision through `commitDraftRevision` (one writer, one new revision), labelled as user-accepted despite a failed check. Rationale: structural post-conditions can be wrong for edge-case designs (design.md Risks), and a false negative should cost the user one click, not a lost edit. Reversibility is preserved: nothing enters the chain unless a person chooses it, and an adopted revision is an ordinary revision Undo can step back from.
+- **The verifier runs on a fixed Haiku model; the retry uses the user's refine model.** Proposal **008** lets users pick Opus for refine. The verifier is a small machine-readable judgement (and only `add` spends it), so it is an **internal** step pinned to Haiku, not a user-selectable surface. The single retry re-runs the refine on the model the user chose. Worst case for an Opus refine is therefore 2 Opus + 2 Haiku calls, not 4 Opus.
+- **Phase 0 — the deploy pipeline is broken, and is fixed first. (added 2026-09-23)** The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)) built and pushed the image, then **Coolify rejected the redeploy with `401`**. The `COOLIFY_API_TOKEN` secret no longer authenticates, and the scheduler redeploy never ran. No harm yet (that commit was docs-only; prod's code is unchanged), but **every future merge to `main` builds without deploying**, including the eventual `v2` merge. That's the same shape as PR #39's lesson: _a merged + CI-built fix can still be inert_. User decisions:
+  - **The token is rotated by the Coolify administrator** (not the user, not Claude), from the handoff in `docs/coolify-token-rotation.md`. Phase 0 is blocked on it for its final proof.
+  - **Phase 0 ships as its own small PR to `main` now** — the one exception to the `v2` rule. The deploy steps only run on pushes to `main`, so a pipeline fix cannot be proven from `v2`, and the `v2` merge must not be the first time the fixed pipeline runs.
+  - **Hardening, all four:** (1) readable failure messages plus **post-deploy verification** that prod serves the new commit; (2) bump `docker-publish.yml`'s actions off Node 20 (`e2e.yml` is already current); (3) move the image **from `node:20-alpine` to `node:22-alpine`**; (4) the scheduler redeploy runs **even if the app redeploy fails**, and the job fails at the end with both results, so one failure can't hide the other.
+  - The earlier E2E failures on PR #41 (`Start MinIO`) are **already fixed** in that PR (Docker Hub withdrew `minio/minio`; every reference now uses `quay.io`) — not part of Phase 0.
+- **Release: an integration branch `v2`, not one PR per phase.** All three phases — and the other roadmap changes built after them — land on one long-lived branch `v2`, which is pushed to `origin` and merged to `main` in one go **only after it is confirmed working and the user gives the go-ahead**. Phases stay internally ordered and independently revertible on `v2` (one commit series per phase). Consequence to note: `main` is what CI auto-deploys to prod, so nothing on `v2` reaches production until that merge — confirmation has to happen locally or on a separate environment.
 
 ## Open Questions
 
