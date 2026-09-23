@@ -5,7 +5,14 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 ## ✅ Outstanding work — START HERE (updated 2026-09-23)
 
 - **⏸️ 2026-09-23 — PICK UP HERE. Planning only, no product code changed.** Full detail: [`docs/handoff.md`](docs/handoff.md) top section. Order and dependencies: [`.specclaw/ROADMAP.md`](.specclaw/ROADMAP.md).
-  - **Work lives on branch `v2`** (pushed). All roadmap work, 004–011, lands there and merges to `main` **in one go, only once confirmed working and on the user's go-ahead**. `main` auto-deploys, so nothing on `v2` is on prod. **Exception: 004 Phase 0** ships as its own PR to `main` on `fix/ci-deploy-pipeline`, because deploy steps only run on `main`.
+  - **Added later on 2026-09-23 (planning only):**
+    - **New proposal 012: per-channel captions.** Instagram, LinkedIn and WhatsApp each get their own caption, panel, counter and regenerate, and each is published to its own channel.
+      - It fixes a live bug: `Draft.copyText` is one unstructured string, and `publishDraft.ts` / `jobRunner.ts` send the **whole combined caption to every channel**.
+      - It renames "copy" → "caption" in the UI, the docs and the code it touches. **The `COPY` provider slot keeps its name**, because it also drives brand-voice drafting.
+    - **011 gains a floating bottom-right "Create post" button.** It is hidden on `/brief`, the dashboard card stays, toasts are offset above it, and it can ship early.
+    - **Order:** 011 foundation → **012** → 008 → 009 → 010. 012 → 010 is now a hard dependency.
+    - **Naming:** write "caption", not "copy", in new docs and UI. The launch video's current cut is `brag-output/bistec-studio-v2.mp4` (local only, gitignored).
+  - **Work lives on branch `v2`** (pushed). All roadmap work, 004–012, lands there and merges to `main` **in one go, only once confirmed working and on the user's go-ahead**. `main` auto-deploys, so nothing on `v2` is on prod. **Exception: 004 Phase 0** ships as its own PR to `main` on `fix/ci-deploy-pipeline`, because deploy steps only run on `main`.
   - **🔴 Merges to `main` build but do NOT deploy.** Since 2026-09-15 the Coolify redeploy returns **401**: `COOLIFY_API_TOKEN` is dead ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)). Prod runs `9ea4c045`, the same code as `main`, because `09a38b71` was docs-only.
     - The token is rotated by the **Coolify administrator**, using [`docs/coolify-token-rotation.md`](docs/coolify-token-rotation.md).
     - The code hardening is **004 Wave 0** (T0b–T0f): readable failures, both redeploys always attempted, `/api/health` → `{ ok, commit }`, CI verifying the deployed commit, actions off Node 20, Node 20 → 22.
@@ -300,7 +307,7 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 
 ### Specification & planning
 
-- **[`.specclaw/ROADMAP.md`](.specclaw/ROADMAP.md)** — the open changes 004–011 (none built yet): recommended order, hard/soft dependencies, and which change owns what where they overlap. **Read before planning or building any of them.** Each change's `proposal.md` is the source of truth for its own scope.
+- **[`.specclaw/ROADMAP.md`](.specclaw/ROADMAP.md)** — the open changes 004–012 (none built yet): recommended order, hard/soft dependencies, and which change owns what where they overlap. **Read before planning or building any of them.** Each change's `proposal.md` is the source of truth for its own scope.
 - **[`docs/coolify-token-rotation.md`](docs/coolify-token-rotation.md)** — ops handoff for the dead Coolify deploy token (merges don't deploy until it's rotated).
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary
 - **[`.specclaw/changes/001-marketing-post-studio-v1/spec.md`](.specclaw/changes/001-marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements

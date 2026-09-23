@@ -11,7 +11,7 @@ Where the models are fixed today:
 
 | Surface                                                   | Model today                       | Where it's fixed                                                                        |
 | --------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------- |
-| Caption (copy)                                            | Haiku                             | `claudeCli.ts:25` fallback (CLI); `providers/implementations/copy/anthropic.ts:8` (API) |
+| Caption                                                   | Haiku                             | `claudeCli.ts:25` fallback (CLI); `providers/implementations/copy/anthropic.ts:8` (API) |
 | Design, template fill (Path A)                            | Haiku                             | `agent/config.ts:24,28`                                                                 |
 | Design, freeform (Path B) + regenerate-design             | Sonnet 4.6                        | `agent/config.ts:25,29`                                                                 |
 | Refine                                                    | Haiku / Sonnet by design mode     | `api/drafts/[id]/refine/route.ts:160,170`                                               |
@@ -33,7 +33,7 @@ One model catalogue, one resolver, three places to choose.
 
 1. **Model catalogue** in `src/lib/agent/config.ts`: Haiku 4.5, Sonnet 5, Opus 5.5. Each entry carries its full API ID, a display name, a relative cost/speed label, and a per-surface timeout. The **full ID is passed in both modes** (`claude -p --model` accepts full IDs; see the `claudeCli.ts:20` comment), so CLI and API always run the same version.
 2. **Named surfaces.** Every model call declares one:
-   - `copy`
+   - `caption` (named `caption`, not `copy`, to match **012**'s rename)
    - `design.template`
    - `design.freeform`
    - `refine`
@@ -57,7 +57,7 @@ One model catalogue, one resolver, three places to choose.
    - The last pick per surface is remembered per user.
 5. **Team defaults + allow-list at `/team`** (team admins). **Decided 2026-09-23: Opus is allowed for everyone by default**; admins can remove any model from their team's list. The server always validates against the allow-list and never trusts the client.
 6. **Non-interactive callers use the team default:** the scheduler, MCP and ACP have no acting user (they pass `null` to `withClaudeAuth`). A `ScheduledGeneration` may optionally pin models at plan time.
-7. **Stamp what ran.** `Draft.copyModel`, `Draft.designModel` and `DraftRevision.model` sit beside `promptVersion`. Output can then be compared by model, and proposal **006**'s traces can read the field instead of re-deriving it.
+7. **Stamp what ran.** `Draft.captionModel`, `Draft.designModel` and `DraftRevision.model` sit beside `promptVersion`. Output can then be compared by model, and proposal **006**'s traces can read the field instead of re-deriving it.
 8. **Timeouts scale with the model.** A per-model design timeout, e.g. Opus ~600s against today's 300s, **kept strictly under the 15-minute stale sweeps**, or those sweeps become model-aware. A generation must never be marked FAILED by the sweep while its model call is still legitimately running.
 
 ## Scope
@@ -76,8 +76,8 @@ One model catalogue, one resolver, three places to choose.
 
 ### Out of Scope
 
-- Choosing the **provider or credential route** for copy (OAuth CLI vs a registered API key). That is proposal **005** item 2. This proposal picks **which Claude model** runs on whichever route 005 selects; the two compose and must not duplicate UI.
-- Non-Claude text models (OpenAI, Gemini) for copy or design
+- Choosing the **provider or credential route** for captions (OAuth CLI vs a registered API key). That is proposal **005** item 2. This proposal picks **which Claude model** runs on whichever route 005 selects; the two compose and must not duplicate UI.
+- Non-Claude text models (OpenAI, Gemini) for captions or design
 - Image-model selection (gpt-image vs Gemini is **005** item 4)
 - Per-user spend caps or budgets; cost visibility belongs to **006**
 - Letting users pick the model for internal steps (background decision, token ping)

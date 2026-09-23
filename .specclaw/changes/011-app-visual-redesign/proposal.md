@@ -41,7 +41,15 @@ The fixed header sits above scrolling content at 60–75% opacity, so text scrol
 
    Each screen is a separately shippable unit.
 
-6. **Self-hosted assets stay the rule.** No runtime font or icon CDN, per the existing `DESIGN_SYSTEM.md` §0 decision. The `high-end-visual-design` skill is used as **guidance**. None of its files enter the repository (the same licence caution proposal **007** recorded for design skills that ship no licence).
+6. **Floating "Create post" button (added 2026-09-23), part of the app shell.** A shortcut to start a brief from anywhere.
+   - **Today:** the only entry point is the dashboard's **Create Post** quick action (`src/app/(app)/page.tsx:219`), plus the empty state in Recent Drafts. There is no create link in the sidebar, library, campaigns or projects.
+   - **Placement (decided 2026-09-23):** fixed **bottom-right** on every `(app)` page, desktop and mobile. It links to `/brief`.
+   - **Hidden on `/brief` itself.**
+   - **The dashboard quick action stays.** The button is an additional shortcut, not a replacement.
+   - **Toasts move out of its way.** Sonner's Toaster is `position="bottom-right"` (`src/components/providers/ToastProvider.tsx:28`), in the same corner. Proposed: an `offset` so toasts stack above the button. The measurable rule: **a toast never overlaps the button**.
+   - It is a floating surface, so it follows item 2's rule: **opaque**, with visible focus and an accessible name ("Create post").
+   - **It can ship ahead of the rest of 011** as its own small unit in the current style, and be restyled when the tokens land. It does not need to wait for the direction studies.
+7. **Self-hosted assets stay the rule.** No runtime font or icon CDN, per the existing `DESIGN_SYSTEM.md` §0 decision. The `high-end-visual-design` skill is used as **guidance**. None of its files enter the repository (the same licence caution proposal **007** recorded for design skills that ship no licence).
 
 ## Scope
 
@@ -50,6 +58,7 @@ The fixed header sits above scrolling content at 60–75% opacity, so text scrol
 - Direction studies + a chosen direction, recorded in a new `DESIGN_SYSTEM.md` (Frozen Light archived)
 - Token foundation (Tailwind theme + CSS variables) for colour, type, spacing, radius, elevation, motion
 - Opaque surface model for every fixed, sticky or floating surface; retiring `.glass` / `.glass-panel` in those roles
+- Floating bottom-right **Create post** button in the app shell (hidden on `/brief`; toasts offset above it; dashboard quick action kept). It is the one small _behaviour_ addition in this change, and it is shippable early on its own.
 - Restyle of every screen under `src/app/(app)/` plus the login and choose-team pages
 - Shared UI primitives in `src/components/ui/` (Button, Modal, Select, inputs, toggles, toasts, lightbox) rebuilt on the tokens
 - Dark and light themes, with a visual check of both on every restyled screen
@@ -58,7 +67,7 @@ The fixed header sits above scrolling content at 60–75% opacity, so text scrol
 ### Out of Scope
 
 - The **generated posts'** design — proposals **004**, **007**, **009**
-- New features or flows. This proposal restyles; it does not rearrange product behaviour. The new pickers from **008** and the WhatsApp handoff screen from **010** should be **built in the new style**, not restyled twice.
+- New features or flows (the Create post button above is the one exception). This proposal restyles; it does not otherwise rearrange product behaviour. The three caption panels from **012** are new UI owned by 012, built in this style if the foundation has landed. The new pickers from **008** and the WhatsApp handoff screen from **010** should be **built in the new style**, not restyled twice.
 - A marketing website or landing page
 - Changing icon libraries unless the chosen direction requires it
 
@@ -78,6 +87,7 @@ The fixed header sits above scrolling content at 60–75% opacity, so text scrol
 - How many direction studies, and who approves the choice (you alone, or the marketing team)?
 - Does the default theme stay "follow OS preference", or does the new direction lead with one theme?
 - Should the E2E suite gain visual-regression screenshots per screen during the restyle, or is that heavier than it is worth?
+- **Create post button:** icon + label ("+ Create post") or icon only, with a tooltip? Proposed: icon + label on desktop, icon-only below `md`. Also, should it resume the newest unfinished brief (002's `BriefDraft`) or always start fresh? Proposed: always start fresh; resuming stays on the dashboard.
 - Mobile: the app is desktop-first today, but **010**'s handoff is used on a phone. Does the redesign make the whole app responsive, or only the screens a phone needs?
 
 ---

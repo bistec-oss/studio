@@ -1,7 +1,7 @@
 # 🦞 SpecClaw Dashboard
 
 **Project:** bistec-studio
-**Last Updated:** 2026-09-23 10:57 UTC
+**Last Updated:** 2026-09-23 11:49 UTC
 
 ## Active Changes
 
@@ -19,6 +19,7 @@
 - 📋 **009-hero-image-design** — proposal ready, awaiting planning
 - 📋 **010-whatsapp-channel-posting** — proposal ready, awaiting planning
 - 📋 **011-app-visual-redesign** — proposal ready, awaiting planning
+- 📋 **012-per-channel-captions** — proposal ready, awaiting planning
 
 ## Recently Completed
 

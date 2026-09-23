@@ -39,7 +39,7 @@ WhatsApp becomes a first-class channel whose publisher **hands off to a person**
    - At due time they are alerted, with an in-app "Ready to post" badge and queue as the always-available baseline.
    - Out-of-app delivery (email, web push, or a WhatsApp message to the poster's own number via the Cloud API) is an open question below. The product has **no notification infrastructure today**.
    - Overdue items (not posted within a configurable window) are flagged and re-alerted, never silently dropped.
-5. **A WhatsApp caption variant.** Copy generation currently writes `INSTAGRAM:` / `LINKEDIN:` sections. Add a WhatsApp variant using WhatsApp's own formatting (`*bold*`, `_italic_`, no Markdown `**`). Keep it short, with the link in the body since there is no "link in bio".
+5. **The WhatsApp caption comes from 012 (moved 2026-09-23).** Proposal **012 (per-channel captions)** gives every draft its own Instagram, LinkedIn and WhatsApp caption. The WhatsApp one uses WhatsApp's formatting (`*bold*`, `_italic_`, no Markdown `**`), is short, and puts the link in the body. 010 only **consumes** it: the handoff screen shows it and **Copy caption** copies it. (Correction: this item previously said generation "currently writes `INSTAGRAM:` / `LINKEDIN:` sections". It does not. That was the model's own formatting inside one unstructured string, which 012 replaces.)
 6. **`/team` configuration:** the Channel's name and invite link, plus the designated posters. No credential is stored, because none exists. That is a deliberate difference from `ChannelToken`, which assumes an encrypted token.
 7. **MCP / ACP parity.** Publish tools accept `WHATSAPP` and return `awaiting_manual` with the handoff link, instead of pretending the post went out.
 
@@ -51,7 +51,7 @@ WhatsApp becomes a first-class channel whose publisher **hands off to a person**
 - Mobile-first handoff screen: Web Share with file, download, copy caption, open WhatsApp, mark as posted
 - Designated posters + Channel config at `/team`
 - In-app "Ready to post" badge/queue and overdue flagging
-- WhatsApp caption variant in the copy prompt (`PROMPT_VERSION` bump)
+- Consuming 012's WhatsApp caption on the handoff screen (generating it is **012**'s scope)
 - Tests: the scheduler hands off (does not publish) a due WhatsApp post; the duplicate guard covers `AWAITING_MANUAL`; mark-as-posted transitions; handoff is team-scoped (cross-team → 404)
 
 ### Out of Scope
@@ -64,12 +64,14 @@ WhatsApp becomes a first-class channel whose publisher **hands off to a person**
 
 ## Dependencies
 
+- **012 (per-channel captions) should land first.** It supplies the WhatsApp caption and makes the publish service send each channel its own caption. Without it, WhatsApp would inherit the single combined string that Instagram and LinkedIn get today.
+
 - **B4 (scheduler resource not running on prod) must be fixed first.** Scheduled WhatsApp handoffs are raised by the worker. With the worker down, a scheduled WhatsApp post would sit in `SCHEDULED` forever, exactly like B4's HOLD entry. Manual "publish now" works without it.
 - **006 item 7 (scheduler heartbeat)** is strongly recommended alongside. A missed handoff is a missed post, and it is the same "nothing self-reports" failure B4 was.
 
 ## Impact
 
-- **Files affected:** ~15–25 (estimated) — schema + migration, `publishDraft.ts`, `jobRunner.ts`, campaign queue, `PublishDialog.tsx`, library, new handoff page + route, `/team` section, copy prompt, MCP/ACP publish tools, tests
+- **Files affected:** ~15–25 (estimated) — schema + migration, `publishDraft.ts`, `jobRunner.ts`, campaign queue, `PublishDialog.tsx`, library, new handoff page + route, `/team` section, MCP/ACP publish tools, tests
 - **Complexity:** medium
 - **Risk:** low-medium. No external API and no credentials. The main risks are process ones: the handoff relies on a person acting, so alerting and overdue flagging carry the reliability. The job-runner change must exclude WhatsApp from the auto-publish claim, or it would try (and fail) to publish.
 

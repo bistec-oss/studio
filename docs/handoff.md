@@ -1,13 +1,60 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-09-23 (latest: planning session — proposals 008–011 + roadmap, 004 re-planned to 24 tasks incl. Phase 0, and the deploy pipeline found broken: Coolify 401 since 2026-09-15). Previous: 2026-07-28 (copy-edit status clobber fix).
+**Date:** 2026-09-23 (latest, later the same day: proposal **012** per-channel captions + copy→caption rename, a floating **Create post** button folded into 011, and a launch-video legibility pass. Before that: planning session — proposals 008–011 + roadmap, 004 re-planned to 24 tasks incl. Phase 0, and the deploy pipeline found broken: Coolify 401 since 2026-09-15). Previous: 2026-07-28 (copy-edit status clobber fix).
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** work continues on **`v2`** (integration branch, pushed; all 004–011 work lands here, merged to `main` in one go on go-ahead). `main` = `09a38b71` (PR #41, docs); prod runs `9ea4c045` because the #41 redeploy 401'd. Exception: 004 Phase 0 ships as its own PR to `main`.
+**Branch:** work continues on **`v2`** (integration branch, pushed; all 004–012 work lands here, merged to `main` in one go on go-ahead). `main` = `09a38b71` (PR #41, docs); prod runs `9ea4c045` because the #41 redeploy 401'd. Exception: 004 Phase 0 ships as its own PR to `main`.
 **Production:** `https://studio.bistecglobal.com`
 
 ---
 
-## ⏸️ 2026-09-23 (latest) — PICK UP HERE
+## ⏸️ 2026-09-23 (later) — PICK UP HERE
+
+**Planning only, no product code changed.** Two additions to the roadmap, and a legibility pass on the launch video. Everything in the earlier 2026-09-23 section below still stands. **Next actions are unchanged except for step 4's order.**
+
+### What was added
+
+- **New proposal 012 — per-channel captions** ([`.specclaw/changes/012-per-channel-captions/proposal.md`](../.specclaw/changes/012-per-channel-captions/proposal.md)):
+  - **Three captions per draft: Instagram, LinkedIn, WhatsApp.** Each gets its own panel on the draft page with a per-channel counter, Regenerate, undo and copy-to-clipboard. Each is published to its own channel.
+  - **It fixes a real bug found while planning.** `Draft.copyText` is **one** unstructured string. The `**INSTAGRAM:** … **LINKEDIN:** …` blocks are the model's own habit; the prompt never asks for them and nothing parses them. As a result, `publishDraft.ts:33-44` and `jobRunner.ts:63,77` send the **whole combined string to every channel**, literal `**` included. The editor counter also measures the whole string against the smallest limit ("1451 / 2200 (Instagram)").
+  - **Rename "copy" → "caption".**
+    - **Scope (user decision): UI + docs, plus code where the change touches it.** `regenerate-copy` → `regenerate-caption`, `REGENERATE_COPY` → `REGENERATE_CAPTION`, `CopyEditor` → `CaptionPanels`, and so on.
+    - **The `COPY` provider slot and `Brief.copyProviderKey` keep their names.** That slot also drives brand-voice drafting (`providers/registry.ts:92-106`), so calling it CAPTION would be wrong.
+    - **The clipboard sense of "copy" is untouched.**
+  - **Open questions for the plan phase:** the storage shape (three columns vs a `DraftCaption` table vs JSON); which caption feeds the design agent as on-image text (proposed: Instagram); the WhatsApp length limit; whether revisions should snapshot captions.
+- **011 gains a floating "Create post" button** (item 6), as part of the app shell:
+  - **Bottom-right** on every `(app)` page, hidden on `/brief`. The dashboard's Create Post quick action **stays**.
+  - Sonner toasts are also bottom-right (`ToastProvider.tsx:28`), so they get an offset. The rule: a toast never overlaps the button.
+  - It is opaque per 011's surface rule, and **can ship early on its own** ahead of the direction studies.
+- **Knock-on edits:**
+  - **010:** item 5 (the WhatsApp caption) now belongs to 012. 010 only consumes the caption, and 012 → 010 is a new hard dependency. It also corrects 010's wrong claim that generation "writes INSTAGRAM:/LINKEDIN: sections".
+  - **008:** the surface is named `caption` and the stamp `Draft.captionModel`.
+  - **ROADMAP:** 012 is in **Stage 3, ahead of 008**, and the button is an optional Stage 1 quick win. Boundaries and parallel-work cautions are updated.
+
+### Decisions made (settled, don't re-ask)
+
+| Topic                   | Decision                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Caption channels        | **Instagram, LinkedIn, WhatsApp.** WhatsApp is caption-only (copy + paste) until 010's handoff ships. |
+| Rename depth            | UI + docs, code identifiers where 012 touches them; `COPY` provider slot unchanged.                   |
+| Create post button      | **Bottom-right**, all app pages except `/brief`; keep the dashboard card; toasts offset above it.     |
+| Where it lives in plans | Captions = new change **012**; the button = folded into **011** (app shell), shippable early.         |
+
+### Revised step 4 of "Next actions"
+
+Review proposals 005–012 with the user, then `/specclaw:plan` them in roadmap order: **011 foundation (optionally the Create post button first) → 012 → 008 → 009 → 010**, then the rest.
+
+### Launch video (not in git)
+
+`brag-output/` is gitignored, so it exists **only on this machine**.
+
+- `bistec-studio-v2.mp4` is the current cut. It has larger workflow-step cards (titles 56px, step descriptions 19px bright mono) and much larger bottom-left scene captions (42px; the Scene 2 stack is 30px so it stays clear of the post).
+- Its poster is `brag-v2.jpg`, also baked in as frame 0.
+- The original `bistec-studio.mp4` / `brag.jpg` are kept.
+- The composition source is `brag-output/composition/index.html`. Re-render from that folder with `npx hyperframes@0.8.61 render --quality high`, with `composition/.bin` on PATH for ffmpeg.
+
+---
+
+## ⏸️ 2026-09-23 (earlier) — planning session 008–011
 
 **Planning session, no product code changed.** Output: four new proposals (008–011), a roadmap sequencing 004–011, a revised 004 plan (now 24 tasks, including a new **Phase 0** for a broken deploy pipeline), and a handoff for the Coolify admin.
 
@@ -37,7 +84,7 @@ The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/s
 1. **Send the Coolify handoff** to whoever administers Coolify. Ask them to also read the **scheduler** resource's first log lines, which identify the B4 cause (`docs/scheduler-b4-diagnosis-2026-08-03.md`).
 2. **Build 004 Phase 0.** `git switch main && git pull && git switch -c fix/ci-deploy-pipeline`, then T0b → T0f. Put **T0e (Node 22) in its own commit.** It needs Docker Desktop running for `docker build`, and a real render + `claude --version` inside the image. Open the PR to `main`. Merge only on the user's go-ahead. After merging, **merge `main` into `v2`** so `v2` carries it.
 3. **004 Phases 1 → 3 on `v2`** (Waves 1–4, hard-ordered). Phase 1's font fix (AC-01) is only provable inside the built image, never on Windows (host Chromium has Segoe UI Symbol).
-4. **Review proposals 005–011** with the user (each ends in open questions), then `/specclaw:plan` them one at a time in roadmap order: **011 foundation → 008 → 009 → 010**, then the rest.
+4. **Review proposals 005–012** with the user (each ends in open questions), then `/specclaw:plan` them one at a time in roadmap order: **011 foundation → 012 → 008 → 009 → 010**, then the rest. _(Revised later on 2026-09-23; see the section above.)_
 5. **Stage-0 ops still outstanding from July:** team Claude token on both prod teams; mark each team's IMAGE provider `isDefault`; B4.
 
 ### Decisions made this session (settled, don't re-ask)
@@ -62,7 +109,7 @@ The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/s
   - Whether WhatsApp's share sheet lists **Channels** as a destination from a phone browser (010). Needs a real device.
   - gpt-image-2 multi-image input and transparent-background support (009).
   - The exact Coolify v4 menu path for API tokens (the handoff says to check it).
-- **Uncommitted, not ours:** a `.gitignore` edit (ignores `brag-output*/`) from an earlier session is still in the working tree, deliberately left out of commits.
+- **Uncommitted:** a staged `.gitignore` edit (ignores `brag-output*/`, the launch-video output) is still in the working tree, deliberately left out of commits. Commit it or drop it; it is harmless either way.
 - Local Postgres + MinIO containers (`designer-postgres-1`, `designer-minio-1`) were started this session and left running.
 - The Bistec Studio launch post was exported to `~/Downloads/` (`bistec-studio-launch-post.png`, a polished `-v2.png` + `.html`, and captions). The `v2.html` only renders with local MinIO up, because it loads the background and logo from `localhost:9000`. The DB draft (`cmrkg2f6a000g1lee5aktmqxj`) is unchanged.
 
