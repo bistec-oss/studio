@@ -1,13 +1,74 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-28 (latest: a copy edit was flipping `Draft.status` to `IN_PROGRESS`, breaking the library, Refine, regenerate-copy and the copy field at once — fixed, with a read-time + migration heal for stranded drafts. Earlier: team-admin brand-kit access + Sinhala font rendering; **PR #39** made deploys apply migrations; **PR #40** removed the wizard's stale COPY-provider gate.)
+**Date:** 2026-09-23 (latest: planning session — proposals 008–011 + roadmap, 004 re-planned to 24 tasks incl. Phase 0, and the deploy pipeline found broken: Coolify 401 since 2026-09-15). Previous: 2026-07-28 (copy-edit status clobber fix).
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` — **PR #40** `21f95035` (brief-wizard CLI copy gate) on top of **PR #39** `16e1a069` (migrate on boot), **PR #38** `b35d96bd` (team-name reuse), PR #37 `fb8216c3`, PR #35 `d01ac4d2`, PR #36 `3dcac485`, prod-fix PR #30 `4e8e6e3e`, team-tenancy PR #29 `2a118a73`. All merged; no open branches.
+**Branch:** work continues on **`v2`** (integration branch, pushed; all 004–011 work lands here, merged to `main` in one go on go-ahead). `main` = `09a38b71` (PR #41, docs); prod runs `9ea4c045` because the #41 redeploy 401'd. Exception: 004 Phase 0 ships as its own PR to `main`.
 **Production:** `https://studio.bistecglobal.com`
 
 ---
 
-## ⏸️ 2026-07-28 (latest) — PICK UP HERE
+## ⏸️ 2026-09-23 (latest) — PICK UP HERE
+
+**Planning session, no product code changed.** Output: four new proposals (008–011), a roadmap sequencing 004–011, a revised 004 plan (now 24 tasks, including a new **Phase 0** for a broken deploy pipeline), and a handoff for the Coolify admin.
+
+### Where things are
+
+| What                                  | Where                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| All roadmap work (004–011)            | branch **`v2`** (pushed to `origin`, branched from `main` `09a38b71`). Planning commit `71cdc9ad` + this handoff commit.              |
+| `main`                                | untouched at `09a38b71`. **Prod runs `9ea4c045`** (same code; `09a38b71` was docs-only and never deployed, see the CI finding below). |
+| Order + dependencies                  | [`.specclaw/ROADMAP.md`](../.specclaw/ROADMAP.md): read it first                                                                      |
+| Proposals                             | `.specclaw/changes/{004…011}/proposal.md`; **004** also has spec/design/tasks                                                         |
+| Coolify token handoff                 | [`docs/coolify-token-rotation.md`](coolify-token-rotation.md)                                                                         |
+| Comparison evidence (ChatGPT vs ours) | `.specclaw/changes/009-hero-image-design/evidence/`                                                                                   |
+
+**Branch rule (user decision):** everything lands on `v2` and merges to `main` **in one go, only once confirmed working and the user says go**. The one exception is **004 Phase 0** (the CI/deploy fix): a small PR to `main` on its own branch, because the deploy steps only run on `main` and can't be proven from `v2`. `main` is what CI auto-deploys, so **nothing on `v2` is ever on prod** until the merge. Confirm features locally.
+
+### 🔴 CI finding: merges to `main` build but do not deploy
+
+The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)) built and pushed the image to GHCR, then **Coolify returned `401`** on the redeploy call. `COOLIFY_API_TOKEN` is dead, and the scheduler redeploy step never ran. No harm yet, but **the next code merge will silently not ship**, and the `v2` merge would be that merge. CLAUDE.md's "a green `main` build **does** redeploy prod" is **no longer true** until this is fixed.
+
+- The **token** is rotated by the Coolify administrator (user decision: not the user, not Claude). Send them `docs/coolify-token-rotation.md`.
+- The **code hardening** is 004 **Wave 0** (T0b–T0f): readable deploy failures, both redeploys always attempted, a public `/api/health` → `{ ok, commit }` with the SHA baked into the image, CI verifying prod serves the new commit, `docker-publish.yml` actions off Node 20, and `node:20-alpine` → `node:22-alpine`.
+- Not related: the two E2E failures on PR #41 (`Start MinIO`) were already fixed inside that PR. Docker Hub withdrew `minio/minio`; every reference now uses `quay.io`.
+
+### Next actions, in order
+
+1. **Send the Coolify handoff** to whoever administers Coolify. Ask them to also read the **scheduler** resource's first log lines, which identify the B4 cause (`docs/scheduler-b4-diagnosis-2026-08-03.md`).
+2. **Build 004 Phase 0.** `git switch main && git pull && git switch -c fix/ci-deploy-pipeline`, then T0b → T0f. Put **T0e (Node 22) in its own commit.** It needs Docker Desktop running for `docker build`, and a real render + `claude --version` inside the image. Open the PR to `main`. Merge only on the user's go-ahead. After merging, **merge `main` into `v2`** so `v2` carries it.
+3. **004 Phases 1 → 3 on `v2`** (Waves 1–4, hard-ordered). Phase 1's font fix (AC-01) is only provable inside the built image, never on Windows (host Chromium has Segoe UI Symbol).
+4. **Review proposals 005–011** with the user (each ends in open questions), then `/specclaw:plan` them one at a time in roadmap order: **011 foundation → 008 → 009 → 010**, then the rest.
+5. **Stage-0 ops still outstanding from July:** team Claude token on both prod teams; mark each team's IMAGE provider `isDefault`; B4.
+
+### Decisions made this session (settled, don't re-ask)
+
+| Topic               | Decision                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 004 emoji           | Monochrome symbol coverage only (★ ✓ →). The design prompt tells the agent **never to use emoji** in rendered designs (T3a). Captions unaffected.                                                      |
+| 004 rejected refine | Preview + **Use anyway** adopts it as a normal revision (T11a, new `…/revisions/[rev]/adopt` route). Rejected rows are still never pointed at.                                                         |
+| 004 verifier model  | Pinned to **Haiku**; the retry uses the user's refine model (FR-14b).                                                                                                                                  |
+| 004 Phase 0         | All four hardening items; token rotated by the Coolify admin; ships as its own PR to `main`.                                                                                                           |
+| 008 model choice    | Per post / per chat, remembered per user, team defaults. **Opus allowed for everyone by default.**                                                                                                     |
+| 010 WhatsApp        | Target is a **WhatsApp Channel**. Meta has **no official Channel posting API**, so it's **assisted**: scheduled handoff → share sheet → "mark as posted". Unofficial session APIs rejected (ban risk). |
+| 011 UI              | **New visual direction** (not a Frozen Light touch-up), guided by the `high-end-visual-design` skill. Opaque floating/fixed surfaces. Dark + light stay mandatory.                                     |
+| Release             | One integration branch `v2`; merge to `main` once confirmed + go-ahead.                                                                                                                                |
+
+### Gotchas for the next session
+
+- **specclaw `git.strategy` is now `direct`** (`.specclaw/config.yaml`), so `/specclaw:build` commits onto **whatever branch is checked out**. For Phase 0, switch to `fix/ci-deploy-pipeline` **before** building, or Phase 0 lands on `v2`.
+- **The pre-commit hook (lint-staged → prettier) reformats markdown on commit.** Expect diffs in files you only lightly edited.
+- **Unverified facts carried in the proposals, to check before relying on them:**
+  - Opus pricing/multipliers: 008 deliberately leaves this open. An earlier "≈5× Sonnet" claim was from memory.
+  - Whether WhatsApp's share sheet lists **Channels** as a destination from a phone browser (010). Needs a real device.
+  - gpt-image-2 multi-image input and transparent-background support (009).
+  - The exact Coolify v4 menu path for API tokens (the handoff says to check it).
+- **Uncommitted, not ours:** a `.gitignore` edit (ignores `brag-output*/`) from an earlier session is still in the working tree, deliberately left out of commits.
+- Local Postgres + MinIO containers (`designer-postgres-1`, `designer-minio-1`) were started this session and left running.
+- The Bistec Studio launch post was exported to `~/Downloads/` (`bistec-studio-launch-post.png`, a polished `-v2.png` + `.html`, and captions). The `v2.html` only renders with local MinIO up, because it loads the background and logo from `localhost:9000`. The DB draft (`cmrkg2f6a000g1lee5aktmqxj`) is unchanged.
+
+---
+
+## ⏸️ 2026-07-28 — previous pick-up point
 
 ### The through-line: a merged, deployed, CI-green fix can be completely inert
 

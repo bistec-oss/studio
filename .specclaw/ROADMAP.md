@@ -1,6 +1,6 @@
 # bistec-studio roadmap — changes 004–011
 
-**Updated:** 2026-09-23
+**Updated:** 2026-09-23 · **Branch:** all of this lands on `v2` (see Branching at the bottom); handoff in `docs/handoff.md` top section.
 **Status:** none of 004–011 is built. **004** is fully planned (spec, design, 24 tasks — 8 added 2026-09-23, incl. Phase 0 deploy-pipeline fix). **005–011** are proposals awaiting approval.
 
 This file sequences the open changes. Each change's own `proposal.md` is the source of truth for its scope. This file only records **order, dependencies, and the boundaries between changes that touch the same code**.
