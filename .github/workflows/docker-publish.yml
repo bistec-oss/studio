@@ -14,7 +14,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   # Coolify base URL, used by the redeploy + verify steps below. Prod's own
-  # public URL, polled post-deploy by the verify step (added once T4 lands).
+  # public URL, polled post-deploy by the verify step.
   COOLIFY_URL: https://coolify.bistecglobal.com
   PROD_URL: https://studio.bistecglobal.com
 
@@ -27,13 +27,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -41,7 +41,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -49,7 +49,7 @@ jobs:
             type=sha,format=long
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
@@ -128,5 +128,78 @@ jobs:
           echo "Redeploy summary: app=$([ "$app_result" = 0 ] && echo ok || echo failed), scheduler=$([ "$scheduler_result" = 0 ] && echo ok || echo failed)"
 
           if [ "$app_result" != 0 ] || [ "$scheduler_result" != 0 ]; then
+            exit 1
+          fi
+
+      # The workflow verifies the deploy, not just that Coolify accepted the
+      # trigger (FR-P0-5). Only runs once the redeploy step above has actually
+      # succeeded — if it failed, the job is already red and there is nothing
+      # new to poll for. Both checks below run regardless of each other's
+      # outcome, and the job fails at the end reporting both (mirrors the
+      # redeploy step's own always-both contract).
+      #
+      # App: poll /api/health until it reports this commit. Coolify pulls the
+      # image, runs `prisma migrate deploy` in the entrypoint, then boots — the
+      # ~10 min budget (40 x 15s) has to cover a migration.
+      #
+      # Scheduler: it has no HTTP surface, so instead poll its Coolify
+      # deployment status (captured above as scheduler_deployment_uuid) until
+      # it reports "finished". This proves the container deployed, not that the
+      # worker loop runs — that is 006's heartbeat, and B4 (docs/handoff.md).
+      - name: Verify deploy (prod /api/health + scheduler deployment status)
+        env:
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          set -uo pipefail  # no -e: the app check must still run even if the scheduler check fails, and vice versa
+
+          app_verified=0
+          last_commit="(none)"
+          for i in $(seq 1 40); do
+            resp=$(curl -sS --max-time 10 "$PROD_URL/api/health" 2>/dev/null || true)
+            commit=$(echo "$resp" | jq -r '.commit // empty' 2>/dev/null || true)
+            if [ -n "$commit" ]; then
+              last_commit="$commit"
+            fi
+            if [ "$commit" = "${{ github.sha }}" ]; then
+              echo "prod /api/health reports ${{ github.sha }} after $((i * 15))s"
+              app_verified=1
+              break
+            fi
+            sleep 15
+          done
+          if [ "$app_verified" != 1 ]; then
+            echo "::error::prod /api/health never reported ${{ github.sha }} within 10 min — last commit seen: $last_commit"
+          fi
+
+          scheduler_verified=0
+          deployment_uuid="${{ steps.redeploy.outputs.scheduler_deployment_uuid }}"
+          if [ -z "$deployment_uuid" ]; then
+            echo "::error::scheduler status unknown — the redeploy response had no deployment_uuid"
+          else
+            last_status="(none)"
+            for i in $(seq 1 40); do
+              last_status=$(curl -sS --max-time 10 \
+                -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+                "$COOLIFY_URL/api/v1/deployments/${deployment_uuid}" 2>/dev/null \
+                | jq -r '.status // empty' 2>/dev/null || true)
+              case "$last_status" in
+                finished)
+                  echo "scheduler deployment finished after $((i * 15))s"
+                  scheduler_verified=1
+                  break
+                  ;;
+                failed | cancelled)
+                  echo "::error::scheduler deployment $last_status"
+                  break
+                  ;;
+                *) sleep 15 ;;
+              esac
+            done
+            if [ "$scheduler_verified" != 1 ]; then
+              echo "::error::scheduler deployment never reached 'finished' within 10 min — last status: ${last_status:-unknown}"
+            fi
+          fi
+
+          if [ "$app_verified" != 1 ] || [ "$scheduler_verified" != 1 ]; then
             exit 1
           fi
