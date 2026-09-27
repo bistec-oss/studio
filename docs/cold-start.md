@@ -13,7 +13,7 @@ Follow this top-to-bottom on a fresh machine or after `docker compose down -v` /
 Run these and confirm each before starting the dev server. If any fails, fix it in the matching section below.
 
 ```bash
-node --version          # expect v20.6+ (needed for --env-file); repo tested on v24
+node --version          # expect v22+ (needed for --env-file); repo tested on v24
 docker ps               # expect bistec_studio_postgres AND a minio container, both Up
 test -f .env && echo ".env present" || echo "MISSING .env"
 npx prisma migrate status   # expect "Database schema is up to date!"

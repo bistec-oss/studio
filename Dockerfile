@@ -77,14 +77,6 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
-# Commit SHA the image was built from (FR-P0-3) — passed as a build-arg by CI
-# (build-args: GIT_SHA=${{ github.sha }} in docker-publish.yml), not a secret.
-# Declared here, after `npm run build` in the builder stage, so it's never
-# baked into a statically-rendered page; the app reads it at request time via
-# src/lib/env.ts (falls back to "unknown" when unset, e.g. local `docker build`).
-ARG GIT_SHA
-ENV GIT_SHA=$GIT_SHA
-
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -128,6 +120,17 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Commit SHA the image was built from (FR-P0-3) — passed as a build-arg by CI
+# (build-args: GIT_SHA=${{ github.sha }} in docker-publish.yml), not a secret.
+# Declared here, after every COPY/RUN layer above (still after `npm run build`
+# in the builder stage, so the force-dynamic reasoning in /api/health still
+# holds — this only changes which layer a new commit invalidates) so a new
+# SHA on every commit stops busting the Docker layer cache for the user setup
+# and COPY layers above; the app reads it at request time via src/lib/env.ts
+# (falls back to "unknown" when unset, e.g. local `docker build`).
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
 
 # Migrations run on every boot, for both resources — the scheduler's CMD override
 # still passes through the entrypoint. See docker-entrypoint.sh for the advisory

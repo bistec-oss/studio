@@ -12,6 +12,14 @@ on:
   # reach prod.
   workflow_dispatch:
 
+# Only one prod deploy runs at a time; a second merge while one is in flight
+# queues behind it rather than racing it (both target the same two Coolify
+# resources). cancel-in-progress: false — a deploy already underway must
+# finish, not be killed mid-redeploy.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -27,6 +35,9 @@ jobs:
     # a feature branch would still redeploy prod with that branch's image.
     # push is already branch-filtered above; this makes both triggers agree.
     if: github.ref == 'refs/heads/main'
+    # Build + two ~10-min verify polls comfortably fit; caps a hung step
+    # instead of running to GitHub's default 6h.
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
@@ -71,10 +82,11 @@ jobs:
 
       # Trigger Coolify to pull the freshly-pushed :latest and redeploy both
       # resources that run this image. Requires the COOLIFY_API_TOKEN repo
-      # secret (Coolify → Keys & Tokens → create an API token with BOTH the
-      # `deploy` ability, for this step, AND the `read` ability, for the verify
-      # step below to poll GET /api/v1/deployments/<uuid> — that endpoint is
-      # read-gated, not deploy-gated).
+      # secret (Coolify → Keys & Tokens → create an API token owned by a team
+      # Admin/Owner — Members are deploy-read-only since Coolify v4.2.0 — with
+      # BOTH the `deploy` ability, for this step, AND the `read` ability, for
+      # the verify step below to poll GET /api/v1/deployments/<uuid> — that
+      # endpoint is read-gated, not deploy-gated).
       #
       # One script step loops over both UUIDs so a failed app redeploy never
       # skips the scheduler one (FR-P0-2) — curl -sS -o/-w (not -f) so the
@@ -102,12 +114,29 @@ jobs:
             esac
           }
 
-          # redeploy_one <name> <uuid> — deploys one resource, prints its status
-          # + reason, and (on success) records the scheduler's deployment_uuid.
+          # A deployment_uuid Coolify actually queued is always a plain
+          # alphanumeric id — anything else (empty, or garbage from a
+          # malformed/unexpected response body) is treated as "no deployment
+          # queued", same as the empty case.
+          UUID_RE='^[A-Za-z0-9]+$'
+
+          # redeploy_one <name> <uuid> — deploys one resource via POST (Coolify
+          # v4.2.0+ answers 405 "This endpoint has changed to a POST request"
+          # on GET; v4.1.x accepted both, so POST works either way — the query
+          # string is read the same on both), prints its status + reason, and
+          # (on success) records the scheduler's deployment_uuid.
+          #
+          # A 2xx response does not always mean a deployment was queued:
+          # Coolify answers HTTP 200 with
+          #   {"deployments":[{"message":"Unauthorized to deploy this
+          #   application.","resource_uuid":...}]} and NO deployment_uuid
+          # when the token owner can't deploy, when a deployment is skipped
+          # because one is already queued, or when the resource is a Service.
+          # Treat that as a failure too, not a silent no-op.
           redeploy_one() {
-            local name="$1" uuid="$2" body_file status body reason
+            local name="$1" uuid="$2" body_file status body reason deployment_uuid message
             body_file="$(mktemp)"
-            status=$(curl -sS -o "$body_file" -w '%{http_code}' -X GET \
+            status=$(curl -sS -o "$body_file" -w '%{http_code}' --max-time 30 -X POST \
               -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
               "$COOLIFY_URL/api/v1/deploy?uuid=${uuid}&force=false")
             body=$(cat "$body_file")
@@ -115,9 +144,17 @@ jobs:
             reason=$(status_to_reason "$status")
 
             if [[ "$status" == 2* ]]; then
-              echo "$name redeploy: HTTP $status ($reason)"
+              deployment_uuid=$(echo "$body" | jq -r '.deployments[0].deployment_uuid // empty' 2>/dev/null || true)
+              message=$(echo "$body" | jq -r '.deployments[0].message // empty' 2>/dev/null || true)
+
+              if [[ ! "$deployment_uuid" =~ $UUID_RE ]]; then
+                echo "::error::$name redeploy failed: Coolify accepted the call but queued no deployment: ${message:-no message}"
+                return 1
+              fi
+
+              echo "$name redeploy: HTTP $status ($reason)${message:+ — $message}"
               if [ "$name" = "scheduler" ]; then
-                echo "scheduler_deployment_uuid=$(echo "$body" | jq -r '.deployments[0].deployment_uuid // empty')" >> "$GITHUB_OUTPUT"
+                echo "scheduler_deployment_uuid=$deployment_uuid" >> "$GITHUB_OUTPUT"
               fi
               return 0
             fi
@@ -158,30 +195,41 @@ jobs:
       - name: Verify deploy (prod /api/health + scheduler deployment status)
         env:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          # Passed through env, not interpolated into the script text below —
+          # same reasoning as COOLIFY_API_TOKEN, for any step output.
+          SCHEDULER_DEPLOYMENT_UUID: ${{ steps.redeploy.outputs.scheduler_deployment_uuid }}
         run: |
           set -uo pipefail  # no -e: the app check must still run even if the scheduler check fails, and vice versa
 
           app_verified=0
           last_commit="(none)"
+          last_http="(none)"
           for i in $(seq 1 40); do
-            resp=$(curl -sS --max-time 10 "$PROD_URL/api/health" 2>/dev/null || true)
-            commit=$(echo "$resp" | jq -r '.commit // empty' 2>/dev/null || true)
-            if [ -n "$commit" ]; then
-              last_commit="$commit"
-            fi
-            if [ "$commit" = "${{ github.sha }}" ]; then
-              echo "prod /api/health reports ${{ github.sha }} after $((i * 15))s"
-              app_verified=1
-              break
+            body_file="$(mktemp)"
+            http_code=$(curl -sS --max-time 10 -o "$body_file" -w '%{http_code}' "$PROD_URL/api/health" 2>/dev/null || true)
+            resp=$(cat "$body_file" 2>/dev/null || true)
+            rm -f "$body_file"
+            last_http="$http_code"
+
+            if [ "$http_code" = "200" ]; then
+              commit=$(echo "$resp" | jq -r '.commit // empty' 2>/dev/null || true)
+              if [ -n "$commit" ]; then
+                last_commit="$commit"
+              fi
+              if [ "$commit" = "${{ github.sha }}" ]; then
+                echo "prod /api/health reports ${{ github.sha }} after $((i * 15))s"
+                app_verified=1
+                break
+              fi
             fi
             sleep 15
           done
           if [ "$app_verified" != 1 ]; then
-            echo "::error::prod /api/health never reported ${{ github.sha }} within 10 min — last commit seen: $last_commit"
+            echo "::error::prod /api/health never reported ${{ github.sha }} within 10 min — last commit seen: $last_commit (last HTTP: $last_http)"
           fi
 
           scheduler_verified=0
-          deployment_uuid="${{ steps.redeploy.outputs.scheduler_deployment_uuid }}"
+          deployment_uuid="$SCHEDULER_DEPLOYMENT_UUID"
           if [ -z "$deployment_uuid" ]; then
             echo "::error::scheduler status unknown — the redeploy response had no deployment_uuid"
           else
@@ -222,7 +270,9 @@ jobs:
                   scheduler_verified=1
                   break
                   ;;
-                failed | cancelled)
+                failed | cancelled*)
+                  # Coolify's enum value is "cancelled-by-user", not a bare
+                  # "cancelled" — glob-match the prefix.
                   echo "::error::scheduler deployment $last_status"
                   break
                   ;;
