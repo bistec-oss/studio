@@ -6,10 +6,17 @@ name: Build and push Docker image
 on:
   push:
     branches: [main]
+  # Manual trigger — lets a redeploy be re-run without a new commit, and lets
+  # AC-P0-1 (a deliberately invalid token) be exercised on demand.
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  # Coolify base URL, used by the redeploy + verify steps below. Prod's own
+  # public URL, polled post-deploy by the verify step (added once T4 lands).
+  COOLIFY_URL: https://coolify.bistecglobal.com
+  PROD_URL: https://studio.bistecglobal.com
 
 jobs:
   build-and-push:
@@ -55,14 +62,67 @@ jobs:
       # Trigger Coolify to pull the freshly-pushed :latest and redeploy both
       # resources that run this image. Requires the COOLIFY_API_TOKEN repo
       # secret (Coolify → Keys & Tokens → create an API token with deploy scope).
-      - name: Redeploy app on Coolify
+      #
+      # One script step loops over both UUIDs so a failed app redeploy never
+      # skips the scheduler one (FR-P0-2) — curl -sS -o/-w (not -f) so the
+      # response body survives a non-2xx status, which is mapped to a readable
+      # reason (FR-P0-1). The token is only ever read from $COOLIFY_API_TOKEN
+      # (never interpolated into this script, never echoed). The job fails at
+      # the end if either redeploy failed, reporting both outcomes.
+      #
+      # The scheduler has no HTTP surface of its own, so its deployment_uuid is
+      # captured to $GITHUB_OUTPUT here for the post-deploy verify step (T4) to
+      # poll the Coolify deployment status directly.
+      - name: Redeploy on Coolify (app + scheduler, both always attempted)
+        id: redeploy
+        env:
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
         run: |
-          curl -fsS -X GET \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
-            "https://coolify.bistecglobal.com/api/v1/deploy?uuid=nck8s530pseqdcfxt50hndl5&force=false"
+          set -uo pipefail  # no -e: one failed redeploy must not abort the other
 
-      - name: Redeploy scheduler on Coolify
-        run: |
-          curl -fsS -X GET \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}" \
-            "https://coolify.bistecglobal.com/api/v1/deploy?uuid=warr96qhvzrie5ndwv8oteeu&force=false"
+          status_to_reason() {
+            case "$1" in
+              401|403) echo "token rejected — rotate COOLIFY_API_TOKEN (docs/coolify-token-rotation.md)" ;;
+              404) echo "resource UUID not found" ;;
+              2*) echo "ok" ;;
+              *) echo "unexpected response" ;;
+            esac
+          }
+
+          # redeploy_one <name> <uuid> — deploys one resource, prints its status
+          # + reason, and (on success) records the scheduler's deployment_uuid.
+          redeploy_one() {
+            local name="$1" uuid="$2" body_file status body reason
+            body_file="$(mktemp)"
+            status=$(curl -sS -o "$body_file" -w '%{http_code}' -X GET \
+              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+              "$COOLIFY_URL/api/v1/deploy?uuid=${uuid}&force=false")
+            body=$(cat "$body_file")
+            rm -f "$body_file"
+            reason=$(status_to_reason "$status")
+
+            if [[ "$status" == 2* ]]; then
+              echo "$name redeploy: HTTP $status ($reason)"
+              if [ "$name" = "scheduler" ]; then
+                echo "scheduler_deployment_uuid=$(echo "$body" | jq -r '.deployments[0].deployment_uuid // empty')" >> "$GITHUB_OUTPUT"
+              fi
+              return 0
+            fi
+
+            echo "::error::$name redeploy failed: HTTP $status ($reason)"
+            if [ "$reason" = "unexpected response" ]; then
+              echo "::error::$name response body: $body"
+            fi
+            return 1
+          }
+
+          app_result=0
+          redeploy_one app nck8s530pseqdcfxt50hndl5 || app_result=1
+          scheduler_result=0
+          redeploy_one scheduler warr96qhvzrie5ndwv8oteeu || scheduler_result=1
+
+          echo "Redeploy summary: app=$([ "$app_result" = 0 ] && echo ok || echo failed), scheduler=$([ "$scheduler_result" = 0 ] && echo ok || echo failed)"
+
+          if [ "$app_result" != 0 ] || [ "$scheduler_result" != 0 ]; then
+            exit 1
+          fi
