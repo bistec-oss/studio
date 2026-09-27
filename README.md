@@ -15,7 +15,7 @@ An internal marketing post generation tool for the Bistec marketing team. bistec
 
 ## Prerequisites
 
-- **Node.js** >=20.6 (required for `--env-file` flag in seed scripts; tested on v24)
+- **Node.js** >=22 (required for `--env-file` flag in seed scripts; tested on v24)
 - **Docker Desktop** with Docker Compose (for PostgreSQL + MinIO containers)
 - **Claude Code CLI** (optional, for CLI-mode generation without Anthropic API key)
 - **Chromium/Chrome browser** (Windows hosts: set `PUPPETEER_EXECUTABLE_PATH` in `.env`)

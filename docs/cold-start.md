@@ -51,7 +51,7 @@ If all four preflight lines and both probes pass, skip to §6 and start the serv
 
 | Tool                    | Version           | Notes                                                                                |
 | ----------------------- | ----------------- | ------------------------------------------------------------------------------------ |
-| Node.js                 | 20.6+ (24 tested) | `--env-file` flag required by seed scripts                                           |
+| Node.js                 | 22+ (24 tested)   | `--env-file` flag required by seed scripts                                           |
 | Docker + Compose        | recent            | Postgres + MinIO containers                                                          |
 | npm deps                | —                 | `npm install` (postinstall builds Prisma engine)                                     |
 | Chromium (Windows host) | any recent Chrome | `puppeteer-core` does NOT bundle Chromium — set `PUPPETEER_EXECUTABLE_PATH` (see §2) |

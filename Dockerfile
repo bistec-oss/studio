@@ -1,5 +1,5 @@
 # ─── Stage 1: deps ───────────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 
 # libc compat for Prisma's OpenSSL engine on Alpine; chromium for Puppeteer rendering.
@@ -12,7 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev --ignore-scripts
 
 # ─── Stage 2: builder ────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # openssl: required for `prisma generate` to detect OpenSSL 3 and download the
@@ -57,7 +57,7 @@ RUN npx esbuild src/scheduler/worker.ts \
     --external:@prisma/client
 
 # ─── Stage 3: runner ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 # openssl: Prisma's runtime OpenSSL detection needs it (see builder stage note).
