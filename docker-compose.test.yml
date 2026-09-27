@@ -13,8 +13,14 @@ services:
       - /var/lib/postgresql/data
 
   minio-test:
-    # quay.io is MinIO's own registry; docker.io/minio/minio was withdrawn.
-    image: quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z
+    # MinIO's community images are gone everywhere: Docker Hub deleted
+    # docker.io/minio/minio on 2026-09-11, and quay.io/minio/minio has
+    # refused anonymous pulls since 2026-09-24. Replaced with pgsty/silo, a
+    # maintained drop-in fork pinned by digest — see docker-compose.yml's
+    # minio service and docs/minio-silo-migration.md for the full rationale
+    # (incl. CVE-2026-40344). This service uses tmpfs, so there's no
+    # existing volume/on-disk-format concern here — every start is fresh.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
     command: server /data --console-address ":9002"
     ports:
       - "127.0.0.1:9002:9001"
