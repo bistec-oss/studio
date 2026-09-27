@@ -75,6 +75,11 @@ const envSchema = z.object({
 
   // --- App (server-side reads only; the client bundle inlines its own copy) ---
   NEXT_PUBLIC_APP_URL: z.string().optional(),
+
+  // --- Build metadata (FR-P0-3) --- Baked into the runner image as ENV by the
+  // Dockerfile from a CI build-arg (docker-publish.yml); read by /api/health.
+  // Unset locally (no build-arg passed) — the route falls back to "unknown".
+  GIT_SHA: z.string().optional(),
 })
 
 export type Env = z.infer<typeof envSchema>

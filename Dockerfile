@@ -77,6 +77,14 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+# Commit SHA the image was built from (FR-P0-3) — passed as a build-arg by CI
+# (build-args: GIT_SHA=${{ github.sha }} in docker-publish.yml), not a secret.
+# Declared here, after `npm run build` in the builder stage, so it's never
+# baked into a statically-rendered page; the app reads it at request time via
+# src/lib/env.ts (falls back to "unknown" when unset, e.g. local `docker build`).
+ARG GIT_SHA
+ENV GIT_SHA=$GIT_SHA
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs

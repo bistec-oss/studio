@@ -6,9 +6,10 @@ import { loginAs } from '../helpers/api'
 // Contract notes verified against src/middleware.ts + src/lib/auth.ts:
 //   - The session gate is MIDDLEWARE-level and REDIRECTS unauthenticated requests
 //     to /login (302/307) — it does NOT return 401 — for every path except the
-//     public prefixes (/login, /api/auth, /api/acp). So an unauthenticated API
-//     call is blocked by redirect, not by a 401 body. (/api/acp fails closed with
-//     a route-level 401 — see acp.test.ts.)
+//     public prefixes (/login, /api/auth, /api/acp, /api/health). So an
+//     unauthenticated API call is blocked by redirect, not by a 401 body.
+//     (/api/acp fails closed with a route-level 401 — see acp.test.ts. /api/health
+//     is a genuinely public 200 — see TC-AUTH-08.)
 //   - /api/me returns the role LOWER-CASED ('admin' | 'editor'); the DB enum is
 //     ADMIN/EDITOR and requireRole compares case-insensitively.
 //   - Admin-only mutations return 403 for an editor (requireRole('admin')).
@@ -96,5 +97,16 @@ test.describe('Authentication & RBAC', () => {
     const res = await request.get('/api/authsomething', { maxRedirects: 0 })
     expect([301, 302, 303, 307, 308]).toContain(res.status())
     expect(res.headers()['location'] ?? '').toContain('/login')
+  })
+
+  // TC-AUTH-08 — /api/health is public (no session) and returns exactly
+  // { ok: true, commit } — no other keys. Guards FR-P0-4 / AC-P0-3.
+  test('/api/health is public and returns exactly {ok, commit}', async ({ request }) => {
+    const res = await request.get('/api/health', { maxRedirects: 0 })
+    expect(res.status()).toBe(200)
+    const json = await res.json()
+    expect(Object.keys(json).sort()).toEqual(['commit', 'ok'])
+    expect(json.ok).toBe(true)
+    expect(typeof json.commit).toBe('string')
   })
 })

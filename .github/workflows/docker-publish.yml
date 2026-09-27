@@ -56,6 +56,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # The image knows its own commit (FR-P0-3) — the Dockerfile runner
+          # stage turns this into ENV GIT_SHA, read by /api/health at request time.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -4,7 +4,9 @@ import { NextRequest, NextResponse } from "next/server"
 // (resolveApiKey, DB-backed — src/mcp/auth.ts), not by the session cookie —
 // exempt it from the session gate so the route-level key check governs (and
 // fails closed when the key doesn't resolve to a live ApiKey row).
-const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp"]
+// /api/health (FR-P0-4) is a public version endpoint polled by CI post-deploy —
+// it returns only { ok, commit }, nothing sensitive.
+const PUBLIC_PREFIXES = ["/login", "/api/auth", "/api/acp", "/api/health"]
 
 // Next 16: the `middleware` convention is deprecated in favour of `proxy`
 // (runs on the nodejs runtime; this cookie-presence gate is runtime-agnostic).
