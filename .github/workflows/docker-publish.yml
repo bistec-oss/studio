@@ -7,7 +7,9 @@ on:
   push:
     branches: [main]
   # Manual trigger — lets a redeploy be re-run without a new commit, and lets
-  # AC-P0-1 (a deliberately invalid token) be exercised on demand.
+  # AC-P0-1 (a deliberately invalid token) be exercised on demand. Guarded to
+  # main at the job level below — a dispatch on any other ref must never
+  # reach prod.
   workflow_dispatch:
 
 env:
@@ -21,6 +23,10 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    # workflow_dispatch can target any ref — without this guard a manual run on
+    # a feature branch would still redeploy prod with that branch's image.
+    # push is already branch-filtered above; this makes both triggers agree.
+    if: github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
@@ -65,7 +71,10 @@ jobs:
 
       # Trigger Coolify to pull the freshly-pushed :latest and redeploy both
       # resources that run this image. Requires the COOLIFY_API_TOKEN repo
-      # secret (Coolify → Keys & Tokens → create an API token with deploy scope).
+      # secret (Coolify → Keys & Tokens → create an API token with BOTH the
+      # `deploy` ability, for this step, AND the `read` ability, for the verify
+      # step below to poll GET /api/v1/deployments/<uuid> — that endpoint is
+      # read-gated, not deploy-gated).
       #
       # One script step loops over both UUIDs so a failed app redeploy never
       # skips the scheduler one (FR-P0-2) — curl -sS -o/-w (not -f) so the
@@ -176,12 +185,37 @@ jobs:
           if [ -z "$deployment_uuid" ]; then
             echo "::error::scheduler status unknown — the redeploy response had no deployment_uuid"
           else
+            # -o/-w (not -f), same as the redeploy step, so a non-2xx status is
+            # readable instead of silently discarded. GET /api/v1/deployments/*
+            # is gated by the token's `read` ability (deploy-only tokens 401/403
+            # here even though /deploy above works) — fail fast on that rather
+            # than burning the whole 10-min budget on a token that will never
+            # succeed. Any other non-200 keeps polling (transient 5xx etc.),
+            # but the last HTTP status is remembered for the timeout message.
             last_status="(none)"
+            last_http="(none)"
+            auth_failed=0
             for i in $(seq 1 40); do
-              last_status=$(curl -sS --max-time 10 \
+              body_file="$(mktemp)"
+              http_code=$(curl -sS --max-time 10 -o "$body_file" -w '%{http_code}' \
                 -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-                "$COOLIFY_URL/api/v1/deployments/${deployment_uuid}" 2>/dev/null \
-                | jq -r '.status // empty' 2>/dev/null || true)
+                "$COOLIFY_URL/api/v1/deployments/${deployment_uuid}" 2>/dev/null || true)
+              body=$(cat "$body_file" 2>/dev/null || true)
+              rm -f "$body_file"
+              last_http="$http_code"
+
+              if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+                echo "::error::token rejected by /api/v1/deployments — COOLIFY_API_TOKEN needs the read ability as well as deploy (docs/coolify-token-rotation.md)"
+                auth_failed=1
+                break
+              fi
+
+              if [ "$http_code" = "200" ]; then
+                last_status=$(echo "$body" | jq -r '.status // empty' 2>/dev/null || true)
+              else
+                last_status="(none)"
+              fi
+
               case "$last_status" in
                 finished)
                   echo "scheduler deployment finished after $((i * 15))s"
@@ -195,8 +229,8 @@ jobs:
                 *) sleep 15 ;;
               esac
             done
-            if [ "$scheduler_verified" != 1 ]; then
-              echo "::error::scheduler deployment never reached 'finished' within 10 min — last status: ${last_status:-unknown}"
+            if [ "$scheduler_verified" != 1 ] && [ "$auth_failed" != 1 ]; then
+              echo "::error::scheduler deployment never reached 'finished' within 10 min — last status: ${last_status:-unknown} (last HTTP: $last_http)"
             fi
           fi
 
