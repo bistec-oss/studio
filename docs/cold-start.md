@@ -123,7 +123,7 @@ docker ps   # confirm both are Up
    ```bash
    docker run -d --name bistec_studio_minio -p 9000:9000 -p 9001:9001 \
      -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-     -v minio_data:/data quay.io/minio/minio server /data --console-address ":9001"
+     -v minio_data:/data pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 server /data --console-address ":9001"
    ```
 
    (This matches the WSL2 `docker run` workaround noted in the handoff.) MinIO buckets are auto-created by the app on first use — no manual setup.
@@ -221,11 +221,14 @@ draft pages all work; Puppeteer rendering, `generateImage`, and MinIO upload are
 > `TOKEN_ENCRYPTION_KEY` also protects these stored personal/team tokens. The Docker image
 > ships the Claude CLI, so `DESIGN_PROVIDER=cli` works in the container too.
 
-> **MinIO image pin:** the compose pins `quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z`.
-> Pull from quay.io, MinIO's own registry — `docker.io/minio/minio` was withdrawn (Hub
-> 404 / registry 401) and no longer resolves. Do
-> NOT pin back to a pre-2025 release — the volume's on-disk format ("xl meta version 3")
-> makes older images crash-loop with `decodeXLHeaders: Unknown xl meta version 3`.
+> **MinIO image pin:** the compose pins `pgsty/silo:RELEASE.2026-09-16T00-00-00Z` by digest.
+> MinIO's own community images are gone everywhere: `docker.io/minio/minio` was deleted
+> from Docker Hub on 2026-09-11, and `quay.io/minio/minio` has refused anonymous pulls
+> since 2026-09-24. silo is a maintained drop-in fork — same on-disk format, same `server`
+> argv, same env vars — see `docs/minio-silo-migration.md` for the full rationale (incl.
+> CVE-2026-40344) and the Coolify rollout/rollback steps. Do NOT pin back to a pre-2025
+> release regardless of which image you run — the volume's on-disk format ("xl meta
+> version 3") makes older images crash-loop with `decodeXLHeaders: Unknown xl meta version 3`.
 
 For E2E tests with everything stubbed (no AI, no Puppeteer, no social):
 

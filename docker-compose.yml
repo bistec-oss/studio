@@ -46,13 +46,28 @@ services:
     restart: unless-stopped
 
   minio:
-    # Pinned for reproducibility. ⚠️ Keep >= 2025 releases: the volume's on-disk
-    # format is "xl meta version 3", which pre-2025 images (e.g. the previous
-    # RELEASE.2024-10-13 pin) cannot read — they crash-loop with
+    # MinIO's community images are gone everywhere we could pull them: Docker
+    # Hub deleted docker.io/minio/minio on 2026-09-11, and quay.io/minio/minio
+    # has refused anonymous pulls since 2026-09-24 — so the previous pin here
+    # (quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z) can no longer be
+    # pulled on a fresh host. Separately, every MinIO release before
+    # 2026-04-11 carries CVE-2026-40344 (auth bypass via the Snowball
+    # auto-extract handler, CVSS 8.2) — exploitable with only a known access
+    # key, and this app's presigned URLs put the access key in
+    # `X-Amz-Credential`, so this was overdue regardless of the pull breakage.
+    #
+    # Replacement: pgsty/silo, a maintained drop-in fork, pinned by digest for
+    # reproducibility. It preserves MinIO's on-disk format — silo reads
+    # volumes written by MinIO RELEASE.2025-09-07 and MinIO RELEASE.2025-09-07
+    # reads volumes silo writes, so rollback to the cached old image works if
+    # you still have it. `command`/`volumes`/`environment`/`healthcheck` below
+    # are unchanged: the image's entrypoint translates `server /data ...`
+    # argv to the `silo` binary, and the image still ships curl.
+    # ⚠️ Keep the on-disk format in mind regardless of which image is running:
+    # the volume is "xl meta version 3", which pre-2025 MinIO images (e.g. the
+    # old RELEASE.2024-10-13 pin) cannot read — they crash-loop with
     # "Unable to initialize backend: decodeXLHeaders: Unknown xl meta version 3".
-    # quay.io is MinIO's own registry; docker.io/minio/minio was withdrawn
-    # (Hub 404 / registry 401), so a Hub-sourced pull no longer resolves.
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
     command: server /data --console-address ":9001"
     ports:
       - "127.0.0.1:9001:9001"

@@ -77,13 +77,19 @@ jobs:
         run: npm ci
 
       - name: Start MinIO
-        # Pulled from quay.io, MinIO's own registry — the docker.io/minio/minio
-        # repository was withdrawn (Hub 404 / registry 401), which broke this step
-        # on every run from 2026-08 onward. Same pinned release, official source.
+        # MinIO's community images are gone everywhere we could pull them:
+        # Docker Hub deleted docker.io/minio/minio on 2026-09-11 (which broke
+        # this step from 2026-08 onward, when it still pointed at Hub), and
+        # since 2026-09-24 quay.io/minio/minio also refuses anonymous pulls —
+        # so the quay.io fallback pinned here stopped working too. Replaced
+        # with pgsty/silo, a maintained drop-in fork pinned by digest: it
+        # reads/writes the same on-disk format as MinIO (verified both
+        # directions) and its entrypoint translates `server /data` argv to
+        # the `silo` binary, so nothing else in this step changes.
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio:RELEASE.2024-10-13T13-34-11Z server /data
+            pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 server /data
           # Wait for MinIO to accept connections.
           for i in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
