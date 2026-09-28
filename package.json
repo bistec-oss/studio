@@ -22,7 +22,7 @@
     "test:e2e:serve": "dotenv -e .env.test -- next dev -p 3001"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
+    "@anthropic-ai/sdk": "^0.110.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/s3-request-presigner": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
