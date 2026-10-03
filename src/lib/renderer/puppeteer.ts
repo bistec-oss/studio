@@ -1,4 +1,4 @@
-import puppeteer, { type Browser } from "puppeteer-core"
+import puppeteer, { type Browser, type Page } from "puppeteer-core"
 import { existsSync } from "fs"
 import pLimit from "p-limit"
 import { MOCK_PUPPETEER, MOCK_PNG_BUFFER } from "@/lib/testHooks"
@@ -117,6 +117,8 @@ async function launchBrowser(): Promise<Browser> {
   const executablePath = resolveExecutablePath()
   const browser = await puppeteer.launch({
     executablePath,
+    // Keep in sync with scripts/glyph-check/check-glyphs.mjs (launch args and
+    // deviceScaleFactor are duplicated there).
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
   })
   // If Chromium crashes or is killed, drop the cached handle so the next render
@@ -144,14 +146,22 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise
 }
 
-async function renderOnce(
+// Loads a document exactly as a post render does — shared browser, same
+// viewport and device scale, same egress allowlist, same settle condition —
+// and hands the page to `fn`. The export (screenshot) and the refine verifier's
+// fact extraction (evaluate) both go through here, so the facts describe the
+// very layout the PNG shows.
+async function withRenderedPage<T>(
   html: string,
   width: number,
-  height: number
-): Promise<Buffer> {
+  height: number,
+  fn: (page: Page) => Promise<T>
+): Promise<T> {
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
+    // Keep in sync with scripts/glyph-check/check-glyphs.mjs (launch args and
+    // deviceScaleFactor are duplicated there).
     await page.setViewport({ width, height, deviceScaleFactor: 2 })
     await page.setRequestInterception(true)
     page.on("request", (req) => {
@@ -163,8 +173,7 @@ async function renderOnce(
       }
     })
     await page.setContent(html, { waitUntil: "networkidle0", timeout: SET_CONTENT_TIMEOUT_MS })
-    const screenshot = await page.screenshot({ type: "png" })
-    return Buffer.from(screenshot)
+    return await fn(page)
   } finally {
     // Close only the page; the browser is shared and stays alive.
     await page.close().catch(() => {})
@@ -178,7 +187,21 @@ export async function renderHtmlToPng(
 ): Promise<Buffer> {
   // Test seam: skip Chromium entirely and return a fixed PNG.
   if (MOCK_PUPPETEER) return MOCK_PNG_BUFFER
-  return limit(() => renderOnce(html, width, height))
+  return limit(() =>
+    withRenderedPage(html, width, height, async (page) => Buffer.from(await page.screenshot({ type: "png" })))
+  )
+}
+
+// Runs `fn` against the document loaded as a post render loads it (see
+// withRenderedPage), under the same concurrency cap. No MOCK_PUPPETEER seam
+// here: callers own their mock (domFacts.ts returns static facts).
+export async function evaluateInRenderedPage<T>(
+  html: string,
+  width: number,
+  height: number,
+  fn: (page: Page) => Promise<T>
+): Promise<T> {
+  return limit(() => withRenderedPage(html, width, height, fn))
 }
 
 // Sample the dominant colors of an image (F5 brand-kit extraction). The image

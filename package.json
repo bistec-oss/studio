@@ -15,6 +15,7 @@
     "mcp": "tsx src/mcp/server.ts",
     "db:seed": "node --env-file=.env scripts/seed-admin.mjs && node --env-file=.env scripts/seed-brandkit.mjs && node --env-file=.env scripts/seed-hearts-talk.mjs",
     "test:unit": "vitest run",
+    "test:render": "vitest run --config vitest.render.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:mock": "cross-env TEST_BASE_URL=http://localhost:3001 MOCK_AI=true MOCK_PUPPETEER=true MOCK_SOCIAL=true playwright test",
     "test:e2e:reg": "node --env-file=.env.test ./node_modules/@playwright/test/cli.js test",

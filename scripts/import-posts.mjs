@@ -279,9 +279,17 @@ async function main() {
   }
 
   const haveRevisions = await existingIds(prisma.draftRevision, revisions.map((r) => r.id))
-  stats.revisions = { created: 0, skipped: haveRevisions.size }
+  stats.revisions = { created: 0, skipped: haveRevisions.size, skippedRejected: 0 }
   for (const r of revisions) {
     if (haveRevisions.has(r.id)) continue
+    // Never import a rejected refine render (change 004 FR-13): it is not part
+    // of the revision chain. Current exports already omit them; this guards a
+    // hand-edited or future manifest. Mirrors COMMITTED_REVISION in
+    // src/lib/drafts/revisions.ts.
+    if (r.rejectedAt != null || r.revisionNumber == null) {
+      stats.revisions.skippedRejected++
+      continue
+    }
     const data = {
       id: r.id,
       draftId: r.draftId,
@@ -332,7 +340,10 @@ async function main() {
   if (stats.briefs.unlinkedKits > 0)
     console.log(`             ⚠ ${stats.briefs.unlinkedKits} brand-kit links dropped (no kit with that name here — kit precedence fallback applies)`)
   console.log(`  drafts:    ${stats.drafts.created} created, ${stats.drafts.skipped} already present`)
-  console.log(`  revisions: ${stats.revisions.created} created, ${stats.revisions.skipped} already present`)
+  console.log(
+    `  revisions: ${stats.revisions.created} created, ${stats.revisions.skipped} already present` +
+      (stats.revisions.skippedRejected ? `, ${stats.revisions.skippedRejected} rejected renders skipped` : '')
+  )
   console.log(
     `  posts:     ${stats.posts.created} created, ${stats.posts.skipped} already present` +
       (stats.posts.skippedNonTerminal > 0

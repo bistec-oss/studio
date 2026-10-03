@@ -24,6 +24,7 @@ import { PublishDialog } from '@/components/library/PublishDialog'
 import { CopyEditor } from '@/components/drafts/CopyEditor'
 import { RefinementPanel } from '@/components/drafts/RefinementPanel'
 import { InlineEditModal } from '@/components/drafts/InlineEditModal'
+import { BackgroundNotice } from '@/components/drafts/BackgroundNotice'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { useUndoableAction } from '@/lib/hooks/useUndoableAction'
@@ -272,6 +273,7 @@ export default function DraftDetailPage() {
               pendingAction={draft.pendingAction}
               pendingActionError={draft.pendingActionError}
               conflict={draft.conflict}
+              notApplied={draft.notApplied}
               currentRevisionNumber={draft.currentRevisionNumber}
               onActionStarted={fetchDraft}
               onRefined={refreshAfterChange}
@@ -366,9 +368,15 @@ export default function DraftDetailPage() {
               )}
             </div>
 
+            {/* 005 FR-07: why this design has no AI background, when that
+                was not the model's choice. Non-blocking. */}
+            {draft.backgroundSkipped && <BackgroundNotice skipped={draft.backgroundSkipped} />}
+
             {/* A background action failed — surface the error inline; the
-                buttons below are re-enabled so the user can simply re-trigger
-                (which clears this message). */}
+                buttons below are re-enabled so the user can simply re-trigger.
+                Claiming a new run does not clear the message (it is hidden
+                while that run is pending); the run settling does: success
+                clears it, a failure replaces it. */}
             {draft.pendingActionError && !actionPending && (
               <p className="mt-3 text-xs text-red-500 flex items-start gap-1.5">
                 <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
@@ -529,13 +537,16 @@ export default function DraftDetailPage() {
         />
       )}
 
-      {/* Manual inline edit — sandboxed iframe, text + image edits, synchronous save. */}
-      {draft.htmlContent && (
+      {/* Manual inline edit — sandboxed iframe; whole-document text + image
+          edits, or single-element edits (change 004 T24). Mounted per open so
+          the modal reads html + revision pointer from THIS draft read, once. */}
+      {draft.htmlContent && showInlineEdit && (
         <InlineEditModal
           open={showInlineEdit}
           onClose={() => setShowInlineEdit(false)}
           draftId={draftId}
           html={draft.htmlContent}
+          baseRevisionNumber={draft.currentRevisionNumber}
           aspectRatio={draft.brief.aspectRatio}
           onSaved={refreshAfterChange}
         />

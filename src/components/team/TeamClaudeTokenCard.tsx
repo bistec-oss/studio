@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { KeyRound, Unplug } from 'lucide-react'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
 import type { TeamClaudeTokenInfo } from '@/lib/api-types'
+import { ClaudeConnectGuide } from '@/components/settings/ClaudeConnectGuide'
 
 // Team-admin management of the TEAM's shared Claude OAuth token — the
 // fallback tier below each member's personal token (src/lib/agent/userToken.ts
@@ -32,14 +33,6 @@ function statusPill(info: TeamClaudeTokenInfo) {
     <span className={`${base} bg-status-published/10 dark:bg-status-published-dark/15 text-status-published dark:text-status-published-dark border-status-published/25 dark:border-status-published-dark/30`}>
       Connected
     </span>
-  )
-}
-
-function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="font-mono text-xs px-1.5 py-0.5 rounded-md bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
-      {children}
-    </code>
   )
 }
 
@@ -82,7 +75,7 @@ export function TeamClaudeTokenCard() {
   const handleDisconnect = async () => {
     const ok = await confirm({
       title: 'Disconnect the team Claude account?',
-      description: 'Members without a personal Claude token will fall back to the shared server credential until this is reconnected.',
+      description: 'Members without a personal Claude token will have no Claude account to generate with until this is reconnected.',
       confirmLabel: 'Disconnect',
     })
     if (ok) disconnectMutation.mutate()
@@ -117,19 +110,7 @@ export function TeamClaudeTokenCard() {
         <h3 className="text-sm font-semibold text-light-text dark:text-dark-text">
           {info.connected ? 'Replace the team token' : 'Connect a team Claude account'}
         </h3>
-        <ol className="list-decimal list-inside flex flex-col gap-1.5 text-sm text-light-text-muted dark:text-dark-text-muted">
-          <li>
-            Install Claude Code: <Code>npm install -g @anthropic-ai/claude-code</Code>
-          </li>
-          <li>
-            Run <Code>claude setup-token</Code> and finish the sign-in it opens in your browser.
-          </li>
-          <li>
-            Copy the printed token — it starts with <Code>sk-ant-oat01-</Code> and lasts about a
-            year.
-          </li>
-          <li>Paste it below.</li>
-        </ol>
+        <ClaudeConnectGuide variant="team" />
       </div>
 
       <form

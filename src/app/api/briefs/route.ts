@@ -7,6 +7,7 @@ import { Prisma, Channel, DesignMode, type AspectRatio } from '@prisma/client'
 import { isAspectRatio } from '@/lib/aspectRatio'
 import { isCliMode } from '@/lib/agent/config'
 import { resolveBriefCopyKey } from '@/lib/brief/copyProvider'
+import { IMAGE_PROVIDERS } from '@/providers/imageCapabilities'
 
 // Permissive schema: only guards the JSON parse. The thorough hand-rolled
 // validation below (exact error messages + channel normalization) is kept as-is.
@@ -125,7 +126,14 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
       : Promise.resolve(null),
     imageProviderKey
       ? prisma.availableProvider.findFirst({
-          where: { providerKey: imageProviderKey, slot: 'IMAGE', teamId: user.teamId, isEnabled: true },
+          where: {
+            providerKey: imageProviderKey,
+            slot: 'IMAGE',
+            teamId: user.teamId,
+            isEnabled: true,
+            // A legacy incompatible row is refused like a missing one.
+            providerName: { in: [...IMAGE_PROVIDERS] },
+          },
         })
       : Promise.resolve(null),
     campaignId

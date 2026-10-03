@@ -2,6 +2,7 @@ import OpenAI from "openai"
 import type { ImageProvider } from "../../interfaces/ImageProvider"
 
 export class OpenAIImageProvider implements ImageProvider {
+  readonly providerName = "openai" as const
   private client: OpenAI
 
   constructor(apiKey: string, private model = "gpt-image-2") {

@@ -7,6 +7,8 @@ import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { planDraftRecovery, STUCK_ACTION_REASON, STUCK_REASON } from '@/lib/drafts/recovery'
+import { COMMITTED_REVISION, resolveNotAppliedOutcome } from '@/lib/drafts/revisions'
+import { backgroundSkippedFor } from '@/lib/drafts/backgroundNotice'
 
 type Params = { id: string }
 
@@ -106,7 +108,9 @@ async function loadDraft(id: string) {
           publishedAt: true,
         },
       },
-      _count: { select: { revisions: true } },
+      // revisionCount counts the chain only — rejected refine renders are not
+      // versions (change 004 FR-13).
+      _count: { select: { revisions: { where: COMMITTED_REVISION } } },
     },
   })
   if (!draft) return null
@@ -127,6 +131,11 @@ async function loadDraft(id: string) {
 
   const kit = await resolveBrandKit(draft.teamId, draft.brief.campaignId ?? undefined, draft.brief.brandKitId ?? undefined)
 
+  // FR-14/AC-18: a twice-failed refine is a distinct outcome, not the
+  // existing error channel — re-derived from the retained rejected row on
+  // every poll (Ruling E), never trusted off the stored FK alone.
+  const notApplied = await resolveNotAppliedOutcome(draft)
+
   return {
     ownerId: draft.brief.userId,
     teamId: draft.teamId,
@@ -146,6 +155,10 @@ async function loadDraft(id: string) {
     conflict: pendingConflict
       ? { conflictId: pendingConflict.conflictId, explanation: pendingConflict.explanation }
       : null,
+    notApplied,
+    // 005 FR-07: why there is no AI background, when that was not the
+    // model's choice. The message is a fixed per-reason sentence.
+    backgroundSkipped: backgroundSkippedFor(draft.backgroundSkipReason, draft.backgroundSkipDetail),
     createdAt: draft.createdAt,
     revisionCount: draft._count.revisions,
     currentRevisionNumber: draft.currentRevisionNumber,
@@ -253,6 +266,10 @@ export const DELETE = withTeamAdmin<Params>(async (_req, { params }, user) => {
 
   const briefDeleted = await prisma.$transaction(async (tx) => {
     await tx.post.deleteMany({ where: { draftId: draft.id } })
+    // Deliberately UNFILTERED: a hard delete removes every revision row,
+    // rejected refine renders included (the FK would otherwise block the draft
+    // delete). Draft.notAppliedRevisionId is ON DELETE SET NULL, so removing the
+    // rejected row it references first is safe.
     await tx.draftRevision.deleteMany({ where: { draftId: draft.id } })
     await tx.draft.delete({ where: { id: draft.id } })
 

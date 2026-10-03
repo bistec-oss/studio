@@ -33,5 +33,7 @@ recommended build sequence (low-risk foundations first, vision features last).
   `BrandKit.logoUrl` remaining the primary/default.
 - **CLI-vision is proven** (spike 2026-07-13): headless `claude -p --allowedTools Read`
   reads a temp-file image as real vision content under the OAuth token. F5 & F6 rely on this.
+  _Superseded by 005 T5: CLI vision now sends base64 image blocks in one stream-json message
+  on stdin to `claude -p --tools ""` — no temp files, no Read tool._
   Colors from vision are approximate → **sample palettes programmatically**, use vision for
   layout/style/tone.

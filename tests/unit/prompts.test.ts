@@ -3,7 +3,7 @@ import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
 import { buildPathBSystemPrompt, buildPathBUserMessage } from '@/lib/agent/prompts/pathB'
 import { buildPathASystemPrompt, buildPathAUserMessage } from '@/lib/agent/prompts/pathA'
 import { buildCopyPrompt } from '@/lib/agent/prompts/copy'
-import { placeholderNote } from '@/lib/agent/prompts/shared'
+import { placeholderNote, SCRIPT_SUPPORT_NOTE, PROMPT_VERSION } from '@/lib/agent/prompts/shared'
 
 const kit: ResolvedBrandKit = {
   id: 'kit-1',
@@ -164,6 +164,29 @@ describe('buildPathAUserMessage', () => {
     expect(withImg).toContain('https://cdn.example.com/photo.jpg')
     const withoutImg = buildPathAUserMessage({ ...base, mode: 'cli' })
     expect(withoutImg).not.toContain('User-provided image URL')
+  })
+})
+
+describe('SCRIPT_SUPPORT_NOTE — no-emoji guidance', () => {
+  it('instructs the design agent to use covered symbols, never emoji, in the design only', () => {
+    expect(SCRIPT_SUPPORT_NOTE).toContain('never emoji')
+    expect(SCRIPT_SUPPORT_NOTE).toContain('In the rendered design')
+    expect(SCRIPT_SUPPORT_NOTE).toContain('captions are unaffected')
+  })
+
+  it('carves emoji out of the exact-reproduction rule so the two rules cannot conflict', () => {
+    // The exact-reproduction rule (protects Sinhala and other scripts) must not
+    // fight the no-emoji-in-design rule: emoji get an explicit, narrow exception.
+    expect(SCRIPT_SUPPORT_NOTE).toContain('The only exception is emoji')
+    expect(SCRIPT_SUPPORT_NOTE).toContain('does NOT contradict the exact-reproduction rule')
+    expect(SCRIPT_SUPPORT_NOTE).toContain('leave those emoji out of the rendered design')
+    expect(SCRIPT_SUPPORT_NOTE).toContain('the caption text keeps the copy\'s original emoji unchanged')
+  })
+
+  it('bumps PROMPT_VERSION alongside the note change', () => {
+    // 2026-10-01.1: the CLI refine prompt gained SCRIPT_SUPPORT_NOTE (final F1 / I-3).
+    // 2026-10-01.2: VERIFIER_SYSTEM no longer paraphrases class criteria (final F1b / M-1).
+    expect(PROMPT_VERSION).toBe('2026-10-01.2')
   })
 })
 

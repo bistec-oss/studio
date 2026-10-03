@@ -8,17 +8,28 @@
 // Draft.imageUrl.
 //
 // Failure policy: this step NEVER fails the pipeline. No image provider, a
-// declined decision, a provider error, or malformed JSON all resolve to null and
-// the design proceeds without a generated background (CSS/SVG as before).
-// MOCK_AI skips the step entirely so the E2E suite stays deterministic.
+// declined decision, a provider error, or malformed JSON all resolve to a skip
+// with its reason (BackgroundResult, 005 FR-06), and the design proceeds without
+// a generated background (CSS/SVG as before). The callers store an unintended
+// skip on the draft so the draft page can say why (FR-07, drafts/backgroundNotice.ts).
+// MOCK_AI skips the step entirely so the E2E suite stays deterministic — unless
+// the brief topic (or, for refine, the instruction) carries a __MOCK_BG__
+// sentinel (the NFR-06 seam, testHooks.ts).
 
 import Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import type { Brief } from '@prisma/client'
 import { env } from '@/lib/env'
-import { MOCK_AI } from '@/lib/testHooks'
+import {
+  MOCK_AI,
+  backgroundSeamText,
+  mockBackgroundDecision,
+  mockImageProvider,
+  shouldMockBackground,
+} from '@/lib/testHooks'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
 import { resolveImageProvider } from '@/providers/registry'
+import { imageSizeFor } from '@/providers/imageCapabilities'
 import type { ImageProvider } from '@/providers/interfaces/ImageProvider'
 import { persistDataUrlImage } from '@/lib/storage/minio'
 import { runClaudeCli, stripCodeFences } from '@/lib/agent/claudeCli'
@@ -29,6 +40,13 @@ import {
   buildRefineBackgroundDecisionPrompt,
   type BackgroundDecisionPrompt,
 } from '@/lib/agent/prompts/background'
+import {
+  cleanSkipDetail,
+  type BackgroundResult,
+  type BackgroundSkipReason,
+} from '@/lib/drafts/backgroundNotice'
+
+export type { BackgroundResult, BackgroundSkipReason } from '@/lib/drafts/backgroundNotice'
 
 const decisionSchema = z.object({
   needed: z.boolean(),
@@ -40,12 +58,16 @@ function log(msg: string) {
   console.log(`[background] ${msg}`)
 }
 
-// Provider-native image size for the post's aspect ratio. gpt-image supports
-// 1024x1024 / 1536x1024 / 1024x1536; the design layer cover-crops to the exact
-// 1080×1080 / 1080×1350 / 1080×1920 canvas, so nearest-orientation is enough.
-// Both PORTRAIT (4:5) and STORY (9:16) are taller-than-wide → portrait source.
-export function imageSizeFor(aspectRatio: string): string {
-  return aspectRatio === 'PORTRAIT' || aspectRatio === 'STORY' ? '1024x1536' : '1024x1024'
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+// One skip, logged once (the raw detail, server-side only). The returned
+// detail is redacted and clipped to SKIP_DETAIL_MAX here, at the source, so no
+// caller can store or show a key, an internal URL, or more than that.
+function skip(reason: BackgroundSkipReason, detail?: string): BackgroundResult {
+  log(`skipped (${reason})${detail ? ` — ${detail}` : ''}`)
+  return detail ? { url: null, skip: reason, detail: cleanSkipDetail(detail) } : { url: null, skip: reason }
 }
 
 // Tolerant strict-JSON extraction, mirroring the refine route's parseConflict:
@@ -84,71 +106,109 @@ async function runDecision(prompt: BackgroundDecisionPrompt): Promise<Background
   return text && text.type === 'text' ? parseBackgroundDecision(text.text) : null
 }
 
-// Shared tail: run the decision, then (when needed) generate + persist the image.
-// imageProviderKey is the brief's optional per-brief override. actor is WHO is
-// running this call (see GenerationActor) — deliberately NOT derived from the
-// brief, since the acting teammate and the brief's owner are often different
-// people on a shared team brief.
-async function decideAndGenerate(
-  prompt: BackgroundDecisionPrompt,
+// Shared tail: resolve the provider, run the decision, then (when needed)
+// generate + persist the image. imageProviderKey is the brief's optional
+// per-brief override. actor is WHO is running this call (see GenerationActor)
+// — deliberately NOT derived from the brief, since the acting teammate and the
+// brief's owner are often different people on a shared team brief.
+//
+// Every ending is a BackgroundResult (FR-06); nothing here throws. The reason
+// for an unexpected throw comes from `stage`, advanced as the step runs — never
+// from the error's wording: before the decision has parsed it is a
+// DECISION_ERROR, after it a PROVIDER_ERROR (generation or persisting).
+//
+// Order: both entry points resolve the provider FIRST. With none configured
+// there is no point spending a Claude call on the decision: generation records
+// NO_PROVIDER whatever the model would say, and refine's writer leaves the
+// draft's skip unchanged on a refine NO_PROVIDER (refineSkipFields), since it
+// never learned whether the instruction wanted a background.
+//
+// One refine-only wrinkle: a resolver that THROWS (resolveImageProvider never
+// does today; a DB hiccup could) is held until the decision has run. refine
+// stores PROVIDER_ERROR, so it may only report one when the instruction wanted
+// a background — otherwise that is NOT_NEEDED like any other refine.
+async function runBackgroundStep(
+  buildPrompt: () => BackgroundDecisionPrompt,
   opts: {
     actor: GenerationActor
     brandKitId: string
     aspectRatio: string
     imageProviderKey?: string | null
+    // The text the NFR-06 seam reads its sentinel from (testHooks.ts).
+    seamText: string
+    kind: 'generation' | 'refine'
   },
-): Promise<string | null> {
-  // Resolve the image provider FIRST — if none is configured (no personal key,
-  // no team key) there is no point spending a Claude call on the decision.
-  // resolveImageProvider never throws (returns null), but keep the guard: a DB
-  // hiccup here must still degrade gracefully, not fail the whole generation.
-  let provider: ImageProvider | null
+): Promise<BackgroundResult> {
+  // NFR-06 seam: without a __MOCK_BG__ sentinel, MOCK_AI skips the step (no
+  // background, nothing recorded) exactly as it always has.
+  const mockSeam = shouldMockBackground(opts.seamText)
+  if (MOCK_AI && !mockSeam) return { url: null, skip: 'NOT_NEEDED' }
+
+  const resolved = await resolveProvider(opts)
+  if (!resolved.provider) {
+    if (!resolved.failed) return skip('NO_PROVIDER')
+    if (opts.kind === 'generation') return skip('PROVIDER_ERROR', resolved.detail)
+  }
+
+  let stage: 'decision' | 'provider' = 'decision'
   try {
-    provider = await resolveImageProvider(
+    // The seam replaces only the Haiku decision here; resolution above is real.
+    const decision = mockSeam ? mockBackgroundDecision(opts.seamText) : await runDecision(buildPrompt())
+    if (!decision) return skip('DECISION_ERROR', 'decision response was not valid JSON')
+    stage = 'provider'
+    if (!decision.needed || !decision.prompt.trim()) return skip('NOT_NEEDED')
+    // refine only: the held resolver failure, now that a background was wanted.
+    if (!resolved.provider) return skip('PROVIDER_ERROR', resolved.detail)
+
+    // The fixture swap happens AFTER the real resolver chose the provider.
+    const provider = mockSeam ? mockImageProvider(resolved.provider, opts.seamText) : resolved.provider
+
+    log(`generating background · size=${imageSizeFor(provider.providerName, opts.aspectRatio)} · prompt="${decision.prompt.slice(0, 120)}..."`)
+    const startedAt = Date.now()
+    // TODO(team-tenancy): if a personal UserOpenAiKey was resolved above and this
+    // call fails with an auth error, flip it INVALID here (markUserOpenAiKeyInvalid,
+    // src/lib/agent/openAiKey.ts) — mirroring markUserTokenInvalid for Claude. Not
+    // wired yet: there is no existing OpenAI-error auth-classification helper to
+    // hang this off (unlike isClaudeAuthFailure for the CLI), and inventing one is
+    // out of scope here.
+    const result = await provider.generateImage(decision.prompt, opts.brandKitId, imageSizeFor(provider.providerName, opts.aspectRatio))
+    // persistDataUrlImage enforces the raster allow-list and returns a stable
+    // public URL; a provider that already returns an http(s) URL passes through.
+    const url = result.url.startsWith('data:')
+      ? await persistDataUrlImage(result.url, 'background')
+      : result.url
+    log(`background ready in ${((Date.now() - startedAt) / 1000).toFixed(1)}s · ${url}`)
+    return { url }
+  } catch (err) {
+    return skip(stage === 'decision' ? 'DECISION_ERROR' : 'PROVIDER_ERROR', errorText(err))
+  }
+}
+
+// resolveImageProvider never throws (returns null), but keep the guard: a DB
+// hiccup here must still degrade gracefully, not fail the whole generation.
+// It returns the outcome, not a skip: the caller decides when a failure is
+// reported (refine holds it until its decision has run).
+async function resolveProvider(opts: {
+  actor: GenerationActor
+  imageProviderKey?: string | null
+}): Promise<
+  { provider: ImageProvider; failed?: never; detail?: never } | { provider: null; failed: boolean; detail?: string }
+> {
+  try {
+    const provider = await resolveImageProvider(
       { teamId: opts.actor.teamId, userId: opts.actor.userId },
       opts.imageProviderKey ?? undefined
     )
+    return provider ? { provider } : { provider: null, failed: false }
   } catch (err) {
-    log(`skipped — image provider resolution failed (${err instanceof Error ? err.message : err})`)
-    return null
+    return { provider: null, failed: true, detail: errorText(err) }
   }
-  if (!provider) {
-    log('skipped — no image provider configured (no personal or team OpenAI key)')
-    return null
-  }
-
-  const decision = await runDecision(prompt)
-  if (!decision) {
-    log('skipped — decision response was not valid JSON')
-    return null
-  }
-  if (!decision.needed || !decision.prompt.trim()) {
-    log('skipped — model decided no background image is needed')
-    return null
-  }
-
-  log(`generating background · size=${imageSizeFor(opts.aspectRatio)} · prompt="${decision.prompt.slice(0, 120)}..."`)
-  const startedAt = Date.now()
-  // TODO(team-tenancy): if a personal UserOpenAiKey was resolved above and this
-  // call fails with an auth error, flip it INVALID here (markUserOpenAiKeyInvalid,
-  // src/lib/agent/openAiKey.ts) — mirroring markUserTokenInvalid for Claude. Not
-  // wired yet: there is no existing OpenAI-error auth-classification helper to
-  // hang this off (unlike isClaudeAuthFailure for the CLI), and inventing one is
-  // out of scope here.
-  const result = await provider.generateImage(decision.prompt, opts.brandKitId, imageSizeFor(opts.aspectRatio))
-  // persistDataUrlImage enforces the raster allow-list and returns a stable
-  // public URL; a provider that already returns an http(s) URL passes through.
-  const url = result.url.startsWith('data:')
-    ? await persistDataUrlImage(result.url, 'background')
-    : result.url
-  log(`background ready in ${((Date.now() - startedAt) / 1000).toFixed(1)}s · ${url}`)
-  return url
 }
 
 /**
  * Path B initial generation / regeneration: decide (biased toward yes) and
- * generate a background for the brief. Returns the public image URL or null.
- * Never throws.
+ * generate a background for the brief. Returns the public image URL, or the
+ * reason there is none. Never throws.
  */
 export async function generateBackgroundForBrief(
   brief: Brief,
@@ -156,52 +216,55 @@ export async function generateBackgroundForBrief(
   copyText: string,
   campaignBriefing: string | null | undefined,
   actor: GenerationActor,
-): Promise<string | null> {
-  if (MOCK_AI) return null
-  try {
-    const prompt = buildBackgroundDecisionPrompt({
-      kit,
-      topic: brief.topic,
-      description: brief.description,
-      goal: brief.goal,
-      tone: brief.tone,
-      copyText,
-      campaignBriefing,
-    })
-    return await decideAndGenerate(prompt, {
+): Promise<BackgroundResult> {
+  return runBackgroundStep(
+    () =>
+      buildBackgroundDecisionPrompt({
+        kit,
+        topic: brief.topic,
+        description: brief.description,
+        goal: brief.goal,
+        tone: brief.tone,
+        copyText,
+        campaignBriefing,
+      }),
+    {
       actor,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,
-    })
-  } catch (err) {
-    log(`skipped after error — proceeding without background: ${err instanceof Error ? err.message : err}`)
-    return null
-  }
+      seamText: brief.topic,
+      kind: 'generation',
+    },
+  )
 }
 
 /**
  * AGUI refine: generate a new background ONLY when the instruction asks for one
- * (neutral bias — see the refine decision prompt). Returns the URL or null.
- * Never throws.
+ * (neutral bias — see the refine decision prompt). Returns the URL, or the
+ * reason there is none: NOT_NEEDED means the instruction didn't ask, and
+ * NO_PROVIDER means none resolved, so the decision never ran (the refine
+ * writer leaves the draft's skip unchanged for both). Never throws.
+ *
+ * The mock seam reads its sentinel from the instruction when it carries one,
+ * so a test can make one refine fail on a draft whose generation produced a
+ * background; otherwise from the draft's brief topic.
  */
 export async function generateBackgroundForRefine(
   brief: Brief,
   kit: ResolvedBrandKit,
   instruction: string,
   actor: GenerationActor,
-): Promise<string | null> {
-  if (MOCK_AI) return null
-  try {
-    const prompt = buildRefineBackgroundDecisionPrompt({ kit, topic: brief.topic, instruction })
-    return await decideAndGenerate(prompt, {
+): Promise<BackgroundResult> {
+  return runBackgroundStep(
+    () => buildRefineBackgroundDecisionPrompt({ kit, topic: brief.topic, instruction }),
+    {
       actor,
       brandKitId: kit.id,
       aspectRatio: brief.aspectRatio,
       imageProviderKey: brief.imageProviderKey,
-    })
-  } catch (err) {
-    log(`skipped after error — proceeding without background: ${err instanceof Error ? err.message : err}`)
-    return null
-  }
+      seamText: backgroundSeamText(instruction, brief.topic),
+      kind: 'refine',
+    },
+  )
 }

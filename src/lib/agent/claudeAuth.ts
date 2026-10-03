@@ -6,15 +6,16 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 // credential (a member's personal OAuth token, or the team's shared token) is
 // NOT threaded through function signatures; it rides an AsyncLocalStorage set
 // at the route entry point (withClaudeAuth in userToken.ts) and is read at the
-// single spawn site (runClaudeCliOnce, claudeCli.ts). Rationale: every CLI call
-// funnels through runClaudeCli, but explicit threading would touch 14+
+// single spawn site (spawnClaude, claudeCli.ts — the core that runClaudeCli and
+// runClaudeCliStreamJson both go through). Rationale: every CLI call funnels
+// through that core, but explicit threading would touch 14+
 // signatures including the provider-agnostic CopyProvider interface with a
 // Claude-CLI-only concern.
 //
 // There are exactly two tiers now — personal, then team — and NO further
 // fallback below the team tier: a caller that never enters runWithClaudeAuth,
 // or whose resolveClaudeAuth found neither a personal nor a team token, gets a
-// no-credential ClaudeCliError from runClaudeCliOnce. CLI mode always requires
+// no-credential ClaudeCliError from spawnClaude. CLI mode always requires
 // an explicit credential (the old shared-env-token and dev-logged-in-session
 // tiers are deleted — see claudeCli.ts).
 //
@@ -52,7 +53,7 @@ export interface ClaudeCliAuth {
 
 const storage = new AsyncLocalStorage<ClaudeCliAuth>()
 
-/** Runs fn with the given auth visible to runClaudeCli. null ⇒ plain passthrough (no credential in scope — runClaudeCliOnce throws if a CLI-mode call actually tries to spawn). */
+/** Runs fn with the given auth visible to runClaudeCli. null ⇒ plain passthrough (no credential in scope — spawnClaude throws if a CLI-mode call actually tries to spawn). */
 export function runWithClaudeAuth<T>(auth: ClaudeCliAuth | null, fn: () => Promise<T>): Promise<T> {
   if (!auth) return fn()
   return storage.run(auth, fn)

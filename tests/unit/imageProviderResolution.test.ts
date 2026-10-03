@@ -65,6 +65,7 @@ process.env.TOKEN_ENCRYPTION_KEY = 'b'.repeat(64)
 
 const { encrypt } = await import('@/lib/crypto')
 const { resolveImageProvider, resolveCopyProvider, resolveAnthropicApiKey } = await import('@/providers/registry')
+const { IMAGE_PROVIDERS, pickServingImageProvider } = await import('@/providers/imageCapabilities')
 
 const TEAM_ID = 'team-1'
 const OTHER_TEAM_ID = 'team-2'
@@ -305,4 +306,230 @@ describe('resolveAnthropicApiKey — team-scoped default lookup (team-tenancy fi
     // the foreign team's key.
     await expect(resolveAnthropicApiKey(TEAM_ID)).resolves.toBeNull()
   })
+})
+
+// ── 005 T1: compat filter + tier 4 fallback (FR-01, FR-04) ──────────────────
+// An in-memory evaluator for the findFirst calls the resolver makes, so the
+// resolver runs against real fixture rows (WHERE + ORDER BY applied the way
+// Postgres would) instead of a per-call stub. Every fixture row carries its own
+// plaintext key, so the instantiated provider identifies which row served.
+
+type Fixture = {
+  id: string
+  providerName: string
+  isEnabled: boolean
+  isDefault: boolean
+  createdAt: Date
+}
+
+function keyFor(id: string) {
+  return `sk-row-${id}-plaintext`
+}
+
+function matches(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
+  return Object.entries(where).every(([field, cond]) => {
+    if (cond && typeof cond === 'object' && 'in' in cond) {
+      return (cond as { in: unknown[] }).in.includes(row[field])
+    }
+    return row[field] === cond
+  })
+}
+
+type OrderBy = Array<Record<string, 'asc' | 'desc'>>
+
+// Loads the fixtures as the team's rows. Returns the ids of the rows the
+// resolver's queries returned, in call order: hits[0] is the row it served.
+function useRows(fixtures: Fixture[]): string[] {
+  const db: Array<Record<string, unknown>> = fixtures.map((f) =>
+    providerRow({ ...f, providerKey: `key-${f.id}`, encryptedApiKey: encrypt(keyFor(f.id)) }),
+  )
+  const hits: string[] = []
+  h.availableProviderFindFirst.mockImplementation(
+    async ({ where, orderBy }: { where: Record<string, unknown>; orderBy?: OrderBy }) => {
+      let found = db.filter((r) => matches(r, where))
+      if (orderBy) {
+        found = [...found].sort((a, b) => {
+          for (const clause of orderBy) {
+            const [field, dir] = Object.entries(clause)[0]
+            const av = a[field] as Date | string
+            const bv = b[field] as Date | string
+            const cmp = av < bv ? -1 : av > bv ? 1 : 0
+            if (cmp !== 0) return dir === 'asc' ? cmp : -cmp
+          }
+          return 0
+        })
+      }
+      const hit = found[0] ?? null
+      if (hit) hits.push(hit.id as string)
+      return hit
+    },
+  )
+  return hits
+}
+
+async function servedKey(providerKey?: string): Promise<string | null> {
+  const provider = await resolveImageProvider({ teamId: TEAM_ID, userId: null }, providerKey)
+  return provider ? (provider as unknown as { apiKey: string }).apiKey : null
+}
+
+const JAN = new Date('2026-01-01T00:00:00Z')
+const FEB = new Date('2026-02-01T00:00:00Z')
+const MAR = new Date('2026-03-01T00:00:00Z')
+
+describe('resolveImageProvider — tier 4 fallback (FR-01)', () => {
+  beforeEach(() => {
+    h.userOpenAiKeyFindUnique.mockResolvedValue(null)
+  })
+
+  it('AC-01: one enabled non-default row + a scheduler-style call (no providerKey, userId null) resolves that row', async () => {
+    useRows([{ id: 'only', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN }])
+    expect(await servedKey()).toBe(keyFor('only'))
+  })
+
+  it('AC-02: two enabled non-default rows resolve the OLDER one', async () => {
+    useRows([
+      { id: 'newer', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: MAR },
+      { id: 'older', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN },
+    ])
+    expect(await servedKey()).toBe(keyFor('older'))
+  })
+
+  it('AC-03: an enabled default wins even when an older enabled row exists', async () => {
+    useRows([
+      { id: 'older', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN },
+      { id: 'def', providerName: 'openai', isEnabled: true, isDefault: true, createdAt: FEB },
+    ])
+    expect(await servedKey()).toBe(keyFor('def'))
+  })
+
+  it('tier 4 orders by createdAt then id, and filters to IMAGE + team + enabled', async () => {
+    useRows([{ id: 'only', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN }])
+    await servedKey()
+    const tier4 = h.availableProviderFindFirst.mock.calls.find(
+      (c) => c[0].where.isDefault === undefined && c[0].where.providerKey === undefined,
+    )
+    expect(tier4).toBeTruthy()
+    expect(tier4![0].orderBy).toEqual([{ createdAt: 'asc' }, { id: 'asc' }])
+    expect(tier4![0].where).toMatchObject({ slot: 'IMAGE', teamId: TEAM_ID, isEnabled: true })
+  })
+
+  it('a disabled default is not served; the oldest enabled row is', async () => {
+    useRows([
+      { id: 'def-off', providerName: 'openai', isEnabled: false, isDefault: true, createdAt: JAN },
+      { id: 'on', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: FEB },
+    ])
+    expect(await servedKey()).toBe(keyFor('on'))
+  })
+
+  it('AC-04 fallback half: with the default row deleted, the oldest remaining enabled row serves', async () => {
+    // The same fixtures minus the deleted default row.
+    useRows([
+      { id: 'newer', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: MAR },
+      { id: 'older', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: FEB },
+    ])
+    expect(await servedKey()).toBe(keyFor('older'))
+  })
+
+  it('returns null when the team has no enabled image-capable row', async () => {
+    useRows([
+      { id: 'off', providerName: 'openai', isEnabled: false, isDefault: false, createdAt: JAN },
+      { id: 'ant', providerName: 'anthropic', isEnabled: true, isDefault: false, createdAt: JAN },
+    ])
+    expect(await servedKey()).toBeNull()
+  })
+})
+
+describe('resolveImageProvider — incompatible rows are skipped, never instantiated (FR-04, AC-06)', () => {
+  beforeEach(() => {
+    h.userOpenAiKeyFindUnique.mockResolvedValue(null)
+  })
+
+  it('a legacy anthropic IMAGE default is skipped and the next compatible row serves', async () => {
+    useRows([
+      { id: 'ant-def', providerName: 'anthropic', isEnabled: true, isDefault: true, createdAt: JAN },
+      { id: 'oai', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: FEB },
+    ])
+    expect(await servedKey()).toBe(keyFor('oai'))
+  })
+
+  it('an explicit providerKey naming an incompatible row is skipped (no "Unsupported provider" throw)', async () => {
+    useRows([
+      { id: 'ant', providerName: 'anthropic', isEnabled: true, isDefault: false, createdAt: JAN },
+      { id: 'oai', providerName: 'openai', isEnabled: true, isDefault: true, createdAt: FEB },
+    ])
+    expect(await servedKey('key-ant')).toBe(keyFor('oai'))
+  })
+
+  it('an incompatible oldest row is skipped by the tier 4 fallback', async () => {
+    useRows([
+      { id: 'groq', providerName: 'groq', isEnabled: true, isDefault: false, createdAt: JAN },
+      { id: 'oai', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: FEB },
+    ])
+    expect(await servedKey()).toBe(keyFor('oai'))
+  })
+
+  it('tiers 2, 3 and 4 all carry the image-provider filter', async () => {
+    useRows([])
+    await servedKey('explicit-key')
+    expect(h.availableProviderFindFirst).toHaveBeenCalledTimes(3)
+    for (const call of h.availableProviderFindFirst.mock.calls) {
+      expect(call[0].where.providerName).toEqual({ in: [...IMAGE_PROVIDERS] })
+    }
+  })
+})
+
+describe('resolveImageProvider tiers 3+4 agree with pickServingImageProvider', () => {
+  const cases: Array<{ name: string; rows: Fixture[] }> = [
+    { name: 'no rows', rows: [] },
+    { name: 'default only', rows: [{ id: 'd', providerName: 'openai', isEnabled: true, isDefault: true, createdAt: JAN }] },
+    {
+      name: 'default newer than a plain row',
+      rows: [
+        { id: 'p', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN },
+        { id: 'd', providerName: 'gemini', isEnabled: true, isDefault: true, createdAt: MAR },
+      ],
+    },
+    {
+      name: 'no default, mixed ages',
+      rows: [
+        { id: 'c', providerName: 'gemini', isEnabled: true, isDefault: false, createdAt: MAR },
+        { id: 'a', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: FEB },
+        { id: 'b', providerName: 'openai', isEnabled: false, isDefault: false, createdAt: JAN },
+      ],
+    },
+    {
+      name: 'createdAt tie broken by id',
+      rows: [
+        { id: 'y', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN },
+        { id: 'x', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: JAN },
+      ],
+    },
+    {
+      name: 'incompatible default + disabled default + compatible plain rows',
+      rows: [
+        { id: 'ant', providerName: 'anthropic', isEnabled: true, isDefault: true, createdAt: JAN },
+        { id: 'off', providerName: 'openai', isEnabled: false, isDefault: true, createdAt: JAN },
+        { id: 'late', providerName: 'openai', isEnabled: true, isDefault: false, createdAt: MAR },
+        { id: 'early', providerName: 'gemini', isEnabled: true, isDefault: false, createdAt: FEB },
+      ],
+    },
+    {
+      name: 'only incompatible or disabled rows',
+      rows: [
+        { id: 'cli', providerName: 'cli', isEnabled: true, isDefault: true, createdAt: JAN },
+        { id: 'off', providerName: 'openai', isEnabled: false, isDefault: false, createdAt: JAN },
+      ],
+    },
+  ]
+
+  for (const c of cases) {
+    it(c.name, async () => {
+      h.userOpenAiKeyFindUnique.mockResolvedValue(null)
+      const hits = useRows(c.rows)
+      // Until T8 lands a Gemini implementation, a chosen gemini row is found
+      // but can't be instantiated; compare the CHOSEN row, not the instance.
+      await resolveImageProvider({ teamId: TEAM_ID, userId: null }).catch(() => null)
+      expect(hits[0] ?? null).toBe(pickServingImageProvider(c.rows)?.id ?? null)
+    })
+  }
 })

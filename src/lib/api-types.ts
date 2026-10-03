@@ -7,6 +7,7 @@
 // inline interface in a page.
 import type { AspectRatio, Channel, DesignMode, TeamRole } from '@prisma/client'
 import type { Role } from '@/lib/auth'
+import type { BackgroundSkipped } from '@/lib/drafts/backgroundNotice'
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 
@@ -228,10 +229,27 @@ export interface ProviderInfo {
 // In-flight async draft action — mirrors the Prisma DraftAction enum.
 export type DraftAction = 'REGENERATE_COPY' | 'REGENERATE_DESIGN' | 'REFINE'
 
+// GET /api/drafts/[id] — the not-applied refine outcome (change 004 FR-14,
+// AC-18; T18). A refine that failed its fidelity check twice commits
+// nothing (FR-12) — this is that failure, re-derived from the retained
+// rejected render on every poll rather than trusted off the stored FK (Ruling
+// E), so a discard/adopt elsewhere is reflected immediately. `null` when there
+// is no live not-applied outcome. Deliberately carries nothing else off the
+// rejected row (no htmlSnapshot, no rejection JSON).
+export interface DraftNotApplied {
+  reason: string
+  instruction: string
+  revisionId: string
+  previewUrl: string | null
+  rejectedAt: string
+}
+
 // GET /api/drafts/[id] — full detail consumed by the draft review page.
 // `pendingAction`/`pendingActionError`/`conflict` drive the async-action poll;
 // `conflict` is derived from the stored pendingConflict and NEVER includes the
-// server-side pendingHtml.
+// server-side pendingHtml. `notApplied` is a SEPARATE outcome channel (FR-14)
+// — distinct from both a settled success and `pendingActionError` (a crashed
+// run): it means the run completed cleanly but the edit itself was rejected.
 export interface DraftDetail {
   id: string
   briefId: string
@@ -244,6 +262,10 @@ export interface DraftDetail {
   pendingAction: DraftAction | null
   pendingActionError: string | null
   conflict: { conflictId: string; explanation: string } | null
+  notApplied: DraftNotApplied | null
+  // 005 FR-07: set when the current design has no AI background for a reason
+  // other than the model deciding it didn't need one.
+  backgroundSkipped: BackgroundSkipped | null
   createdAt: string
   revisionCount: number
   currentRevisionNumber: number | null

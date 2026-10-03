@@ -106,6 +106,42 @@ describe('isClaudeAuthFailure', () => {
     expect(isClaudeAuthFailure(new ClaudeCliError('odd', 0, AUTH_STDERR, ''))).toBe(false)
   })
 
+  // T6 fix round 1: CLI 2.1.287 reports a REVOKED OAuth token as
+  // api_error_status 403 (not 401) with "OAuth token has been revoked" in the
+  // is_error result text. A 403 is otherwise a permission/plan error, so only
+  // that phrasing, in the result text (stdout) only, makes it an auth failure.
+  describe('a structured 403 (T6 fix round 1)', () => {
+    const e403 = (stdout: string, stderr = '') =>
+      new ClaudeCliError('exit 1', 1, stderr, stdout, { apiErrorStatus: 403 })
+    it.each([
+      'Failed to authenticate. API Error: 403 {"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked. Please obtain a new token or refresh your existing token."}}',
+      'Failed to authenticate: OAuth token revoked · Please run /login',
+      'OAuth access token has been revoked',
+    ])('403 + revoked-token result text %j → auth failure', (text) => {
+      expect(isClaudeAuthFailure(e403(text))).toBe(true)
+    })
+    it('403 with any other text (a permission or plan error) → not an auth failure', () => {
+      expect(
+        isClaudeAuthFailure(
+          e403('API Error: 403 {"type":"error","error":{"type":"permission_error","message":"Your plan does not include this model. Please run /login"}}'),
+        ),
+      ).toBe(false)
+    })
+    it('403 with empty result text → not an auth failure, even if stderr says revoked', () => {
+      expect(isClaudeAuthFailure(e403(''))).toBe(false)
+      expect(isClaudeAuthFailure(e403('', 'OAuth token has been revoked'))).toBe(false)
+    })
+    it('401 is unchanged: an auth failure whatever the text', () => {
+      expect(isClaudeAuthFailure(new ClaudeCliError('x', 1, '', 'Request failed.', { apiErrorStatus: 401 }))).toBe(true)
+      expect(isClaudeAuthFailure(new ClaudeCliError('x', 1, '', '', { apiErrorStatus: 401 }))).toBe(true)
+    })
+    it('another status with revoked text → still not an auth failure', () => {
+      expect(
+        isClaudeAuthFailure(new ClaudeCliError('x', 1, '', 'OAuth token has been revoked', { apiErrorStatus: 500 })),
+      ).toBe(false)
+    })
+  })
+
   it('rejects plain Errors (timeout / ENOENT / buffer-limit)', () => {
     expect(isClaudeAuthFailure(new Error('Claude CLI timed out after 300000ms'))).toBe(false)
     expect(isClaudeAuthFailure(new Error('Claude CLI not found on PATH.'))).toBe(false)

@@ -110,7 +110,14 @@ async function main() {
           referenceTemplate: { select: { name: true } },
         },
       },
-      revisions: { orderBy: { revisionNumber: "asc" } },
+      // The revision chain only. Rejected refine renders (change 004 FR-13 —
+      // revisionNumber NULL, rejectedAt set) are per-machine diagnostics, not
+      // versions; they are never exported. Mirrors COMMITTED_REVISION in
+      // src/lib/drafts/revisions.ts (a .mjs script cannot import the TS helper).
+      revisions: {
+        where: { rejectedAt: null, revisionNumber: { not: null } },
+        orderBy: { revisionNumber: "asc" },
+      },
       posts: true,
     },
   })

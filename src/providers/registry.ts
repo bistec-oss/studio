@@ -4,11 +4,13 @@ import type { CopyProvider } from "./interfaces/CopyProvider"
 import type { ImageProvider } from "./interfaces/ImageProvider"
 import { OpenAICopyProvider } from "./implementations/copy/openai"
 import { OpenAIImageProvider } from "./implementations/image/openai"
+import { GeminiImageProvider } from "./implementations/image/gemini"
 import { AnthropicCopyProvider } from "./implementations/copy/anthropic"
 import { ClaudeCliCopyProvider } from "./implementations/copy/claude-cli"
 import { MOCK_AI, buildMockCopy } from "@/lib/testHooks"
 import { env } from "@/lib/env"
 import { isCliMode } from "@/lib/agent/config"
+import { IMAGE_PROVIDERS } from "./imageCapabilities"
 
 function instantiateCopyProvider(providerName: string, apiKey: string): CopyProvider {
   switch (providerName.toLowerCase()) {
@@ -34,6 +36,8 @@ function instantiateImageProvider(providerName: string, apiKey: string): ImagePr
   switch (providerName.toLowerCase()) {
     case "openai":
       return new OpenAIImageProvider(apiKey)
+    case "gemini":
+      return new GeminiImageProvider(apiKey)
     default:
       throw new Error(`Unsupported provider: ${providerName}`)
   }
@@ -80,7 +84,7 @@ export async function resolveCopyProvider(teamId: string, providerKey?: string):
 
   // The env.OPENAI_API_KEY fallback tier was removed (team-tenancy Task 11) —
   // COPY provider config lives entirely in AvailableProvider rows now. The
-  // ANTHROPIC_API_KEY fallback stays: it's the shared server credential, not a
+  // ANTHROPIC_API_KEY fallback stays: it's a server-wide credential, not a
   // per-team secret, and the API-mode fallback chain still expects it.
   const anthropicKey = env.ANTHROPIC_API_KEY
   if (anthropicKey) return new AnthropicCopyProvider(anthropicKey)
@@ -113,10 +117,16 @@ export async function resolveAnthropicApiKey(teamId: string): Promise<string | n
 
 // Resolution order: personal UserOpenAiKey (ACTIVE, only when userId is
 // given) → an explicit providerKey row scoped to ctx.teamId → the team's
-// default IMAGE row → null. No throw, no env fallback — callers (background.ts,
-// the generate/image route) treat null as "skip, no image provider configured".
+// enabled default IMAGE row → the team's OLDEST enabled IMAGE row (005 FR-01:
+// an enabled key that isn't flagged default still serves teammates) → null.
+// No throw, no env fallback — callers (background.ts, the generate/image route)
+// treat null as "skip, no image provider configured".
 // Personal wins even over an explicit providerKey: a user who connected their
 // own OpenAI key wants THEIR key used for every image call, team config or not.
+// Tiers 2–4 only consider image-capable providers (FR-04), so a legacy row such
+// as an Anthropic key registered as IMAGE is skipped rather than thrown on.
+// Tiers 3+4 must stay in step with pickServingImageProvider
+// (./imageCapabilities), which /team uses to say which row is serving.
 export async function resolveImageProvider(
   ctx: { teamId: string; userId?: string | null },
   providerKey?: string
@@ -128,22 +138,31 @@ export async function resolveImageProvider(
     }
   }
 
+  const imageCapable = { in: [...IMAGE_PROVIDERS] }
+  const oldestFirst = [{ createdAt: "asc" as const }, { id: "asc" as const }]
+
   if (providerKey) {
     const record = await prisma.availableProvider.findFirst({
-      where: { slot: "IMAGE", providerKey, teamId: ctx.teamId, isEnabled: true },
+      where: { slot: "IMAGE", providerKey, teamId: ctx.teamId, isEnabled: true, providerName: imageCapable },
     })
     if (record) {
       return instantiateImageProvider(record.providerName, decrypt(record.encryptedApiKey))
     }
   }
 
-  const defaultRecord = await prisma.availableProvider.findFirst({
-    where: { slot: "IMAGE", teamId: ctx.teamId, isDefault: true, isEnabled: true },
-  })
-  if (defaultRecord) {
+  const servingRecord =
+    (await prisma.availableProvider.findFirst({
+      where: { slot: "IMAGE", teamId: ctx.teamId, isDefault: true, isEnabled: true, providerName: imageCapable },
+      orderBy: oldestFirst,
+    })) ??
+    (await prisma.availableProvider.findFirst({
+      where: { slot: "IMAGE", teamId: ctx.teamId, isEnabled: true, providerName: imageCapable },
+      orderBy: oldestFirst,
+    }))
+  if (servingRecord) {
     return instantiateImageProvider(
-      defaultRecord.providerName,
-      decrypt(defaultRecord.encryptedApiKey)
+      servingRecord.providerName,
+      decrypt(servingRecord.encryptedApiKey)
     )
   }
 

@@ -1,0 +1,29 @@
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-01T14:46:20Z","ts":1790865980}
+{"ev":"stop","span":"plan","at":"2026-10-01T14:56:51Z","ts":1790866611,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-01T18:40:22Z","ts":1790880022}
+{"ev":"start","span":"T1","kind":"task","label":"capability module + resolver","parent":"W1","model":"opus","attempt":"1","at":"2026-10-01T18:40:22Z","ts":1790880022}
+{"ev":"stop","span":"T1","at":"2026-10-01T19:07:40Z","ts":1790881660,"status":"ok"}
+{"ev":"start","span":"T2","kind":"task","label":"skip reasons + notice + seam","parent":"W1","model":"opus","attempt":"1","at":"2026-10-01T19:07:41Z","ts":1790881661}
+{"ev":"stop","span":"T2","at":"2026-10-01T19:57:27Z","ts":1790884647,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"explicit IMAGE default in /team","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-01T19:57:27Z","ts":1790884647}
+{"ev":"stop","span":"T3","at":"2026-10-01T20:03:46Z","ts":1790885026,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-01T20:03:46Z","ts":1790885027,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-01T20:03:50Z","ts":1790885030}
+{"ev":"start","span":"T4","kind":"task","label":"CLI spawn core","parent":"W2","model":"opus","attempt":"1","at":"2026-10-01T20:03:50Z","ts":1790885030}
+{"ev":"start","span":"T5","kind":"task","label":"vision stream-json","parent":"W2","model":"opus","attempt":"1","at":"2026-10-01T20:14:14Z","ts":1790885653}
+{"ev":"stop","span":"T4","at":"2026-10-01T20:18:48Z","ts":1790885928,"status":"ok"}
+{"ev":"start","span":"T6","kind":"task","label":"CLI pin + in-image proof","parent":"W2","model":"opus","attempt":"1","at":"2026-10-01T20:27:07Z","ts":1790886427}
+{"ev":"stop","span":"T5","at":"2026-10-01T20:48:37Z","ts":1790887717,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-01T20:48:38Z","ts":1790887718,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-01T20:48:38Z","ts":1790887718}
+{"ev":"start","span":"T7","kind":"task","label":"per-provider image sizes","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-01T20:48:39Z","ts":1790887719}
+{"ev":"stop","span":"T7","at":"2026-10-02T02:21:50Z","ts":1790907710,"status":"ok"}
+{"ev":"start","span":"T8","kind":"task","label":"Gemini provider","parent":"W3","model":"opus","attempt":"1","at":"2026-10-02T02:30:29Z","ts":1790908229}
+{"ev":"stop","span":"T8","at":"2026-10-02T02:46:01Z","ts":1790909161,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-02T02:46:01Z","ts":1790909161,"status":"ok"}
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-10-02T02:46:02Z","ts":1790909162}
+{"ev":"start","span":"T9","kind":"task","label":"claude-account-setup doc","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-02T02:46:02Z","ts":1790909162}
+{"ev":"stop","span":"T9","at":"2026-10-02T02:48:15Z","ts":1790909295,"status":"ok"}
+{"ev":"start","span":"T10","kind":"task","label":"in-app connection guide","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-02T02:48:30Z","ts":1790909310}
+{"ev":"stop","span":"T10","at":"2026-10-02T02:53:02Z","ts":1790909582,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-10-02T02:53:02Z","ts":1790909582,"status":"ok"}

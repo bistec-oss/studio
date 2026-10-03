@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
 import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
 
@@ -12,6 +12,29 @@ import { prisma, dbAvailable } from '../helpers/db'
 
 const ADMIN_EMAIL = 'admin@bisteccare.lk'
 const ADMIN_PASSWORD = 'BistecStudio2026!'
+
+// TC-GEN-05 needs a team with an IMAGE row; it makes its own (soft-deleted
+// afterwards) so the seeded Bistec team's providers are never touched.
+async function freshTeamWithImageRow(request: APIRequestContext) {
+  const sa = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD)
+  const name = `Path-B TC-GEN-05 ${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const team = await (await sa.post('/api/admin/teams', { name })).json()
+  const api = await loginAs(request, ADMIN_EMAIL, ADMIN_PASSWORD, { team: name })
+  // The MOCK_AI key-validation seam accepts these fake keys (005 NFR-06).
+  expect((await api.post('/api/admin/providers', { apiKey: 'sk-tc-gen-05-fake-openai', slot: 'IMAGE' })).status()).toBe(201)
+  const copy = await (await api.post('/api/admin/providers', {
+    apiKey: 'tcgen05_copy_123456789', slot: 'COPY', providerName: 'tcgen05copy', label: 'TC-GEN-05 copy',
+  })).json()
+  return {
+    api,
+    copyKey: copy.providerKey as string,
+    async dispose() {
+      await api.dispose()
+      await sa.del(`/api/admin/teams/${team.id}`)
+      await sa.dispose()
+    },
+  }
+}
 
 test.describe('Path B — freeform design generation', () => {
   let api: ApiClient
@@ -77,6 +100,39 @@ test.describe('Path B — freeform design generation', () => {
     const draft = await waitForDraft(api, (await res.json()).draftId)
     expect(draft.status).toBe('EXPORTED')
     expect((draft.brief as { aspectRatio: string }).aspectRatio).toBe('PORTRAIT')
+  })
+
+  // TC-GEN-05 — A generated raster image is stored as a public
+  // (anonymously-readable) URL, so a later re-render can fetch it. Guards H10.
+  // Runs on the 005 background seam: the __MOCK_BG__ topic sentinel makes the
+  // background step resolve the team's IMAGE row for real and persist a
+  // fixture PNG through the production persistDataUrlImage path.
+  test('generated image is stored as a public URL', async ({ request }) => {
+    if (!process.env.MOCK_AI || !process.env.MOCK_PUPPETEER) { test.skip(); return }
+    const t = await freshTeamWithImageRow(request)
+    try {
+      const kit = await (await t.api.post('/api/admin/brandkits', { name: 'TC-GEN-05 Kit', colors: ['#7dd3fc'] })).json()
+      const brief = await (await t.api.post('/api/briefs', {
+        topic: `TC-GEN-05 __MOCK_BG__ ${Date.now()}`, goal: 'g', tone: 'bold', channels: ['LINKEDIN'],
+        designMode: 'GENERATE', copyProviderKey: t.copyKey, brandKitId: kit.id,
+      })).json()
+      const res = await t.api.post('/api/generate/assemble-b', { briefId: brief.id })
+      expect(res.status()).toBe(202)
+      const draft = await waitForDraft(t.api, (await res.json()).draftId)
+      expect(draft.status).toBe('EXPORTED')
+      expect(draft.backgroundSkipped).toBeNull()
+
+      const url = draft.imageUrl as string
+      expect(url).toMatch(/^https?:\/\//)
+      // A stable public URL, not a signed one.
+      expect(url).not.toMatch(/X-Amz-Signature/i)
+      // Anonymous read: the unauthenticated `request` fixture (no session cookie).
+      const anon = await request.get(url, { headers: {} })
+      expect(anon.status()).toBe(200)
+      expect(anon.headers()['content-type']).toContain('image/png')
+    } finally {
+      await t.dispose()
+    }
   })
 
   test('assemble-b without a resolvable brand kit returns 422 NO_BRAND_KIT', async () => {

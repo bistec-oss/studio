@@ -88,6 +88,16 @@ describe('toolGenerateImage — actor vs. brief owner', () => {
     expect(h.resolveImageProvider).toHaveBeenCalledWith({ teamId: 'owner-team', userId: OWNER_ID })
   })
 
+  it('passes the provider-mapped size for the aspect ratio (FR-12); no aspect falls back to square', async () => {
+    const generateImage = vi.fn(async () => ({ url: 'https://cdn.example.com/x.png' }))
+    h.resolveImageProvider.mockResolvedValue({ providerName: 'gemini', generateImage })
+    const actor = { userId: ACTOR_ID, teamId: TEAM_ID }
+    await toolGenerateImage('p', 'kit-1', 'brief-1', actor, 'STORY')
+    expect(generateImage).toHaveBeenLastCalledWith('p', 'kit-1', '9:16')
+    await toolGenerateImage('p', 'kit-1', 'brief-1', actor)
+    expect(generateImage).toHaveBeenLastCalledWith('p', 'kit-1', '1:1')
+  })
+
   it('a null resolveImageProvider result throws (no image provider configured)', async () => {
     h.resolveImageProvider.mockResolvedValue(null)
     await expect(
