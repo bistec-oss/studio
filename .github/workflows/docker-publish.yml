@@ -1,21 +1,23 @@
-name: Build and push Docker image
+name: Build and deploy
 
-# Single image serves both the web app and the scheduler worker (the
-# scheduler service just overrides CMD — see docker-compose.yml). Coolify
-# pulls the same tag for both resources.
+# Single image serves both the web app and the scheduler worker (the scheduler
+# Deployment just overrides the command with `node dist/scheduler/worker.js`).
+#
+# Prod runs on the Bistec k3s cluster (namespace studio-uat), deployed by
+# ArgoCD from the Platform-GitOps repo on Azure DevOps. This workflow does not
+# talk to the cluster: it builds the image, then commits the new image tag to
+# Platform-GitOps, and ArgoCD rolls it out. Coolify is retired.
 on:
   push:
     branches: [main]
-  # Manual trigger — lets a redeploy be re-run without a new commit, and lets
-  # AC-P0-1 (a deliberately invalid token) be exercised on demand. Guarded to
+  # Manual trigger — lets a deploy be re-run without a new commit. Guarded to
   # main at the job level below — a dispatch on any other ref must never
   # reach prod.
   workflow_dispatch:
 
 # Only one prod deploy runs at a time; a second merge while one is in flight
-# queues behind it rather than racing it (both target the same two Coolify
-# resources). cancel-in-progress: false — a deploy already underway must
-# finish, not be killed mid-redeploy.
+# queues behind it rather than racing it on the same GitOps file.
+# cancel-in-progress: false — a deploy already underway must finish.
 concurrency:
   group: deploy-prod
   cancel-in-progress: false
@@ -23,20 +25,22 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  # Coolify base URL, used by the redeploy + verify steps below. Prod's own
-  # public URL, polled post-deploy by the verify step.
-  COOLIFY_URL: https://coolify.bistecglobal.com
+  # Prod's own public URL, polled post-deploy by the verify step.
   PROD_URL: https://studio.bistecglobal.com
+  # Where ArgoCD reads Studio's image tag from. Both studio-web.image.tag and
+  # studio-scheduler.image.tag live in this one file and must always match.
+  GITOPS_REPO: dev.azure.com/BistecGlobal/Platform-GitOps/_git/Platform-GitOps
+  GITOPS_VALUES: charts/studio-app/values-uat.yaml
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     # workflow_dispatch can target any ref — without this guard a manual run on
-    # a feature branch would still redeploy prod with that branch's image.
+    # a feature branch would still deploy that branch's image to prod.
     # push is already branch-filtered above; this makes both triggers agree.
     if: github.ref == 'refs/heads/main'
-    # Build + two ~10-min verify polls comfortably fit; caps a hung step
-    # instead of running to GitHub's default 6h.
+    # Build + a ~15-min verify poll comfortably fit; caps a hung step instead
+    # of running to GitHub's default 6h.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -80,210 +84,101 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Trigger Coolify to pull the freshly-pushed :latest and redeploy both
-      # resources that run this image. Requires the COOLIFY_API_TOKEN repo
-      # secret (Coolify → Keys & Tokens → create an API token owned by a team
-      # Admin/Owner — Members are deploy-read-only since Coolify v4.2.0 — with
-      # BOTH the `deploy` ability, for this step, AND the `read` ability, for
-      # the verify step below to poll GET /api/v1/deployments/<uuid> — that
-      # endpoint is read-gated, not deploy-gated).
+      # Point prod at the image just pushed. The cluster pins the immutable
+      # sha-<full-sha> tag, never :latest, so what runs is always traceable to
+      # a commit and a rollback is a revert of this commit in Platform-GitOps.
       #
-      # One script step loops over both UUIDs so a failed app redeploy never
-      # skips the scheduler one (FR-P0-2) — curl -sS -o/-w (not -f) so the
-      # response body survives a non-2xx status, which is mapped to a readable
-      # reason (FR-P0-1). The token is only ever read from $COOLIFY_API_TOKEN
-      # (never interpolated into this script, never echoed). The job fails at
-      # the end if either redeploy failed, reporting both outcomes.
+      # Requires the PLATFORM_GITOPS_PAT repo secret: an Azure DevOps PAT in the
+      # BistecGlobal org with Code (Read & Write) scope, owned by a service
+      # identity that can push to Platform-GitOps main. The token is sent as an
+      # HTTP header, never put in a clone URL, so it cannot end up in
+      # .git/config or a log line.
       #
-      # The scheduler has no HTTP surface of its own, so its deployment_uuid is
-      # captured to $GITHUB_OUTPUT here for the post-deploy verify step (T4) to
-      # poll the Coolify deployment status directly.
-      - name: Redeploy on Coolify (app + scheduler, both always attempted)
-        id: redeploy
+      # Idempotent: a re-run for a commit that is already deployed finds no
+      # change and pushes nothing. A push that loses a race with another
+      # pipeline's tag bump rebases and retries.
+      - name: Deploy — bump image tag in Platform-GitOps
         env:
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+          GITOPS_PAT: ${{ secrets.PLATFORM_GITOPS_PAT }}
         run: |
-          set -uo pipefail  # no -e: one failed redeploy must not abort the other
+          set -euo pipefail
+          if [ -z "${GITOPS_PAT:-}" ]; then
+            echo "::error::PLATFORM_GITOPS_PAT secret is not set — cannot deploy"
+            exit 1
+          fi
+          AUTH="AUTHORIZATION: basic $(printf ':%s' "$GITOPS_PAT" | base64 -w0)"
+          echo "::add-mask::$(printf ':%s' "$GITOPS_PAT" | base64 -w0)"
+          TAG="sha-${GITHUB_SHA}"
 
-          status_to_reason() {
-            case "$1" in
-              401|403) echo "token rejected — rotate COOLIFY_API_TOKEN (docs/coolify-token-rotation.md)" ;;
-              404) echo "resource UUID not found" ;;
-              2*) echo "ok" ;;
-              *) echo "unexpected response" ;;
-            esac
-          }
+          git -c http.extraheader="$AUTH" clone --quiet --depth 20 --branch main "https://${GITOPS_REPO}" gitops
+          cd gitops
+          git config user.name "Studio CI (GitHub Actions)"
+          git config user.email "pipeline@bistecglobal.com"
 
-          # A deployment_uuid Coolify actually queued is always a plain
-          # alphanumeric id — anything else (empty, or garbage from a
-          # malformed/unexpected response body) is treated as "no deployment
-          # queued", same as the empty case.
-          UUID_RE='^[A-Za-z0-9]+$'
-
-          # redeploy_one <name> <uuid> — deploys one resource via POST (Coolify
-          # v4.2.0+ answers 405 "This endpoint has changed to a POST request"
-          # on GET; v4.1.x accepted both, so POST works either way — the query
-          # string is read the same on both), prints its status + reason, and
-          # (on success) records the scheduler's deployment_uuid.
-          #
-          # A 2xx response does not always mean a deployment was queued:
-          # Coolify answers HTTP 200 with
-          #   {"deployments":[{"message":"Unauthorized to deploy this
-          #   application.","resource_uuid":...}]} and NO deployment_uuid
-          # when the token owner can't deploy, when a deployment is skipped
-          # because one is already queued, or when the resource is a Service.
-          # Treat that as a failure too, not a silent no-op.
-          redeploy_one() {
-            local name="$1" uuid="$2" body_file status body reason deployment_uuid message
-            body_file="$(mktemp)"
-            status=$(curl -sS -o "$body_file" -w '%{http_code}' --max-time 30 -X POST \
-              -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-              "$COOLIFY_URL/api/v1/deploy?uuid=${uuid}&force=false")
-            body=$(cat "$body_file")
-            rm -f "$body_file"
-            reason=$(status_to_reason "$status")
-
-            if [[ "$status" == 2* ]]; then
-              deployment_uuid=$(echo "$body" | jq -r '.deployments[0].deployment_uuid // empty' 2>/dev/null || true)
-              message=$(echo "$body" | jq -r '.deployments[0].message // empty' 2>/dev/null || true)
-
-              if [[ ! "$deployment_uuid" =~ $UUID_RE ]]; then
-                echo "::error::$name redeploy failed: Coolify accepted the call but queued no deployment: ${message:-no message}"
-                return 1
-              fi
-
-              echo "$name redeploy: HTTP $status ($reason)${message:+ — $message}"
-              if [ "$name" = "scheduler" ]; then
-                echo "scheduler_deployment_uuid=$deployment_uuid" >> "$GITHUB_OUTPUT"
-              fi
-              return 0
-            fi
-
-            echo "::error::$name redeploy failed: HTTP $status ($reason)"
-            if [ "$reason" = "unexpected response" ]; then
-              echo "::error::$name response body: $body"
-            fi
-            return 1
-          }
-
-          app_result=0
-          redeploy_one app nck8s530pseqdcfxt50hndl5 || app_result=1
-          scheduler_result=0
-          redeploy_one scheduler warr96qhvzrie5ndwv8oteeu || scheduler_result=1
-
-          echo "Redeploy summary: app=$([ "$app_result" = 0 ] && echo ok || echo failed), scheduler=$([ "$scheduler_result" = 0 ] && echo ok || echo failed)"
-
-          if [ "$app_result" != 0 ] || [ "$scheduler_result" != 0 ]; then
+          # Exactly two pinned tags in the file (web + scheduler). Anything
+          # else means the file's shape changed and a blind edit could deploy
+          # one tier without the other — stop instead.
+          before=$(grep -cE '^    tag: sha-[0-9a-f]{40}$' "$GITOPS_VALUES" || true)
+          if [ "$before" != "2" ]; then
+            echo "::error::expected 2 pinned 'tag: sha-…' lines in $GITOPS_VALUES, found $before — refusing to edit"
+            exit 1
+          fi
+          sed -E -i "s/^(    tag: )sha-[0-9a-f]{40}$/\1${TAG}/" "$GITOPS_VALUES"
+          if [ "$(grep -cx "    tag: ${TAG}" "$GITOPS_VALUES")" != "2" ]; then
+            echo "::error::tag bump did not land on both web and scheduler"
             exit 1
           fi
 
-      # The workflow verifies the deploy, not just that Coolify accepted the
-      # trigger (FR-P0-5). Only runs once the redeploy step above has actually
-      # succeeded — if it failed, the job is already red and there is nothing
-      # new to poll for. Both checks below run regardless of each other's
-      # outcome, and the job fails at the end reporting both (mirrors the
-      # redeploy step's own always-both contract).
-      #
-      # App: poll /api/health until it reports this commit. Coolify pulls the
-      # image, runs `prisma migrate deploy` in the entrypoint, then boots — the
-      # ~10 min budget (40 x 15s) has to cover a migration.
-      #
-      # Scheduler: it has no HTTP surface, so instead poll its Coolify
-      # deployment status (captured above as scheduler_deployment_uuid) until
-      # it reports "finished". This proves the container deployed, not that the
-      # worker loop runs — that is 006's heartbeat, and B4 (docs/handoff.md).
-      - name: Verify deploy (prod /api/health + scheduler deployment status)
-        env:
-          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-          # Passed through env, not interpolated into the script text below —
-          # same reasoning as COOLIFY_API_TOKEN, for any step output.
-          SCHEDULER_DEPLOYMENT_UUID: ${{ steps.redeploy.outputs.scheduler_deployment_uuid }}
-        run: |
-          set -uo pipefail  # no -e: the app check must still run even if the scheduler check fails, and vice versa
+          if git diff --quiet; then
+            echo "Platform-GitOps already at ${TAG} — nothing to deploy"
+            exit 0
+          fi
+          git add "$GITOPS_VALUES"
+          git commit --quiet -m "deploy(uat): studio image tag -> ${TAG} [skip ci]" \
+            -m "From ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
-          app_verified=0
+          for attempt in 1 2 3 4 5; do
+            if git -c http.extraheader="$AUTH" push --quiet origin HEAD:main; then
+              echo "Pushed ${TAG} to Platform-GitOps main (attempt $attempt)"
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt) — rebasing on latest main"
+            sleep $((attempt * 5))
+            git -c http.extraheader="$AUTH" pull --quiet --rebase origin main
+          done
+          echo "::error::could not push the tag bump to Platform-GitOps after 5 attempts"
+          exit 1
+
+      # The workflow verifies the deploy, not just that the tag was committed
+      # (FR-P0-5): poll /api/health until it reports this commit. ArgoCD polls
+      # git every ~3 min, then the pod pulls the image and runs
+      # `prisma migrate deploy` in the entrypoint before booting — the ~15 min
+      # budget (60 x 15s) covers all three.
+      #
+      # The scheduler has no HTTP surface and this workflow holds no cluster
+      # credentials, so it is not verified here. It runs the same image from
+      # the same values file, so the two cannot drift apart; whether it is
+      # healthy is visible in ArgoCD (application studio-uat).
+      - name: Verify deploy (prod /api/health)
+        run: |
+          set -uo pipefail
           last_commit="(none)"
           last_http="(none)"
-          for i in $(seq 1 40); do
+          for i in $(seq 1 60); do
             body_file="$(mktemp)"
             http_code=$(curl -sS --max-time 10 -o "$body_file" -w '%{http_code}' "$PROD_URL/api/health" 2>/dev/null || true)
             resp=$(cat "$body_file" 2>/dev/null || true)
             rm -f "$body_file"
             last_http="$http_code"
-
             if [ "$http_code" = "200" ]; then
               commit=$(echo "$resp" | jq -r '.commit // empty' 2>/dev/null || true)
-              if [ -n "$commit" ]; then
-                last_commit="$commit"
-              fi
-              if [ "$commit" = "${{ github.sha }}" ]; then
-                echo "prod /api/health reports ${{ github.sha }} after $((i * 15))s"
-                app_verified=1
-                break
+              [ -n "$commit" ] && last_commit="$commit"
+              if [ "$commit" = "${GITHUB_SHA}" ]; then
+                echo "prod /api/health reports ${GITHUB_SHA} after $((i * 15))s"
+                exit 0
               fi
             fi
             sleep 15
           done
-          if [ "$app_verified" != 1 ]; then
-            echo "::error::prod /api/health never reported ${{ github.sha }} within 10 min — last commit seen: $last_commit (last HTTP: $last_http)"
-          fi
-
-          scheduler_verified=0
-          deployment_uuid="$SCHEDULER_DEPLOYMENT_UUID"
-          if [ -z "$deployment_uuid" ]; then
-            echo "::error::scheduler status unknown — the redeploy response had no deployment_uuid"
-          else
-            # -o/-w (not -f), same as the redeploy step, so a non-2xx status is
-            # readable instead of silently discarded. GET /api/v1/deployments/*
-            # is gated by the token's `read` ability (deploy-only tokens 401/403
-            # here even though /deploy above works) — fail fast on that rather
-            # than burning the whole 10-min budget on a token that will never
-            # succeed. Any other non-200 keeps polling (transient 5xx etc.),
-            # but the last HTTP status is remembered for the timeout message.
-            last_status="(none)"
-            last_http="(none)"
-            auth_failed=0
-            for i in $(seq 1 40); do
-              body_file="$(mktemp)"
-              http_code=$(curl -sS --max-time 10 -o "$body_file" -w '%{http_code}' \
-                -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-                "$COOLIFY_URL/api/v1/deployments/${deployment_uuid}" 2>/dev/null || true)
-              body=$(cat "$body_file" 2>/dev/null || true)
-              rm -f "$body_file"
-              last_http="$http_code"
-
-              if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
-                echo "::error::token rejected by /api/v1/deployments — COOLIFY_API_TOKEN needs the read ability as well as deploy (docs/coolify-token-rotation.md)"
-                auth_failed=1
-                break
-              fi
-
-              if [ "$http_code" = "200" ]; then
-                last_status=$(echo "$body" | jq -r '.status // empty' 2>/dev/null || true)
-              else
-                last_status="(none)"
-              fi
-
-              case "$last_status" in
-                finished)
-                  echo "scheduler deployment finished after $((i * 15))s"
-                  scheduler_verified=1
-                  break
-                  ;;
-                failed | cancelled*)
-                  # Coolify's enum value is "cancelled-by-user", not a bare
-                  # "cancelled" — glob-match the prefix.
-                  echo "::error::scheduler deployment $last_status"
-                  break
-                  ;;
-                *) sleep 15 ;;
-              esac
-            done
-            if [ "$scheduler_verified" != 1 ] && [ "$auth_failed" != 1 ]; then
-              echo "::error::scheduler deployment never reached 'finished' within 10 min — last status: ${last_status:-unknown} (last HTTP: $last_http)"
-            fi
-          fi
-
-          if [ "$app_verified" != 1 ] || [ "$scheduler_verified" != 1 ]; then
-            exit 1
-          fi
+          echo "::error::prod /api/health never reported ${GITHUB_SHA} within 15 min — last commit seen: $last_commit (last HTTP: $last_http). Check ArgoCD application studio-uat."
+          exit 1
