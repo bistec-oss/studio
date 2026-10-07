@@ -6,8 +6,9 @@ import { resolveCopyProvider } from '@/providers/registry'
 import { buildBriefInput } from '@/lib/agent/briefInput'
 import { runPathADesign, assertTemplateMatchesBrief } from '@/lib/agent/pathA'
 import { runPathBDesign } from '@/lib/agent/pathB'
-import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
+import { currentRenderStamp, type RenderStamp } from '@/lib/drafts/revisions'
 import { humanizeGenerationError } from '@/lib/agent/generationErrors'
+import { generationSkipFields, type BackgroundSkipFields } from '@/lib/drafts/backgroundNotice'
 import type { GenerationActor } from '@/lib/agent/types'
 
 // Path B needs a resolvable brand kit; thrown before any model call is paid for.
@@ -73,6 +74,12 @@ interface ProducedDesign {
   htmlContent: string
   exportUrl: string
   backgroundImageUrl: string | null
+  // 005 FR-07: why this render has no AI background, when that was not the
+  // model's choice — cleared for a produced/not-needed background and Path A.
+  backgroundSkip: BackgroundSkipFields
+  // F3 (AC-04): the prompt version + font set of THIS render, resolved once
+  // and written to both the draft and its v1 revision.
+  stamp: RenderStamp
 }
 
 // Path A/B design dispatch → rendered PNG. The heavy model + Puppeteer work,
@@ -85,18 +92,29 @@ async function produceDesign(
 ): Promise<ProducedDesign> {
   if (template) {
     const result = await runPathADesign(brief, kit, template, copyText, campaignBriefing, actor)
-    return { htmlContent: result.htmlContent, exportUrl: result.exportUrl, backgroundImageUrl: null }
+    return {
+      htmlContent: result.htmlContent,
+      exportUrl: result.exportUrl,
+      backgroundImageUrl: null,
+      // Path A has no background step: nothing was skipped.
+      backgroundSkip: generationSkipFields(null),
+      stamp: currentRenderStamp(),
+    }
   }
   const result = await runPathBDesign(brief, kit!, copyText, campaignBriefing, actor)
   return {
     htmlContent: result.htmlContent,
     exportUrl: result.exportUrl,
     backgroundImageUrl: result.backgroundImageUrl,
+    backgroundSkip: generationSkipFields(result.background),
+    stamp: currentRenderStamp(),
   }
 }
 
 // Persist a freshly generated design onto a draft AND record it as revision v1
-// (the append-only history's origin — see F2). One transaction.
+// (the append-only history's origin — see F2). One transaction. The literal 1
+// is safe: a draft only gains other rows (refines, including rejected renders)
+// after it has a finished design, and rejected rows carry no number anyway.
 async function finalizeDraftV1(
   draftId: string,
   design: ProducedDesign,
@@ -111,8 +129,9 @@ async function finalizeDraftV1(
         // Public URL of the AI-generated background (null when the pre-step
         // skipped, and always null for Path A).
         imageUrl: design.backgroundImageUrl,
+        ...design.backgroundSkip,
         status: 'EXPORTED',
-        promptVersion: PROMPT_VERSION,
+        ...design.stamp,
         currentRevisionNumber: 1,
         failureReason: null,
       },
@@ -124,6 +143,7 @@ async function finalizeDraftV1(
         instruction: 'Original design',
         htmlSnapshot: design.htmlContent,
         exportUrl: design.exportUrl,
+        ...design.stamp,
       },
     })
   })
@@ -161,8 +181,9 @@ export async function generateDraftForBrief(
         templateId: inputs.template?.id ?? null,
         exportUrl: design.exportUrl,
         imageUrl: design.backgroundImageUrl,
+        ...design.backgroundSkip,
         status: 'EXPORTED',
-        promptVersion: PROMPT_VERSION,
+        ...design.stamp,
         currentRevisionNumber: 1,
       },
     })
@@ -173,6 +194,7 @@ export async function generateDraftForBrief(
         instruction: 'Original design',
         htmlSnapshot: design.htmlContent,
         exportUrl: design.exportUrl,
+        ...design.stamp,
       },
     })
     return created

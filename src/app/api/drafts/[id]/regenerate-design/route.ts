@@ -6,9 +6,9 @@ import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
 import { getActiveCampaignBriefing } from '@/lib/campaign/briefing'
 import { runPathBDesign } from '@/lib/agent/pathB'
-import { PROMPT_VERSION } from '@/lib/agent/prompts/shared'
-import { withNextRevisionNumber } from '@/lib/drafts/revisions'
+import { currentRenderStamp, withNextRevisionNumber } from '@/lib/drafts/revisions'
 import { claimDraftAction, startDraftAction } from '@/lib/drafts/draftActions'
+import { generationSkipFields } from '@/lib/drafts/backgroundNotice'
 
 // Regenerates the freeform (Path B) design for a draft: produces a brand-new
 // design variant from the same brief + existing copy. Validation runs
@@ -55,7 +55,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
   // (the team token otherwise) — startDraftAction resolves it before the
   // request unwinds and pins it onto the background run. A throw below is
   // recorded on Draft.pendingActionError; the draft itself is left untouched.
-  await startDraftAction(draft.id, user.userId, user.teamId, async () => {
+  await startDraftAction(draft.id, user.userId, user.teamId, 'REGENERATE_DESIGN', async () => {
     // Run the new design first — if it fails, the draft is left untouched.
     // actor is the acting teammate (NOT the brief owner) — the image-provider
     // resolution must follow whoever clicked Regenerate.
@@ -63,6 +63,9 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
       userId: user.userId,
       teamId: user.teamId,
     })
+    // F3 (AC-04): this render's stamp, resolved once and written to both the
+    // new revision row and the draft.
+    const stamp = currentRenderStamp()
 
     // The Undo target is whatever revision is currently live. The design history
     // is an append-only log, so the live state is already the current revision —
@@ -81,6 +84,10 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
             instruction: 'Design before regenerate',
             htmlSnapshot: draft.htmlContent!,
             exportUrl: draft.exportUrl ?? '',
+            // The snapshot IS the draft's current render, so it keeps the
+            // draft's own stamp (null when the draft predates the stamps).
+            promptVersion: draft.promptVersion ?? null,
+            fontSet: draft.fontSet ?? null,
           },
         })
         return revisionNumber
@@ -97,6 +104,7 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
           instruction: 'Regenerated design',
           htmlSnapshot: result.htmlContent,
           exportUrl: result.exportUrl,
+          ...stamp,
         },
       })
       await tx.draft.update({
@@ -106,10 +114,13 @@ export const POST = withTeamAuth<{ id: string }>(async (_req, { params }, user) 
           exportUrl: result.exportUrl,
           // New background (or null when the pre-step skipped — clears the stale one).
           imageUrl: result.backgroundImageUrl,
+          // 005 FR-07: this design was made from scratch, so its skip (or
+          // none) replaces whatever the previous render recorded.
+          ...generationSkipFields(result.background),
           status: 'EXPORTED',
           currentRevisionNumber: revisionNumber,
           pendingConflict: Prisma.JsonNull,
-          promptVersion: PROMPT_VERSION,
+          ...stamp,
         },
       })
       return revisionNumber

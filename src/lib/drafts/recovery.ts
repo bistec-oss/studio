@@ -36,6 +36,11 @@ export interface DraftRecoveryPlan {
 // restore). So an IN_PROGRESS — or interruption-swept FAILED — draft carrying a
 // finished design + revision pointer is a live post whose STATUS was clobbered,
 // not a broken run.
+//
+// Recovery never reads DraftRevision rows — only the pointer. That is safe
+// against rejected refine renders (change 004 FR-13) because a rejected row has
+// no revisionNumber, so currentRevisionNumber can never refer to one, and a
+// twice-failed refine leaves the pointer and status untouched (FR-12).
 export function hasFinishedDesign(draft: {
   exportUrl: string | null
   htmlContent: string | null

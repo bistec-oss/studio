@@ -23,7 +23,9 @@ models:
 #   direct               — commits straight to current branch
 #   worktree-per-change  — isolated worktree per change, enables parallel multi-change builds
 git:
-  strategy: "branch-per-change"   # "branch-per-change" | "direct" | "worktree-per-change"
+  # 2026-09-23: all roadmap work (004–011) lands on the integration branch `v2`,
+  # merged to main once confirmed working — so builds commit directly onto v2.
+  strategy: "direct"              # "branch-per-change" | "direct" | "worktree-per-change"
   auto_commit: true
   commit_prefix: "specclaw"       # Prefix for auto-commits
   branch_prefix: "specclaw/"      # Prefix for feature branches

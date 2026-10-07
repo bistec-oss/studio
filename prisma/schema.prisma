@@ -455,6 +455,13 @@ model Draft {
   // Prompt revision that produced the current design (prompts/shared.ts
   // PROMPT_VERSION) — lets output quality be correlated with prompt changes.
   promptVersion   String?
+  // Digest of the installed font packages at render time (src/lib/renderer/
+  // fontSet.ts getFontSetId) — the glyph environment is global (an image
+  // rebuild can change how an already-approved draft renders) so this makes
+  // that attributable after the fact. Null for drafts rendered before this
+  // existed, or off a host with no apk database (e.g. local dev) — absent,
+  // not wrong.
+  fontSet         String?
   status          DraftStatus     @default(IN_PROGRESS)
   // Why the last generation attempt FAILED (model error, timeout, interruption).
   // Shown on the preview page's inline error card; cleared on a successful retry.
@@ -464,15 +471,35 @@ model Draft {
   pendingAction   DraftAction?
   // Error from the last action run; cleared when the next action starts.
   pendingActionError String?
+  // "Couldn't apply" outcome of the last refine (change 004 FR-14): the refine
+  // ran to completion but failed verification twice, so nothing was committed.
+  // Deliberately separate from pendingActionError — "did not do what you asked"
+  // must read differently from "the run crashed". Cleared by the next
+  // successful action.
+  notAppliedReason     String?
+  // The retained rejected render for that outcome (a DraftRevision with
+  // rejectedAt set and no revisionNumber) — never a chain row. SetNull so the
+  // draft hard-delete, which removes revisions first, is unaffected.
+  notAppliedRevisionId String?
+  notAppliedRevision   DraftRevision? @relation("DraftNotAppliedRevision", fields: [notAppliedRevisionId], references: [id], onDelete: SetNull)
+  // Why the current design has no AI background, when that was NOT the
+  // model's choice (005 FR-06/FR-07): NO_PROVIDER | PROVIDER_ERROR |
+  // DECISION_ERROR, enforced in src/lib/drafts/backgroundNotice.ts (plain TEXT
+  // so a new reason needs no migration). NOT_NEEDED is never stored. The
+  // detail is the clipped (≤300 chars) error text. Null = no notice.
+  backgroundSkipReason String?
+  backgroundSkipDetail String?
   createdAt       DateTime        @default(now())
   // @default(now()) keeps the added column valid for pre-existing rows
   updatedAt       DateTime        @default(now()) @updatedAt
   posts           Post[]
-  revisions       DraftRevision[]
+  revisions       DraftRevision[] @relation("DraftRevisions")
   scheduledGenerations ScheduledGeneration[]
 
   @@index([briefId])
   @@index([teamId])
+  // FK lookup side for ON DELETE SET NULL when a rejected DraftRevision is removed.
+  @@index([notAppliedRevisionId])
 }
 
 model Post {
@@ -619,15 +646,59 @@ model ChannelToken {
   @@index([teamId])
 }
 
+// Two kinds of row share this table (change 004, Phase 2 — FR-12/13/14):
+//
+//  * COMMITTED rows are the revision chain: revisionNumber 1..N, contiguous per
+//    draft, the only rows Draft.currentRevisionNumber can point at, and the only
+//    rows version switching / restore / Undo / next-number allocation see.
+//  * REJECTED rows are refine renders that failed verification twice. They are
+//    kept for diagnosis (and a possible "Use anyway" adoption) but are NOT part
+//    of the chain: they have NO revisionNumber at all (NULL), plus rejectedAt.
+//
+// A rejected row has no chain position by construction, so the pointer (an Int
+// compared to revisionNumber) can never select one and next-number allocation
+// can never count one. The migration adds a CHECK constraint making
+// "revisionNumber IS NULL" and "rejectedAt IS NOT NULL" the same statement.
+// Every reader still filters through committedRevisionWhere() in
+// src/lib/drafts/revisions.ts — never query this table for the chain directly.
 model DraftRevision {
   id             String   @id @default(cuid())
   draftId        String
-  draft          Draft    @relation(fields: [draftId], references: [id])
-  revisionNumber Int
+  draft          Draft    @relation("DraftRevisions", fields: [draftId], references: [id])
+  // Chain position. NULL exactly when the row is rejected (CHECK constraint).
+  revisionNumber Int?
   instruction    String
   htmlSnapshot   String   @db.Text
   exportUrl      String?
   createdAt      DateTime @default(now())
+  // Set when the render failed verification twice (FR-13). Non-null ⇔ rejected.
+  rejectedAt     DateTime?
+  // Free-form diagnostics for a rejected render: the classes the instruction
+  // resolved to and the verifier's stated miss (FR-13). Deliberately untyped JSON
+  // and allowed ONLY on rejected rows (CHECK constraint).
+  // FR-02 vs FR-13 ruling: FR-02 says the instruction class is transient and is
+  // not written to DraftRevision; FR-13 says a rejected render is labelled with
+  // its classes. FR-13 is the more specific requirement for rejected rows, so
+  // classes are stored here and ONLY here — never as a typed column and never
+  // on a committed row.
+  rejection      Json?
+  // "Use anyway" (FR-14a, T19): when the rejected render was adopted, and the
+  // committed revisionNumber its fresh copy became. The rejected row itself is
+  // never pointed at; a non-null adoptedAt makes a second adopt a 409.
+  adoptedAt             DateTime?
+  adoptedRevisionNumber Int?
+  // Set when a rejected render is dismissed/superseded, so adopting it later is
+  // a 409 (FR-14a "already-adopted or discarded").
+  discardedAt    DateTime?
+  // The render stamp of THIS row's render (F3, AC-04): the prompt version that
+  // produced htmlSnapshot and the font set that rasterized exportUrl — the
+  // same values Draft.promptVersion/fontSet carry while the draft shows it.
+  // Restore and "Use anyway" copy them back onto the draft. Null on rows
+  // written before this existed (unknown, and copied as null).
+  promptVersion  String?
+  fontSet        String?
+  // Drafts whose current not-applied outcome references this rejected row.
+  notAppliedOn   Draft[]  @relation("DraftNotAppliedRevision")
 
   @@unique([draftId, revisionNumber])
 }

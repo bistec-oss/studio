@@ -101,7 +101,7 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
 
-**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; Claude auth comes from the logged-in `claude` session by default, see §7. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
+**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; CLI mode needs a **personal or team Claude token** (connected in-app at `/settings` or `/team`; there is no env or logged-in-session fallback). Setup guide: [`docs/claude-account-setup.md`](claude-account-setup.md). See also §7. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
 
 **Credentials no longer live in `.env`.** Personal Claude/OpenAI credentials are connected at **`/settings`**; a team's shared credentials (Claude, OpenAI, Instagram/LinkedIn social channels, and MCP/ACP API keys) are set at **`/team`** by a team admin, in-app, once you're signed in. For social channel setup specifically, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence) — just enter the resulting tokens at `/team` instead of `.env`.
 

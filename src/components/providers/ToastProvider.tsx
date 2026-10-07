@@ -27,6 +27,11 @@ export function ToastProvider() {
     <Toaster
       theme={theme}
       position="bottom-right"
+      // Lift the stack clear of the floating Create post button (56px tall,
+      // 24px from the bottom edge) with a 16px gap. Sonner goes full-width at
+      // <=600px, so the mobile offset needs the same bottom clearance.
+      offset={{ bottom: 96, right: 24 }}
+      mobileOffset={{ bottom: 96 }}
       closeButton
       toastOptions={{
         style: {

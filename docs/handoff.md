@@ -1,13 +1,347 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-28 (latest: a copy edit was flipping `Draft.status` to `IN_PROGRESS`, breaking the library, Refine, regenerate-copy and the copy field at once — fixed, with a read-time + migration heal for stranded drafts. Earlier: team-admin brand-kit access + Sinhala font rendering; **PR #39** made deploys apply migrations; **PR #40** removed the wizard's stale COPY-provider gate.)
+**Date:** 2026-10-07 (latest: 005 finished and verified **PASS**; 011 planned and wave 1 built; **waiting on the user's direction pick**). Previous: 2026-10-03 (004 finished and verified PARTIAL, Phase 0 only; 005 built 9/10, waiting on one operator check). Before that: 2026-09-28 (build session — 004 Waves 1–3 built, MinIO → silo, PR #42 + draft PR #43). Before that: 2026-09-23 (later, later the same day: proposal **012** per-channel captions + copy→caption rename, a floating **Create post** button folded into 011, and a launch-video legibility pass. Before that: planning session — proposals 008–011 + roadmap, 004 re-planned to 24 tasks incl. Phase 0, and the deploy pipeline found broken: Coolify 401 since 2026-09-15). Previous: 2026-07-28 (copy-edit status clobber fix).
 **Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` — **PR #40** `21f95035` (brief-wizard CLI copy gate) on top of **PR #39** `16e1a069` (migrate on boot), **PR #38** `b35d96bd` (team-name reuse), PR #37 `fb8216c3`, PR #35 `d01ac4d2`, PR #36 `3dcac485`, prod-fix PR #30 `4e8e6e3e`, team-tenancy PR #29 `2a118a73`. All merged; no open branches.
+**Branch:** work continues on **`v2`** (pushed; all 004–012 work lands here, merged to `main` in one go on go-ahead). `main` = `09a38b71`; prod runs `9ea4c045` (deploys broken since 2026-09-15). Open: **PR #42** (004 Phase 0 + MinIO→silo, to `main`) and **draft PR #43** (`v2` CI only — never merge).
 **Production:** `https://studio.bistecglobal.com`
 
 ---
 
-## ⏸️ 2026-07-28 (latest) — PICK UP HERE
+## ⏸️ 2026-10-07 — PICK UP HERE
+
+**005 is done and verified PASS.** **011 (app visual redesign) is planned, and wave 1 is built.** The build is paused at its one operator gate: **the user picks one of three design directions.** Everything is pushed to `v2`. Nothing is merged to `main`, and prod is unchanged.
+
+### Do this next, in order
+
+1. **Get the direction pick from the user: A Graphite, B Folio or C Instrument.** They may add changes, for example "B, but keep sidebar icons".
+   - **Comparison page:** https://claude.ai/artifact/XijAC8pAQRkmGErC5QYmB5. It is private to its owner. A local copy is `docs/ui-reference/direction-studies/pick.html`; open it in a browser.
+   - **Full studies:** `docs/ui-reference/direction-studies/study-{a-graphite,b-folio,c-instrument}.html`. Each opens with the exact `:root` / `.dark` token block that T4 copies into `globals.css`, plus its contrast tables. `index.html` in the same folder shows all three side by side in iframes.
+2. **Resume `/specclaw:build 011-app-visual-redesign`** (subagent-driven: one implementer subagent per task, then a `specclaw:code-reviewer` subagent, then the orchestrator commits). The next task is **T3**:
+   - record the pick, with its date, in `proposal.md` → Decisions;
+   - `git mv` Frozen Light into `docs/ui-reference/archive/frozen-light/`;
+   - write the new `docs/ui-reference/DESIGN_SYSTEM.md` from the chosen study.
+
+   Then come T4 (tokens), T5 (primitives and opaque surfaces), T6 (shell), T7–T12 (screens) and T13 (cleanup). Run them **one at a time**, because lint-staged stashes. Every task that touches `src/` ends with a full clean mock E2E run.
+
+3. **PR #42 merges only on the user's go-ahead** (unchanged since 2026-10-01). After it merges, merge `main` into `v2`, re-check 005 AC-17 under node:22, re-run the AC-16 script against a rebuilt image, and close 004's Phase 0 ACs.
+
+### What happened on 2026-10-06 and 2026-10-07
+
+- **005 AC-16 passed 3/3** in the operator run: real token, temporary env file deleted afterwards, image `bistec-studio:t6` with CLI 2.1.287. T6 was marked complete (`9cb80ad1`), and the build was finalized with green gates.
+  - **🔴 The user pasted that OAuth token into the chat**, so it is in the session transcript. **The user should revoke it** and make a new one with `claude setup-token`.
+  - The auto-mode classifier blocks Claude from writing a token to a file and running docker with it. The working pattern is a ready-to-paste `! …` command that writes a temp env file, runs the check and deletes the file. This is logged as a 005 learning.
+- **005 verify: PASS, 25/25 ACs** (`e4e8e78e`, `.specclaw/changes/005-provider-flexibility-onboarding/verify-report.md`).
+  - The first E2E run failed once: the AC-23 stale-wording guard caught the 2026-10-03 handoff quoting "shared server credential". `f0fc1af7` reworded that line.
+  - The clean re-run had **261 passed, 3 skipped, 0 failed, 0 flaky**. The skips are TC-REG-H11a/b/c, and TC-GEN-05 now runs.
+  - **Open follow-ups, none of them failures:** recheck AC-17 after node:22 lands on `v2`; unit runs leave empty `bistec-cli-*` temp dirs; Gemini needs one live call; the card guide names `docs/claude-account-setup.md` as plain text, not a link.
+- **011 approved and planned** (`e398a589`). The user's decisions, recorded in `proposal.md` → Decisions:
+  - **a neutral tool UI**, with no BISTEC brand cues; each team's brand kit is the only brand on screen;
+  - **three studies, from which the user picks alone**;
+  - **the theme follows the OS**.
+
+  The planner's assumptions A1–A4 are in `spec.md`; the user did not veto them:
+  - no pixel-diff tests, with screenshots for review instead;
+  - the button shows icon + label at `md` and wider, and the icon only below that;
+  - it always starts a fresh brief;
+  - every screen works at 375 px with no horizontal scroll.
+
+  The plan is 14 FR, 8 NFR, 20 AC and 13 tasks in 7 waves.
+
+- **011 wave 1 built and pushed:**
+  - **T1 Create post button** (`3203673c`): bottom-right on every `(app)` page except `/brief`, with toasts offset above it (Sonner `offset`/`mobileOffset` 96 px). New `tests/e2e/create-post-button.test.ts`. Full E2E: 265 passed, 3 skipped, 0 failed. The review gave NOTE (5 notes, none blocking). **Carry-over for T6:** white on `#0284c7` is about 4.1:1, below AA; the button moves onto AA tokens in the shell task.
+  - **T2 three direction studies** (`bb6828c5`). All 180 contrast checks pass; all floating surfaces are opaque.
+    - **A Graphite:** warm greys, an ink accent, floating opaque islands, Plus Jakarta Sans, today's two-column layout.
+    - **B Folio:** cream paper and espresso ink, a sienna accent, Fraunces over Instrument Sans, rules instead of boxes, the post as a proof with crop marks.
+    - **C Instrument:** true neutrals, a violet accent, Geist and Geist Mono, a dense three-pane workbench.
+  - **The comparison page and screenshots are in docs** (this session's last commit): `docs/ui-reference/direction-studies/pick.html` and `shots/`.
+
+### Notes T3 onwards must honour (from the T2 report)
+
+- **A new token, `--line-subtle`,** is for decorative dividers, so `--line` can carry the 3:1 contrast needed for control edges. T4's token and contrast tests must include it.
+- **The design §4 reduced-motion rule** (1 ms on `*`) also makes every property transition for 1 ms. T5's computed-style E2E checks should wait briefly before reading.
+- **No study uses blue,** so `status-scheduled` moves from sky to amber or ochre in all three. In C, `exported` shares the accent hue.
+- **Every study regroups some controls:** Export and Edit inline move into a More menu, and Undo sits by the versions. FR-12 still requires every control to stay present and reachable. C's three panes need a 375 px plan (a bottom sheet for the inspector).
+- **The studies load Google Fonts for preview only.** The app self-hosts the chosen families through `next/font` (NFR-05).
+- **`scratchpad/contrast.mjs` from T2 isn't in the repo.** T4 rebuilds the contrast test as `tests/unit/contrast.test.ts`.
+
+### State and gates at `v2` head
+
+- **Gates:** unit **1593/1593**, lint 0 errors (the 7 known warnings), build passes. The last full clean mock E2E was **265/3/0/0**, at T1. Render harness 15/15 at its last run (011 has not touched generated posts).
+- **No new migrations since 2026-10-03.** The four migrations on `v2` but not on `main` are listed in CLAUDE.md.
+- **Open PRs are unchanged:** #42 merges on go-ahead only; draft #43 must never be merged.
+
+---
+
+## ⏸️ 2026-10-03 — superseded by 2026-10-07 above (kept for history)
+
+**004 is done** (24/24, verify **PARTIAL**, solely because Phase 0 is still on unmerged PR #42). **005 is built** (9 of 10 tasks; **T6 waits on one operator check**, AC-16). Everything is pushed to `v2`. Nothing is merged to `main`, and prod is unchanged.
+
+### Do this next, in order
+
+1. **The user runs AC-16** (005 T6). It proves CLI vision inside the built image and that an injected prompt can't read files or env secrets. Claude never handles the token.
+   1. In your own editor, create `C:\Users\<you>\bistec-token.env` holding `CLAUDE_CODE_OAUTH_TOKEN=<token>`.
+   2. Run `docker run --rm --env-file C:\Users\<you>\bistec-token.env --entrypoint node bistec-studio:t6 scripts/cli-sandbox-check.mjs`.
+   3. Expect three `PASS` lines, then `PASS: 3/3 checks passed`.
+   4. Delete the file.
+   - `--entrypoint node` is required: the default entrypoint runs migrations and needs a DB.
+   - **On another machine,** rebuild the image first: `export MSYS_NO_PATHCONV=1; docker build -t bistec-studio:t6 .` from `v2`.
+2. **Record the result in `reports/T6.md`,** then `specclaw-update-task-status .specclaw/changes/005-provider-flexibility-onboarding/tasks.md T6 complete`.
+3. **`/specclaw:verify` 005.**
+   - Its inputs are `.specclaw/changes/005-provider-flexibility-onboarding/verify-notes.md`: the known limits plus the build rulings verify must judge against.
+   - Run the **full clean mock E2E** as part of it:
+     1. stop stray node processes;
+     2. `rm -rf .next`;
+     3. drop and recreate `bistec_studio_test`;
+     4. `npm run test:e2e:db`;
+     5. serve;
+     6. `npm run test:e2e:mock`.
+
+     Expect 0 failed, 0 flaky, and 3 skips (TC-REG-H11a/b/c; TC-GEN-05 now runs).
+4. **Merge PR #42 on the user's go-ahead only.** The user said "not yet" on 2026-10-01. Then merge `main` into `v2`, re-check 005 AC-17 under node:22 (`claude --version` → `2.1.287` in the image), and close 004's Phase 0 ACs (AC-P0-1/2/4; see 004's `verify-report.md` Issue 2).
+5. **Next change, per `.specclaw/ROADMAP.md`.**
+
+### What 004 finished (since 2026-09-28)
+
+- **The work:**
+  - Waves 4–5 (T17–T24);
+  - a three-slice whole-branch final review;
+  - a fix wave: F1 `5abee773`, F2 `5809e24d`, `a0926982`, F1b `d29c5b60`, F1c `ea3bd1c2`, F1d `570fb6b5`, `f8a6aa3f`;
+  - AC-04 fix F3 `543e8efa`.
+- **Verify:** `.specclaw/changes/004-design-instruction-fidelity/verify-report.md`. Phases 1–3 pass 29/29 after F3. Phase 0's ACs are pending #42 and the token rotation.
+- **Key rulings, all recorded as known limits in that report:**
+  - **A requested image swap always fails closed.** The move-intent lexicon was deleted as gameable.
+  - **The text-reduction lexicon prefers triggering.** For replace/constrain there is no judge, so not triggering is a zero-call pass.
+  - **The settle guards key on the action, not the claim.** A per-claim token is a follow-up.
+
+### What 005 built (all on `v2`)
+
+| Wave                | Commits                                                           | What                                                                                                                                                                                                                                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, image resolution | `e6649f0a` `6c642b35` `d1c61da9` `b13f3933` `b045129b`            | The resolver falls back to the oldest enabled image provider. Slot/provider compatibility is enforced. The IMAGE-only default rules apply. /team shows the default, serving and none states. A skipped AI background shows an amber notice with its reason. The background and key-validation E2E seams make TC-GEN-05 runnable.                   |
+| 2, CLI hardening    | `a1a6ff8f` `956e7cba` `927a0953` `a6c5539e` `8fc9f6e7` `cc2feecb` | `--tools ""` on every call; an env allowlist; vision over stream-json with no temp files; settings isolation (`--safe-mode`, `--setting-sources ""`, `--no-session-persistence`, a temp cwd); auth classified only on CLI-written fields (`api_error_status` 401, or 403 "revoked"); the CLI pinned to `2.1.287`; `scripts/cli-sandbox-check.mjs`. |
+| 3, Gemini           | `7ae1b424` `129c1e75`                                             | Per-provider image sizes; Gemini (`gemini-3.1-flash-image` via generateContent), **mock-verified only** by user decision.                                                                                                                                                                                                                          |
+| 4, onboarding       | `92c91826` `8bd91ff5`                                             | `docs/claude-account-setup.md` (the native installer is primary, per Anthropic; winget is the alternative with the #6200 note); the in-app `ClaudeConnectGuide` on /settings and /team; the stale shared-credential copy is fixed.                                                                                                                 |
+
+- **Plan trail:** `.specclaw/changes/005-provider-flexibility-onboarding/`, with spec, design, tasks, `reports/T1–T10.md` and `timeline.md`. Spec amendments made during the build: the FR-08 isolation flags, AC-14 `DISABLE_AUTOUPDATER`, and FR-14/AC-22 native installer.
+- **Machine-only ledgers (gitignored):**
+  - `.superpowers/sdd/005/`: briefs and `progress.md`, which holds every ruling;
+  - `.superpowers/sdd/tasks/`: 004's reviews.
+
+  Their binding content is in the committed reports and verify notes.
+
+### State and gates
+
+- **Gates at `v2` head:** unit **1593/1593**, lint 0 errors (the 7 known warnings), `npm run build` passes.
+  - **Last full clean mock E2E:** 251 passed / 3 skipped / 0 failed / 0 flaky, at `b13f3933`, end of 005 Wave 1. Later waves ran their own E2E files green, and verify re-runs the full suite.
+  - **004's verify run:** 231/4/0.
+- **New migrations on `v2` since 2026-09-28,** applied by a redeploy (locally, `npx prisma migrate deploy`):
+  - `20261001120000_revision_render_stamps` (004 F3);
+  - `20261002120000_draft_background_skip` (005 T2).
+
+  Both are nullable columns. The down paths are in their headers.
+
+- **Release note for the eventual `v2` → `main` merge:** teams whose IMAGE key isn't flagged default start using it for scheduled, MCP and agent images, so that key starts being spent (005 NFR-03).
+
+### Gotchas from this stretch
+
+- **The D: drive logged real I/O errors on 2026-10-01** (System log events 51, 50 and 140). The user said the drive works. Push `v2` often. The drive-failure protocol in memory still applies.
+- **The account switched mid-build** after a weekly usage limit. Resumed agents kept their context.
+- **chrome-devtools and shadcn MCP disconnected after the re-login.** T10's screenshots were taken with a throwaway Playwright script instead.
+- **`git push` and forcing a stale specclaw lock may be blocked by the auto-mode classifier** until the user authorizes them in chat.
+- **Node 24 prints `DEP0190` on win32 `shell:true` spawns.** It's harmless here.
+
+### 🔴 Urgent ops (Coolify administrator), unchanged and not blocked on any merge
+
+Swap prod MinIO to silo (`docs/minio-silo-migration.md` on the #42 branch; CVE-2026-40344), and rotate `COOLIFY_API_TOKEN` (`deploy` + `read`, created by an Admin/Owner). Details are in the 2026-09-28 section below.
+
+---
+
+## 2026-09-28 — build session (superseded by the 2026-10-03 section above for status)
+
+**Build session.** 004 Waves 1–3 are built, reviewed and pushed, and MinIO is replaced by the maintained fork **silo**. **15/24 of 004's tasks are done.** Next is **Wave 4** (Phase 2 wiring). Nothing is merged to `main`, and prod is unchanged.
+
+### Where things are
+
+| What                                         | Where                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **PR #42** `fix/ci-deploy-pipeline` → `main` | Open, **not merged**. It holds 004 Phase 0 (T2–T5): readable Coolify redeploys, POST `/deploy`, `/api/health` → `{ ok, commit }`, CI verifying the deployed SHA, action majors, Node 22. Plus the **MinIO → silo** switch (`edb20b10`, `f52189e8`) and the admin runbook `docs/minio-silo-migration.md`. Local worktree: `../designer-ci`. |
+| **PR #43** `v2` → `main`                     | A **DRAFT that must never be merged.** It exists only so CI runs on `v2`, because `e2e.yml` never triggers on `v2` pushes. Its e2e job goes red at "Start MinIO" until #42 merges and `main` is merged into `v2`.                                                                                                                          |
+| **`v2`**                                     | Pushed. It holds 004 Waves 2–3 plus the tracking commits.                                                                                                                                                                                                                                                                                  |
+| `main` / prod                                | `main` = `09a38b71`; **prod runs `9ea4c045`**. Deploys have been broken since 2026-09-15 (Coolify 401).                                                                                                                                                                                                                                    |
+| 004 plan and progress                        | `.specclaw/changes/004-design-instruction-fidelity/tasks.md`: task IDs were **renumbered to T1–T24** (old→new table at the top). Each task has its verification report under `reports/`.                                                                                                                                                   |
+| Wave 4 rulings                               | **In `tasks.md` itself**, as "Carried in" notes on T17–T21. Read them before building.                                                                                                                                                                                                                                                     |
+| SDD ledger                                   | `.superpowers/sdd/tasks/progress.md`, which holds every ruling, deferred minor and fix round. **It is gitignored, so it exists on this machine only.** Its binding content was copied into the tasks.md carry notes.                                                                                                                       |
+
+### What was built (all reviewed by independent task and whole-wave reviews)
+
+- **Wave 1: Phase 0, deploy pipeline** (on PR #42). T2–T5 are done; T6's CLAUDE.md note is on `v2`. **T1 (token rotation) is deferred: the Coolify admin does it.** The final review caught two things:
+  - Coolify ≥4.2.0 **rejects GET `/deploy` with 405**, so the call is now POST.
+  - A token created by a team **Member** gets HTTP 200 but queues no deployment. The step now fails on that and prints Coolify's message.
+- **Wave 2: Phase 1** (on `v2`):
+  - T10: no emoji in designs; an explicit exception covers emoji in the caption. `PROMPT_VERSION` `2026-09-27.2`.
+  - T11: `reconcileInlineAssets`.
+  - T7: `font-noto-symbols` in the runner image.
+  - T9: real-render harness in `tests/render/` (`npm run test:render`), plus an in-image glyph check `scripts/glyph-check/check-glyphs.mjs` wired into CI.
+  - T8: `Draft.fontSet` stamp, migration `20260927120000_draft_font_set`.
+- **Wave 3: Phase 2 modules** (on `v2`, **not wired into the refine route yet**):
+  - T12: `instructionClasses.ts`, the one table: semantics plus pure post-conditions over `DomFacts`. It took 4 review rounds; 9 false-pass paths were closed.
+  - T13: `refineEnvelope.ts`. The envelope carries `classes`, `supersedes` and `constrains`.
+  - T15: migration `20260927130000_refine_not_applied`. Rejected rows have a NULL `revisionNumber` and `rejectedAt`, CHECK constraints enforce this, and the down path is documented in the migration header.
+  - T16: the `COMMITTED_REVISION` filter guards every chain consumer; E2E §U.
+  - T14: `refineVerify.ts` and `renderer/domFacts.ts`. Structural classes cost zero model calls; `add` makes one Haiku-pinned call through `pinModel`. It fails closed, and `isAccepted` is true only for `pass`.
+- **Gates at `v2` head:** unit 562/562, render 15/15, full mock E2E **183 passed / 4 skipped / 0 failed**, tsc and lint clean (the 7 known warnings).
+
+### 🔴 Urgent ops (Coolify administrator), not blocked on any merge
+
+1. **Swap prod MinIO to silo now.** MinIO's community edition is dead: Docker Hub deleted it on 2026-09-11, quay.io has refused anonymous pulls since 2026-09-24, and dl.min.io returns 410.
+   - Prod's version has **CVE-2026-40344**: anyone holding an access key can write any object. **Our presigned URLs expose the access key.**
+   - The runbook is `docs/minio-silo-migration.md` (PR #42 branch): record the image, tag a rollback copy, back up the volume, change only `image:`, verify, roll back if needed.
+   - Tested: data compatibility both ways, and full E2E 180/0 against silo.
+2. **Rotate `COOLIFY_API_TOKEN`** (`docs/coolify-token-rotation.md`). It needs the **`deploy` + `read`** abilities and must be created by a team **Admin/Owner**. Before PR #42 merges, prove the token with the doc's direct POST, **not** by re-running run 34988162569, which still sends GET and gets 405.
+
+### Next actions, in order
+
+1. ✅ **CI checked (2026-09-28).** #42 is all green (build, unit, and e2e against silo). #43: build + unit are green, including the first Linux `test:render` run and the AC-01 `ci-docker-build` evidence: PR #43 build job, [run 36361971755](https://github.com/bistec-oss/studio/actions/runs/36361971755) — PASS ★ ✓ ✦ → • inside the built runner image (2026-09-28). #43's e2e is red at "Start MinIO" as expected, until #42 merges into `v2`.
+2. **Merge PR #42 on the user's go-ahead**, then **merge `main` into `v2`**. A reviewer checked this merge is conflict-free for the Dockerfile and `e2e.yml`. After the merge and the token rotation, trigger `gh workflow run docker-publish.yml --ref main`, then confirm `https://studio.bistecglobal.com/api/health` returns the SHA.
+3. **Build 004 Wave 4 on `v2`**: **T20 (test seam) first, then T17 → T18 → T19 → T21**.
+   - T17's file list was widened: runners, `revisions.ts`, `draftActions.ts`, `refineVerify.ts`.
+   - **T19's route is now `/api/drafts/[id]/rejected/[revisionId]/adopt`.**
+   - Stop at the phase boundary. Then Wave 5 (T22–T24).
+4. Then `/specclaw:verify` for 004. AC-01 is recorded as `ci-docker-build` once #43's build job is green.
+5. The earlier plan still stands after that: review/plan 005–012 in roadmap order.
+
+### Known limits, parked on purpose (tracked in the tasks.md carry notes)
+
+- **Headline replaced + logo removed.** "Change the headline to X and remove the logo" fails verification unless the new text is shorter, because `supersedes` is one flat list. T17 either makes it per-clause or adds the replace-only exemption.
+- **Re-tagged passages.** A passage moved to a new class (N5 family) can still pass `remove` when an additive clause is present. Carried to T21 as a known limit.
+- **constrain "smaller" can pass by truncating text** with the font unchanged. This is allowed by ruling and documented.
+
+### Gotchas learned this session
+
+- **Git Bash rewrites container paths.** `docker run -v vol:/data … server /data` silently becomes a Windows path. **`export MSYS_NO_PATHCONV=1`** before any docker command that has a container path. It invalidated a whole compatibility test before it was caught.
+- **Stale `.next` plus leftover servers.** A subagent's `node server.js` smoke test (ports 39xx) or a dead `next dev` on :3001 holds `.next` open, and `next dev` then 404s every route. Before a full E2E run:
+  - stop stray node processes (PowerShell `Get-CimInstance Win32_Process -Filter "Name='node.exe'"`);
+  - `rm -rf .next`;
+  - **drop and recreate the test DB** (`DROP DATABASE bistec_studio_test WITH (FORCE)`), because repeated runs hit the 200-campaign cap and fail `team-isolation`.
+- **Never run two implementers in one checkout.** lint-staged stashes unstaged changes on commit. Worktrees are the way to parallelise.
+- **specclaw quirks:**
+  - `specclaw-build-context` dumps about 457 KB, so briefs were hand-assembled from `tasks.md` + spec/design slices.
+  - Task IDs must be all-digit (`T<n>`).
+  - Report files need a `## Verification` footer with `Command:` / `Exit:` lines.
+- **Docker Desktop stopped once mid-session.** Relaunch it with `"C:\Program Files\Docker\Docker\Docker Desktop.exe"`.
+- **lint-staged commits everything already staged.** A staged `.gitignore` rode along into the task-renumber commit.
+
+---
+
+## 2026-09-23 (later) — planning: 012 + Create post button
+
+**Planning only, no product code changed.** Two additions to the roadmap, and a legibility pass on the launch video. Everything in the earlier 2026-09-23 section below still stands. **Next actions are unchanged except for step 4's order.**
+
+### What was added
+
+- **New proposal 012 — per-channel captions** ([`.specclaw/changes/012-per-channel-captions/proposal.md`](../.specclaw/changes/012-per-channel-captions/proposal.md)):
+  - **Three captions per draft: Instagram, LinkedIn, WhatsApp.** Each gets its own panel on the draft page with a per-channel counter, Regenerate, undo and copy-to-clipboard. Each is published to its own channel.
+  - **It fixes a real bug found while planning.** `Draft.copyText` is **one** unstructured string. The `**INSTAGRAM:** … **LINKEDIN:** …` blocks are the model's own habit; the prompt never asks for them and nothing parses them. As a result, `publishDraft.ts:33-44` and `jobRunner.ts:63,77` send the **whole combined string to every channel**, literal `**` included. The editor counter also measures the whole string against the smallest limit ("1451 / 2200 (Instagram)").
+  - **Rename "copy" → "caption".**
+    - **Scope (user decision): UI + docs, plus code where the change touches it.** `regenerate-copy` → `regenerate-caption`, `REGENERATE_COPY` → `REGENERATE_CAPTION`, `CopyEditor` → `CaptionPanels`, and so on.
+    - **The `COPY` provider slot and `Brief.copyProviderKey` keep their names.** That slot also drives brand-voice drafting (`providers/registry.ts:92-106`), so calling it CAPTION would be wrong.
+    - **The clipboard sense of "copy" is untouched.**
+  - **Open questions for the plan phase:** the storage shape (three columns vs a `DraftCaption` table vs JSON); which caption feeds the design agent as on-image text (proposed: Instagram); the WhatsApp length limit; whether revisions should snapshot captions.
+- **011 gains a floating "Create post" button** (item 6), as part of the app shell:
+  - **Bottom-right** on every `(app)` page, hidden on `/brief`. The dashboard's Create Post quick action **stays**.
+  - Sonner toasts are also bottom-right (`ToastProvider.tsx:28`), so they get an offset. The rule: a toast never overlaps the button.
+  - It is opaque per 011's surface rule, and **can ship early on its own** ahead of the direction studies.
+- **Knock-on edits:**
+  - **010:** item 5 (the WhatsApp caption) now belongs to 012. 010 only consumes the caption, and 012 → 010 is a new hard dependency. It also corrects 010's wrong claim that generation "writes INSTAGRAM:/LINKEDIN: sections".
+  - **008:** the surface is named `caption` and the stamp `Draft.captionModel`.
+  - **ROADMAP:** 012 is in **Stage 3, ahead of 008**, and the button is an optional Stage 1 quick win. Boundaries and parallel-work cautions are updated.
+
+### Decisions made (settled, don't re-ask)
+
+| Topic                   | Decision                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Caption channels        | **Instagram, LinkedIn, WhatsApp.** WhatsApp is caption-only (copy + paste) until 010's handoff ships. |
+| Rename depth            | UI + docs, code identifiers where 012 touches them; `COPY` provider slot unchanged.                   |
+| Create post button      | **Bottom-right**, all app pages except `/brief`; keep the dashboard card; toasts offset above it.     |
+| Where it lives in plans | Captions = new change **012**; the button = folded into **011** (app shell), shippable early.         |
+
+### Revised step 4 of "Next actions"
+
+Review proposals 005–012 with the user, then `/specclaw:plan` them in roadmap order: **011 foundation (optionally the Create post button first) → 012 → 008 → 009 → 010**, then the rest.
+
+### Launch video (not in git)
+
+`brag-output/` is gitignored, so it exists **only on this machine**.
+
+- `bistec-studio-v2.mp4` is the current cut. It has larger workflow-step cards (titles 56px, step descriptions 19px bright mono) and much larger bottom-left scene captions (42px; the Scene 2 stack is 30px so it stays clear of the post).
+- Its poster is `brag-v2.jpg`, also baked in as frame 0.
+- The original `bistec-studio.mp4` / `brag.jpg` are kept.
+- The composition source is `brag-output/composition/index.html`. Re-render from that folder with `npx hyperframes@0.8.61 render --quality high`, with `composition/.bin` on PATH for ffmpeg.
+
+---
+
+## ⏸️ 2026-09-23 (earlier) — planning session 008–011
+
+**Planning session, no product code changed.** Output: four new proposals (008–011), a roadmap sequencing 004–011, a revised 004 plan (now 24 tasks, including a new **Phase 0** for a broken deploy pipeline), and a handoff for the Coolify admin.
+
+### Where things are
+
+| What                                  | Where                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| All roadmap work (004–011)            | branch **`v2`** (pushed to `origin`, branched from `main` `09a38b71`). Planning commit `71cdc9ad` + this handoff commit.              |
+| `main`                                | untouched at `09a38b71`. **Prod runs `9ea4c045`** (same code; `09a38b71` was docs-only and never deployed, see the CI finding below). |
+| Order + dependencies                  | [`.specclaw/ROADMAP.md`](../.specclaw/ROADMAP.md): read it first                                                                      |
+| Proposals                             | `.specclaw/changes/{004…011}/proposal.md`; **004** also has spec/design/tasks                                                         |
+| Coolify token handoff                 | [`docs/coolify-token-rotation.md`](coolify-token-rotation.md)                                                                         |
+| Comparison evidence (ChatGPT vs ours) | `.specclaw/changes/009-hero-image-design/evidence/`                                                                                   |
+
+**Branch rule (user decision):** everything lands on `v2` and merges to `main` **in one go, only once confirmed working and the user says go**. The one exception is **004 Phase 0** (the CI/deploy fix): a small PR to `main` on its own branch, because the deploy steps only run on `main` and can't be proven from `v2`. `main` is what CI auto-deploys, so **nothing on `v2` is ever on prod** until the merge. Confirm features locally.
+
+### 🔴 CI finding: merges to `main` build but do not deploy
+
+The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)) built and pushed the image to GHCR, then **Coolify returned `401`** on the redeploy call. `COOLIFY_API_TOKEN` is dead, and the scheduler redeploy step never ran. No harm yet, but **the next code merge will silently not ship**, and the `v2` merge would be that merge. CLAUDE.md's "a green `main` build **does** redeploy prod" is **no longer true** until this is fixed.
+
+- The **token** is rotated by the Coolify administrator (user decision: not the user, not Claude). Send them `docs/coolify-token-rotation.md`.
+- The **code hardening** is 004 **Wave 1** (T2–T6; renumbered 2026-09-27 — was T0b–T0f): readable deploy failures, both redeploys always attempted, a public `/api/health` → `{ ok, commit }` with the SHA baked into the image, CI verifying prod serves the new commit, `docker-publish.yml` actions off Node 20, and `node:20-alpine` → `node:22-alpine`.
+- Not related: the two E2E failures on PR #41 (`Start MinIO`) were already fixed inside that PR. Docker Hub withdrew `minio/minio`; every reference now uses `quay.io`.
+
+### Next actions, in order
+
+1. **Send the Coolify handoff** to whoever administers Coolify. Ask them to also read the **scheduler** resource's first log lines, which identify the B4 cause (`docs/scheduler-b4-diagnosis-2026-08-03.md`).
+2. **Build 004 Phase 0.** `git switch main && git pull && git switch -c fix/ci-deploy-pipeline`, then T2 → T6. Put **T5 (Node 22) in its own commit.** It needs Docker Desktop running for `docker build`, and a real render + `claude --version` inside the image. Open the PR to `main`. Merge only on the user's go-ahead. After merging, **merge `main` into `v2`** so `v2` carries it.
+3. **004 Phases 1 → 3 on `v2`** (Waves 1–4, hard-ordered). Phase 1's font fix (AC-01) is only provable inside the built image, never on Windows (host Chromium has Segoe UI Symbol).
+4. **Review proposals 005–012** with the user (each ends in open questions), then `/specclaw:plan` them one at a time in roadmap order: **011 foundation → 012 → 008 → 009 → 010**, then the rest. _(Revised later on 2026-09-23; see the section above.)_
+5. **Stage-0 ops still outstanding from July:** team Claude token on both prod teams; mark each team's IMAGE provider `isDefault`; B4.
+
+### Decisions made this session (settled, don't re-ask)
+
+| Topic               | Decision                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 004 emoji           | Monochrome symbol coverage only (★ ✓ →). The design prompt tells the agent **never to use emoji** in rendered designs (T10). Captions unaffected.                                                      |
+| 004 rejected refine | Preview + **Use anyway** adopts it as a normal revision (T19, new `…/revisions/[rev]/adopt` route). Rejected rows are still never pointed at.                                                          |
+| 004 verifier model  | Pinned to **Haiku**; the retry uses the user's refine model (FR-14b).                                                                                                                                  |
+| 004 Phase 0         | All four hardening items; token rotated by the Coolify admin; ships as its own PR to `main`.                                                                                                           |
+| 008 model choice    | Per post / per chat, remembered per user, team defaults. **Opus allowed for everyone by default.**                                                                                                     |
+| 010 WhatsApp        | Target is a **WhatsApp Channel**. Meta has **no official Channel posting API**, so it's **assisted**: scheduled handoff → share sheet → "mark as posted". Unofficial session APIs rejected (ban risk). |
+| 011 UI              | **New visual direction** (not a Frozen Light touch-up), guided by the `high-end-visual-design` skill. Opaque floating/fixed surfaces. Dark + light stay mandatory.                                     |
+| Release             | One integration branch `v2`; merge to `main` once confirmed + go-ahead.                                                                                                                                |
+
+### Gotchas for the next session
+
+- **specclaw `git.strategy` is now `direct`** (`.specclaw/config.yaml`), so `/specclaw:build` commits onto **whatever branch is checked out**. For Phase 0, switch to `fix/ci-deploy-pipeline` **before** building, or Phase 0 lands on `v2`.
+- **The pre-commit hook (lint-staged → prettier) reformats markdown on commit.** Expect diffs in files you only lightly edited.
+- **Unverified facts carried in the proposals, to check before relying on them:**
+  - Opus pricing/multipliers: 008 deliberately leaves this open. An earlier "≈5× Sonnet" claim was from memory.
+  - Whether WhatsApp's share sheet lists **Channels** as a destination from a phone browser (010). Needs a real device.
+  - gpt-image-2 multi-image input and transparent-background support (009).
+  - The exact Coolify v4 menu path for API tokens (the handoff says to check it).
+- **Uncommitted:** a staged `.gitignore` edit (ignores `brag-output*/`, the launch-video output) is still in the working tree, deliberately left out of commits. Commit it or drop it; it is harmless either way.
+- Local Postgres + MinIO containers (`designer-postgres-1`, `designer-minio-1`) were started this session and left running.
+- The Bistec Studio launch post was exported to `~/Downloads/` (`bistec-studio-launch-post.png`, a polished `-v2.png` + `.html`, and captions). The `v2.html` only renders with local MinIO up, because it loads the background and logo from `localhost:9000`. The DB draft (`cmrkg2f6a000g1lee5aktmqxj`) is unchanged.
+
+---
+
+## ⏸️ 2026-07-28 — previous pick-up point
 
 ### The through-line: a merged, deployed, CI-green fix can be completely inert
 
@@ -509,7 +843,7 @@ Built in dependency order and merged to `main`; per-feature plans live in `docs/
 - **Free version switching** — `Draft.currentRevisionNumber` pointer; generation records a v1 revision; restore reuses the stored PNG (instant) and can move back **and** forward.
 - **Async generation** — `assemble-a/b` return `202 {draftId}` and generate in-process; the draft page shows copy/image skeletons; failure → `Draft.failureReason` + inline Retry (`POST /api/drafts/[id]/retry`); stale drafts swept to FAILED on read. Non-interactive callers (MCP/ACP, scheduler) keep the synchronous `generateDraftForBrief`.
 - **Chat auto-scheduling** — a ` ```schedule ` block in the briefing chat → editable plan → `POST /api/campaigns/[id]/queue/batch`.
-- **Vision (F5/F6)** — first real image-input path: `runVisionModel` (`src/lib/agent/vision.ts`) uses Anthropic image blocks (API) or `claude -p --allowedTools Read` on temp files (CLI). F5: brand-kit assistant extracts voice/tone/style/fonts + a **sampled** palette (`sampleImageColors`). F6: image → slot-based Path A template (`POST …/templates/from-image`). **Vision is MOCK-verified only** — live paths not yet runtime-verified.
+- **Vision (F5/F6)** — first real image-input path: `runVisionModel` (`src/lib/agent/vision.ts`) uses Anthropic image blocks (API) or, since 005 T5, the same base64 image blocks in one stream-json message on stdin to `claude -p --tools ""` (CLI; originally `--allowedTools Read` on temp files). F5: brand-kit assistant extracts voice/tone/style/fonts + a **sampled** palette (`sampleImageColors`). F6: image → slot-based Path A template (`POST …/templates/from-image`). **Vision is MOCK-verified only** — live paths not yet runtime-verified.
 
 **Deploy:** `npx prisma migrate deploy` (migrations `20260713120000`, `20260713130000`, `20260713140000`); no new env vars.
 

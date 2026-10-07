@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { canServeSlot } from '@/providers/imageCapabilities'
 
 type Params = { id: string }
 
@@ -22,9 +23,27 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
     return NextResponse.json({ error: 'Provider not found' }, { status: 404 })
   }
 
+  // 005 FR-04: slot and providerName can't be PATCHed, so the only way into an
+  // incompatible state is putting a legacy incompatible row back into service.
+  if ((isEnabled === true || isDefault === true) && !canServeSlot(existing.slot, existing.providerName)) {
+    return NextResponse.json(
+      { error: `Provider ${existing.providerName} cannot serve the ${existing.slot} slot` },
+      { status: 400 },
+    )
+  }
+  // 005 FR-03 (IMAGE only; COPY is unchanged from before T1): a disabled row
+  // is never the default (the resolver would skip it and teammates would
+  // silently lose the slot's default).
+  const enabledAfter = isEnabled ?? existing.isEnabled
+  if (existing.slot === 'IMAGE' && isDefault === true && !enabledAfter) {
+    return NextResponse.json({ error: 'A disabled provider cannot be the default' }, { status: 400 })
+  }
+
   const data: Record<string, unknown> = {}
   if (isEnabled !== undefined) data.isEnabled = isEnabled
   if (isDefault !== undefined) data.isDefault = isDefault
+  // Disabling the default also clears it, so the resolver's fallback serves.
+  if (existing.slot === 'IMAGE' && isEnabled === false) data.isDefault = false
   if (label !== undefined) data.label = label
 
   // Clearing the prior default + updating this row must be atomic so a

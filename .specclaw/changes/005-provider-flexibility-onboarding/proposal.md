@@ -60,6 +60,64 @@ Make provider choice explicit and correct, and make first-time setup something a
 - Gemini image generation has different size/aspect-ratio support than gpt-image. Does `imageSizeFor` need a per-provider capability map, or do we constrain to the intersection?
 - Is Windows the only platform that matters for the install guide, or do any users run macOS?
 
+## Decisions (user, 2026-09-30)
+
+- **Item 2 (COPY route) is deferred to 008.** It sits on 008's model resolver, per the ROADMAP soft dependency. 005 builds items 1, 3, 4 and 5.
+- **A skipped AI background is a visible warning, not a hard failure.** Generation still completes with CSS/SVG, and the draft says why no AI image was used and how to fix it.
+- **The install guide covers Windows and macOS**, each with a full walkthrough. Linux gets a pointer to Anthropic's docs.
+- **Image sizing uses a per-provider capability map.** Each provider declares the sizes it supports, and `imageSizeFor` picks the best fit per provider.
+- **Item 5, the sandbox mechanism:** researched on 2026-09-30, with the recommendation below. It still needs confirming at plan time.
+
+## Decisions (user, 2026-10-01, at plan start)
+
+- **Item 5, the sandbox: remove the tool.** This confirms the 2026-09-30 research recommendation.
+  - Vision sends its images over stdin (stream-json) with `--tools ""`.
+  - Every CLI child gets an env allowlist.
+  - Non-vision calls also get `--tools ""`.
+  - The CLI version is pinned in the Dockerfile.
+  - Fallback, if stream-json images fail on the container CLI: `--restricted` plus deny rules. These are defence in depth only.
+- **Item 3, the `isDefault` fix: fall back, and make the default explicit.**
+  - When a team has no default IMAGE row, the resolver uses its enabled one, the oldest first if there are several.
+  - /team makes the default explicit.
+  - The draft warns when the AI background was skipped.
+- **Item 4, Gemini: mock-verify only.** No Gemini key is available for a live test, so verify-report records Gemini as not live-verified.
+
+## Research: CLI `Read` sandbox (2026-09-30, pre-plan)
+
+**Recommendation: remove the tool instead of confining it.** CLI-mode vision (`vision.ts:114-134`) should send the reference images as base64 image blocks over stdin. The invocation is `claude -p --input-format stream-json --output-format stream-json --verbose --strict-mcp-config --tools ""`, and it creates no temp files and passes no `--allowedTools Read`.
+
+- This was **verified live** on CLI 2.1.285 on Windows. The `system/init` tools list was `[]`, and a test PNG was described correctly.
+- It matches the documented streaming-input image support.
+- With no tools, an injected "read /proc/self/environ" has nothing to call.
+
+**Why the alternatives lose:**
+
+- **Claude Code's built-in `sandbox` setting** only covers Bash. Read/Edit/Write use the permission system and bypass it.
+- **bubblewrap/firejail** need unprivileged user namespaces, which Docker's default seccomp/AppArmor blocks. The CLI docs say nested-container mode "considerably weakens security".
+- **A dedicated uid** needs a setuid helper in a non-root container, and gains nothing when the secrets are env vars, not files.
+- **A per-call container** needs the Docker socket.
+
+**Fallback, if stream-json images fail on the container's pinned CLI:** use `--restricted` with the cwd set to the temp dir, or a scoped `Read(//tmp/bistec-vision-*/**)` allow plus `Read(//proc/**)` / `Read(//app/**)` deny rules. These are defence in depth only, since pattern rules are not an OS boundary.
+
+**A second finding, in the same scope:**
+
+- `claudeCli.ts:199-211` gives **every** CLI child the whole `process.env` (minus the two Anthropic keys). That includes `DATABASE_URL`, `TOKEN_ENCRYPTION_KEY` and the MinIO credentials.
+- The fix is to replace it with an env allowlist (PATH, HOME and the OAuth token), and to add `--tools ""` to every non-vision call as cheap hardening.
+- Also pin the CLI version in the Dockerfile (currently an unpinned `npm install -g`), because the stream-json schema can drift.
+
+**Unverified:**
+
+- stream-json images on the container's CLI version;
+- Coolify's seccomp profile;
+- the bypass forms of `--restricted` and the deny rules.
+
+**Acceptance evidence to plan for:**
+
+- a unit test that the vision args contain `--tools ""` and never `--allowedTools`;
+- a unit test that the child env has no secrets;
+- a real-CLI injection test, kept out of CI, in which an injected instruction to print `/proc/self/environ` yields nothing;
+- a smoke test from the built image.
+
 ---
 
 **To proceed:** Review this proposal and approve to begin planning.

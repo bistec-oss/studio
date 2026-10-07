@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Direction studies — 011 app visual redesign</title>
+<script>
+  (function () {
+    var q = new URLSearchParams(location.search).get('theme');
+    var dark = q ? q === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  })();
+</script>
+<style>
+/* Comparison page only: system fonts, no external requests. */
+:root {
+  --canvas: 245 245 244;
+  --surface-1: 255 255 255;
+  --fg: 23 23 22;
+  --fg-muted: 92 92 88;
+  --line: 140 140 134;
+  --line-subtle: 226 226 222;
+  --focus: 23 23 22;
+}
+.dark {
+  --canvas: 15 15 15;
+  --surface-1: 25 25 24;
+  --fg: 236 236 233;
+  --fg-muted: 158 158 152;
+  --line: 112 112 106;
+  --line-subtle: 44 44 42;
+  --focus: 236 236 233;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background-color: rgb(var(--canvas)); color: rgb(var(--fg));
+  font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+:focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: 2px; }
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 28px; background-color: rgb(var(--canvas)); border-bottom: 1px solid rgb(var(--line-subtle)); }
+.top h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+.top p { margin: 2px 0 0; color: rgb(var(--fg-muted)); font-size: 13px; }
+.seg { display: inline-flex; padding: 3px; border: 1px solid rgb(var(--line)); border-radius: 10px; background-color: rgb(var(--surface-1)); }
+.seg button { border: 0; background: none; color: rgb(var(--fg-muted)); font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background-color: rgb(var(--fg)); color: rgb(var(--canvas)); }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 20px 28px 48px; }
+.col { display: flex; flex-direction: column; min-width: 0; }
+.col-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.col-hd h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.col-hd h2 span { color: rgb(var(--fg-muted)); font-weight: 500; margin-right: 6px; }
+.col-hd a { font-size: 13px; color: rgb(var(--fg)); text-underline-offset: 3px; }
+.viewport { position: relative; overflow: hidden; border: 1px solid rgb(var(--line-subtle)); border-radius: 12px; background-color: rgb(var(--surface-1)); }
+.viewport iframe { position: absolute; top: 0; left: 0; width: 1440px; border: 0; transform-origin: 0 0; }
+.why { margin-top: 14px; padding: 16px 18px; border: 1px solid rgb(var(--line-subtle)); border-radius: 12px; background-color: rgb(var(--surface-1)); }
+.why p { margin: 0 0 10px; }
+.why h3 { margin: 12px 0 4px; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(var(--fg-muted)); }
+.why ul { margin: 0; padding-left: 18px; }
+.why li { margin: 2px 0; }
+.foot { padding: 0 28px 40px; color: rgb(var(--fg-muted)); font-size: 13px; max-width: 1100px; }
+@media (max-width: 1100px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>011 · Three directions for the draft review page</h1>
+    <p>Pick one. Each study carries the exact <code>:root</code> / <code>.dark</code> token block the foundation (T4) will copy.</p>
+  </div>
+  <div class="seg" role="group" aria-label="Theme for all three studies">
+    <button type="button" data-set="light">Light</button>
+    <button type="button" data-set="dark">Dark</button>
+  </div>
+</header>
+
+<main class="cols">
+  <section class="col">
+    <div class="col-hd"><h2><span>A</span>Graphite</h2><a href="study-a-graphite.html" target="_blank" rel="noopener">Open full size ↗</a></div>
+    <div class="viewport" data-id="a"><iframe title="Study A — Graphite" src="study-a-graphite.html"></iframe></div>
+    <div class="why">
+      <p><b>Soft structuralism.</b> Graphite keeps today's comfortable rhythm and two-column page, but makes depth honest: opaque floating islands with soft ambient shadows replace frosted glass, and double-bezel trays give the cards a machined, premium feel without using any colour. The accent is ink — near-black in light, bone in dark — so the only chroma on screen is status and the team's own brand kit.</p>
+      <h3>Trade-offs</h3>
+      <ul>
+        <li>+ Closest to the current layout and density, so the screen restyles carry the least risk.</li>
+        <li>+ A monochrome accent can never clash with any team's brand kit.</li>
+        <li>− A black primary button signposts less than a coloured one; hierarchy leans on weight, shape and the button-in-button nub.</li>
+        <li>− Bezels and pills cost space; dense admin tables will need a flatter variant.</li>
+        <li>− Soft shadows need separate tuning in dark mode.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="col-hd"><h2><span>B</span>Folio</h2><a href="study-b-folio.html" target="_blank" rel="noopener">Open full size ↗</a></div>
+    <div class="viewport" data-id="b"><iframe title="Study B — Folio" src="study-b-folio.html"></iframe></div>
+    <div class="why">
+      <p><b>Editorial and flat.</b> Folio treats the app as a publication desk: a paper ground, serif headlines, rules instead of boxes, and the post shown as a proof on a mat with crop marks, next to a numbered copy desk (caption, refine). It has the most personality of the three and suits a marketing team's craft. Its flat surface model is the simplest to keep opaque and fast.</p>
+      <h3>Trade-offs</h3>
+      <ul>
+        <li>+ Most distinctive, and the most readable for long text such as captions and briefings.</li>
+        <li>+ No blur shadows to tune: floating surfaces are a border plus a hard offset.</li>
+        <li>− A strong taste. The warm cream ground slightly shifts how post colours read next to it.</li>
+        <li>− The sienna accent is a hue, so a warm or orange brand kit sits close to it.</li>
+        <li>− The nav is text-only, which scans worse as the sidebar grows, and there are three fonts to self-host.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="col">
+    <div class="col-hd"><h2><span>C</span>Instrument</h2><a href="study-c-instrument.html" target="_blank" rel="noopener">Open full size ↗</a></div>
+    <div class="viewport" data-id="c"><iframe title="Study C — Instrument" src="study-c-instrument.html"></iframe></div>
+    <div class="why">
+      <p><b>A dense, tonal workbench.</b> Instrument reframes the page as a pro tool. The post sits on a neutral dotted stage with size readouts, versions run along a filmstrip, and the caption and refine live in a right-hand inspector under one toolbar. True-neutral greys don't tint the post. Elevation is tonal plus hairlines, and the type is Geist with a mono "machine layer".</p>
+      <h3>Trade-offs</h3>
+      <ul>
+        <li>+ True neutrals make brand colours look most accurate; it has the highest density, which scales to queues and admin tables.</li>
+        <li>+ The inspector pattern fits 012's per-channel captions and 008's model pickers.</li>
+        <li>− The biggest layout change (three panes), so the draft-page task is larger and riskier for E2E.</li>
+        <li>− 13 px body text is small for occasional users, and the inspector needs a 375 px plan (a bottom sheet).</li>
+        <li>− The violet accent is a common "AI tool" look.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<p class="foot">All three studies: opaque fixed and floating surfaces (alpha 1, no <code>backdrop-filter</code>); visible <code>:focus-visible</code>; motion reduced to 150 ms opacity under <code>prefers-reduced-motion</code>; every text pair at or above WCAG AA in both themes (the tables are in each study's header). Google Fonts load only to preview the studies. The app self-hosts the same families through <code>next/font</code>. The post previews are neutral placeholders, not real posts.</p>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var frames = [].slice.call(document.querySelectorAll('.viewport'));
+    var heights = { a: 2400, b: 2400, c: 2100 };
+    function post(f) { var w = f.querySelector('iframe').contentWindow; if (w) w.postMessage({ type: 'studio-theme', dark: root.classList.contains('dark') }, '*'); }
+    function setTheme(dark) {
+      root.classList.toggle('dark', dark);
+      document.querySelectorAll('[data-set]').forEach(function (b) { b.setAttribute('aria-pressed', String((b.dataset.set === 'dark') === dark)); });
+      frames.forEach(post);
+    }
+    function layout() {
+      frames.forEach(function (v) {
+        var s = v.clientWidth / 1440, h = heights[v.dataset.id], f = v.querySelector('iframe');
+        f.style.height = h + 'px'; f.style.transform = 'scale(' + s + ')'; v.style.height = Math.ceil(h * s) + 'px';
+      });
+    }
+    document.querySelectorAll('[data-set]').forEach(function (b) { b.addEventListener('click', function () { setTheme(b.dataset.set === 'dark'); }); });
+    frames.forEach(function (v) { v.querySelector('iframe').addEventListener('load', function () { post(v); }); });
+    addEventListener('message', function (e) { if (e.data && e.data.type === 'studio-height' && heights[e.data.id]) { heights[e.data.id] = e.data.h; layout(); } });
+    addEventListener('resize', layout);
+    setTheme(root.classList.contains('dark'));
+    layout();
+  })();
+</script>
+</body>
+</html>

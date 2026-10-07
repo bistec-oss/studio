@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { getDraftAccessInfo } from '@/lib/auth'
 import { withTeamAuth } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
+import { listCommittedRevisions } from '@/lib/drafts/revisions'
 
 type Params = { id: string }
 
@@ -13,17 +13,9 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
     return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
   }
 
-  const revisions = await prisma.draftRevision.findMany({
-    where: { draftId: params.id },
-    orderBy: { revisionNumber: 'desc' },
-    select: {
-      id: true,
-      revisionNumber: true,
-      instruction: true,
-      exportUrl: true,
-      createdAt: true,
-    },
-  })
+  // The version-switch list: committed chain rows only. A rejected refine
+  // render (change 004 FR-13) is never listed — it is not a version.
+  const revisions = await listCommittedRevisions(params.id)
 
   // exportUrl is stored as an EXPORTS object key — sign each for the browser.
   const signed = await Promise.all(

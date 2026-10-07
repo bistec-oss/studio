@@ -73,3 +73,18 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
   // Persist the object key; it is signed per read.
   return { htmlContent: html, exportUrl: key, toolCallCount: 0 }
 }
+
+// ── Refine mode (change 004 Phase 2, T17) ────────────────────────────────────
+// Opt-in, used only by the refine route. Returns the model's RAW reply —
+// envelope header, document with __INLINE_ASSET_n__ tokens intact, any
+// narration — and does NOT cut, restore, render or upload anything: the route
+// (drafts/refineAttempt.ts) parses the envelope, reconciles the tokens and
+// verifies the edit, and renders only the document it finally keeps, so a
+// missed attempt leaves no orphaned export. runDesignAgentCli above is
+// untouched (AC-20: regenerate-design, generation and Path A use it).
+export async function runDesignAgentCliRefine(
+  options: Pick<CliAgentOptions, "systemPrompt" | "userMessage" | "model">,
+): Promise<string> {
+  const { systemPrompt, userMessage, model } = options
+  return runClaudeCli(`${systemPrompt}\n\n${userMessage}`, { timeoutMs: 300_000, label: "refine", model })
+}

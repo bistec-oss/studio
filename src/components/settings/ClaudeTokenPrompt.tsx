@@ -63,8 +63,8 @@ export function ClaudeTokenPrompt() {
       </span>
       <p className="flex-1 text-sm text-light-text dark:text-dark-text">
         {invalid
-          ? 'Your Claude token has expired or was revoked — generations are using the shared credential.'
-          : 'Connect your Claude account so your posts generate on your own subscription.'}{' '}
+          ? 'Your Claude token has expired or was revoked. Generations use the team’s Claude account if one is set, otherwise they can’t run.'
+          : 'Connect your Claude account so your posts generate on your own subscription. Without one, generations use the team’s Claude account if one is set, otherwise they can’t run.'}{' '}
         <Link
           href="/settings"
           className="font-medium text-primary dark:text-primary-light hover:underline"

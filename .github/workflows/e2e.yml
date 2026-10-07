@@ -232,4 +232,21 @@ jobs:
         run: npm run build
 
       - name: Docker image build
-        run: docker build .
+        run: docker build -t bistec-studio:ci .
+
+      # Change 004 AC-01: the runner image's own fonts must cover the symbols
+      # the design agent uses. Only an in-image run proves this — host Chrome
+      # has its own fonts. Mounted under /app so puppeteer-core resolves from
+      # the image's node_modules; --entrypoint skips the migrate-on-boot step.
+      - name: Glyph coverage inside the runner image
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/scripts/glyph-check:/app/glyph-check:ro" \
+            --entrypoint node bistec-studio:ci /app/glyph-check/check-glyphs.mjs
+
+      # Change 004 FR-23: the rasterizing harness (tests/render/**) through the
+      # real renderHtmlToPng, MOCK_PUPPETEER off. The runner has no Google Chrome;
+      # puppeteer.ts's COMMON_LINUX_PATHS resolves /usr/bin/chromium-browser first
+      # (a Chromium symlink), so this runs on Chromium, not Chrome.
+      - name: Render-fidelity harness (real Chromium)
+        run: npm run test:render

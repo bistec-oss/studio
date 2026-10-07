@@ -2,13 +2,18 @@ import { prisma } from "@/lib/prisma"
 import { renderHtmlToPng } from "@/lib/renderer/puppeteer"
 import { uploadObject, resolveExportUrl, persistDataUrlImage, exportKey, BUCKET_EXPORTS } from "@/lib/storage/minio"
 import { resolveImageProvider } from "@/providers/registry"
+import { imageSizeFor } from "@/providers/imageCapabilities"
+import type { AspectRatio } from "@prisma/client"
 import type { BrandKitContext, GenerationActor } from "./types"
 
 export async function toolGenerateImage(
   prompt: string,
   brandKitId: string,
   briefId: string,
-  actor?: GenerationActor
+  actor?: GenerationActor,
+  // The post's aspect ratio, so the image comes back portrait for a portrait
+  // post. Omitted: the provider's square size.
+  aspectRatio?: AspectRatio
 ): Promise<{ url: string }> {
   // actor is the ACTING teammate (threaded from the route via
   // DesignAgentOptions/executeTool — see designAgent.ts) — prefer it always,
@@ -29,7 +34,7 @@ export async function toolGenerateImage(
   if (!provider) {
     throw new Error('No image provider configured for this team')
   }
-  const result = await provider.generateImage(prompt, brandKitId)
+  const result = await provider.generateImage(prompt, brandKitId, imageSizeFor(provider.providerName, aspectRatio))
 
   if (result.url.startsWith("data:")) {
     // persistDataUrlImage enforces the raster allow-list (stored-XSS guard) and

@@ -9,7 +9,7 @@ import { dimensionsFor } from '@/lib/aspectRatio'
 import { isCliMode, modelFor, pipelineMode } from '@/lib/agent/config'
 import { buildPathBSystemPrompt, buildPathBUserMessage } from '@/lib/agent/prompts/pathB'
 import { parseBriefImages } from '@/lib/agent/briefInput'
-import { generateBackgroundForBrief } from '@/lib/agent/background'
+import { generateBackgroundForBrief, type BackgroundResult } from '@/lib/agent/background'
 
 // Re-export for existing importers; canonical home is agent/briefInput.ts.
 export { buildBriefInput } from '@/lib/agent/briefInput'
@@ -18,6 +18,9 @@ export type PathBDesignResult = DesignAgentResult & {
   // Public URL of the AI-generated background used in this design (stored on
   // Draft.imageUrl by the callers), or null when the pre-step skipped.
   backgroundImageUrl: string | null
+  // The background step's full outcome, including why it skipped (005
+  // FR-06) — the callers store an unintended skip on the draft (FR-07).
+  background: BackgroundResult
 }
 
 // Runs the Path B (freeform) design pipeline for a given brief + already-generated
@@ -68,9 +71,11 @@ export async function runPathBDesign(
   const briefImages = parseBriefImages(brief.briefImages)
 
   // Background pre-step: Claude (Haiku) decides + gpt-image generates a
-  // full-bleed background before the design call. Null on skip/failure — the
-  // design proceeds with CSS/SVG visuals as before. See agent/background.ts.
-  const backgroundImageUrl = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing, actor)
+  // full-bleed background before the design call. A skip (with its reason)
+  // on no provider/failure — the design proceeds with CSS/SVG visuals as
+  // before. See agent/background.ts.
+  const background = await generateBackgroundForBrief(brief, kit, copyText, campaignBriefing, actor)
+  const backgroundImageUrl = background.url
 
   const systemPrompt = buildPathBSystemPrompt({
     kit,
@@ -108,5 +113,5 @@ export async function runPathBDesign(
         actor,
       })
 
-  return { ...result, backgroundImageUrl }
+  return { ...result, backgroundImageUrl, background }
 }

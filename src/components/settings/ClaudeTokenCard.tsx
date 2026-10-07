@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { KeyRound, Unplug } from 'lucide-react'
@@ -10,12 +10,13 @@ import { Button } from '@/components/ui/Button'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import { ClaudeConnectGuide } from './ClaudeConnectGuide'
 import type { ClaudeTokenInfo } from '@/lib/api-types'
 
 // Self-service "Claude account" card: connect / replace / disconnect the user's
 // personal Claude OAuth token (from `claude setup-token`). In CLI mode every
 // generation the user triggers then bills their own Claude subscription; without
-// a token (or outside CLI mode) the server's shared credential is used.
+// one, generation falls back to the team's token, and fails if the team has none.
 
 const QUERY_KEY = ['me', 'claude-token'] as const
 
@@ -39,14 +40,6 @@ function statusPill(info: ClaudeTokenInfo) {
     <span className={`${base} bg-status-published/10 dark:bg-status-published-dark/15 text-status-published dark:text-status-published-dark border-status-published/25 dark:border-status-published-dark/30`}>
       Connected
     </span>
-  )
-}
-
-function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="font-mono text-xs px-1.5 py-0.5 rounded-md bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
-      {children}
-    </code>
   )
 }
 
@@ -94,7 +87,7 @@ export function ClaudeTokenCard() {
   const handleDisconnect = async () => {
     const ok = await confirm({
       title: 'Disconnect your Claude account?',
-      description: 'Your generations will use the shared server credential until you reconnect.',
+      description: 'Until you reconnect, your generations use the team’s Claude account if one is set, otherwise they can’t run.',
       confirmLabel: 'Disconnect',
     })
     if (ok) disconnectMutation.mutate()
@@ -122,7 +115,7 @@ export function ClaudeTokenCard() {
       {info.connected && info.status === 'INVALID' && (
         <div className="rounded-xl border border-status-scheduled/30 dark:border-status-scheduled-dark/30 bg-status-scheduled/10 dark:bg-status-scheduled-dark/10 px-4 py-3 text-sm text-light-text dark:text-dark-text">
           Your Claude token has expired or was revoked — reconnect below. Until then your
-          generations use the shared server credential.
+          generations use the team&apos;s Claude account if one is set, otherwise they can&apos;t run.
         </div>
       )}
 
@@ -146,20 +139,7 @@ export function ClaudeTokenCard() {
         <h3 className="text-sm font-semibold text-light-text dark:text-dark-text">
           {info.connected ? 'Replace your token' : 'Connect your Claude account'}
         </h3>
-        <ol className="list-decimal list-inside flex flex-col gap-1.5 text-sm text-light-text-muted dark:text-dark-text-muted">
-          <li>
-            Install Claude Code on your own computer: <Code>npm install -g @anthropic-ai/claude-code</Code>
-          </li>
-          <li>
-            In your terminal, run <Code>claude setup-token</Code> and finish the sign-in it opens
-            in your browser.
-          </li>
-          <li>
-            Copy the printed token — it starts with <Code>sk-ant-oat01-</Code> and lasts about a
-            year.
-          </li>
-          <li>Paste it below.</li>
-        </ol>
+        <ClaudeConnectGuide variant="personal" />
       </div>
 
       <form

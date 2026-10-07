@@ -2,7 +2,86 @@
 
 This repo contains planning documents for **bistec-studio**, an internal marketing post generation tool for the Bistec marketing team.
 
-## ✅ Outstanding work — START HERE (updated 2026-08-03)
+## ✅ Outstanding work — START HERE (updated 2026-10-07)
+
+- **⏸️ 2026-10-07 — PICK UP HERE. 005 is done and verified PASS. 011 (app visual redesign) is planned, and wave 1 is built. The build is paused at its operator gate: the user picks a design direction.** Full detail: [`docs/handoff.md`](docs/handoff.md) top section.
+  - **Next, in order:**
+    1. **Get the user's pick: A Graphite, B Folio or C Instrument,** plus any changes they want.
+       - Comparison page: https://claude.ai/artifact/XijAC8pAQRkmGErC5QYmB5 (private). The local copy is [`docs/ui-reference/direction-studies/pick.html`](docs/ui-reference/direction-studies/pick.html). The full studies sit beside it, each with its token block and contrast tables.
+    2. **Resume `/specclaw:build 011-app-visual-redesign`,** subagent-driven: one implementer subagent per task, then a `specclaw:code-reviewer`, then the orchestrator commits. Run tasks one at a time.
+       - Next is **T3**: record the pick; `git mv` Frozen Light to `docs/ui-reference/archive/frozen-light/`; write the new `DESIGN_SYSTEM.md`.
+       - Then T4 (tokens), T5 (primitives, opaque surfaces), T6 (shell), T7–T12 (screens), T13 (cleanup).
+       - Every task that touches `src/` ends with a full clean mock E2E run.
+       - The T2 report's carry-over notes (`--line-subtle`, reduced-motion timing, amber `scheduled`, regrouped controls) are in the handoff.
+    3. **PR #42 merges only on the user's go-ahead** ("not yet", 2026-10-01). Then merge `main` into `v2`, re-check 005 AC-17 under node:22 and re-run AC-16 on a rebuilt image, and close 004's Phase 0 ACs.
+    4. **🔴 The user should revoke the OAuth token pasted into chat on 2026-10-06** and make a new one with `claude setup-token`.
+  - **005 verify: PASS, 25/25** ([`verify-report.md`](.specclaw/changes/005-provider-flexibility-onboarding/verify-report.md)).
+    - AC-16 passed 3/3 in the operator run.
+    - Mock E2E 261/3/0/0, after one doc-wording fix (`f0fc1af7`).
+    - **Follow-ups:** recheck AC-17 under node:22; empty `bistec-cli-*` temp dirs; a Gemini live call; make the setup-guide path a link.
+  - **011** ([`.specclaw/changes/011-app-visual-redesign/`](.specclaw/changes/011-app-visual-redesign/): spec with 14 FR / 8 NFR / 20 AC, design, 13 tasks in 7 waves, reports, reviews).
+    - **Decisions (2026-10-06):** a neutral tool UI with no BISTEC brand cues; three studies, from which the user picks alone; the theme follows the OS. Assumptions A1–A4 are in `spec.md`.
+    - **T1** Create post button (`3203673c`; E2E 265/3/0/0). Carry-over: its white-on-blue is about 4.1:1, which T6 fixes.
+    - **T2** studies (`bb6828c5`).
+  - **The 2026-10-03 status below is superseded for 005, but its 004 and ops details still stand:**
+  - **004:** 24/24 plus a final review fix wave (F1–F3).
+    - [`verify-report.md`](.specclaw/changes/004-design-instruction-fidelity/verify-report.md): Phases 1–3 pass 29/29, and every known limit is stated there.
+    - **Rulings:** a requested image swap always fails closed; the text-reduction lexicon prefers triggering; the settle guards key on the action, not the claim (a claim token is a follow-up).
+  - **005** (spec, design, tasks and `reports/T1–T10.md` in [`.specclaw/changes/005-provider-flexibility-onboarding/`](.specclaw/changes/005-provider-flexibility-onboarding/)):
+    - **Image resolution:** the oldest enabled provider is the fallback; IMAGE-only default rules; /team states; an amber notice when a background is skipped.
+    - **CLI hardening:** `--tools ""`; an env allowlist; stream-json vision with no temp files; settings isolation; auth classified only on CLI-written fields; the CLI pinned to 2.1.287.
+    - **Gemini:** mock-only by user decision.
+    - **Onboarding:** `docs/claude-account-setup.md` (native installer primary) and an in-app guide.
+    - **Item 2 (COPY route) stays deferred to 008.**
+  - **Open PRs:**
+    - **#42** `fix/ci-deploy-pipeline` → `main` (004 Phase 0 + MinIO → silo). Merge **only on go-ahead**.
+    - **#43** `v2` → `main` is a **DRAFT that must never be merged**. It exists only for CI on `v2`.
+  - **🔴 Urgent ops for the Coolify administrator, unchanged:** swap prod MinIO to `pgsty/silo` (`docs/minio-silo-migration.md`; CVE-2026-40344), and rotate `COOLIFY_API_TOKEN` (`deploy` + `read`, made by an Admin/Owner; prove it with a direct POST).
+  - **Gates at `v2` head:**
+    - unit 1593/1593, lint 0 errors, build passes;
+    - last full clean mock E2E 265/3/0/0, at 011 T1 (2026-10-06);
+    - render 15/15.
+  - **Migrations on `v2` not yet on `main`:**
+    - `20260927120000_draft_font_set`;
+    - `20260927130000_refine_not_applied`. Its down path is **order-sensitive**: delete the unnumbered rejected rows first;
+    - `20261001120000_revision_render_stamps`;
+    - `20261002120000_draft_background_skip`.
+
+    A redeploy applies them; locally, run `npx prisma migrate deploy`.
+
+  - **Release note for `v2` → `main`:** teams whose IMAGE key isn't flagged default start using, and spending, it for scheduled, MCP and agent images (005 NFR-03).
+  - **Gotchas:**
+    - `export MSYS_NO_PATHCONV=1` before any docker command with a container path.
+    - Before a full E2E run: stop stray node processes, `rm -rf .next`, and drop/recreate the test DB.
+    - Never run two implementers in one checkout; lint-staged stashes.
+    - The D: drive logged I/O errors on 2026-10-01, so push `v2` often.
+    - The chrome-devtools MCP may be disconnected; Playwright works for screenshots.
+    - specclaw `git.strategy` is `direct`.
+
+- **2026-09-28 — build session (superseded by the 2026-10-03 entry above for status).** 004 Waves 1–3 were built, MinIO → silo, PR #42 and draft PR #43 were opened. Details are in `docs/handoff.md`'s 2026-09-28 section.
+
+- **2026-09-23 — planning (superseded by the 2026-10-03 entry above for status; decisions still stand).** Order and dependencies: [`.specclaw/ROADMAP.md`](.specclaw/ROADMAP.md).
+  - **Added later on 2026-09-23 (planning only):**
+    - **New proposal 012: per-channel captions.** Instagram, LinkedIn and WhatsApp each get their own caption, panel, counter and regenerate, and each is published to its own channel.
+      - It fixes a live bug: `Draft.copyText` is one unstructured string, and `publishDraft.ts` / `jobRunner.ts` send the **whole combined caption to every channel**.
+      - It renames "copy" → "caption" in the UI, the docs and the code it touches. **The `COPY` provider slot keeps its name**, because it also drives brand-voice drafting.
+    - **011 gains a floating bottom-right "Create post" button.** It is hidden on `/brief`, the dashboard card stays, toasts are offset above it, and it can ship early.
+    - **Order:** 011 foundation → **012** → 008 → 009 → 010. 012 → 010 is now a hard dependency.
+    - **Naming:** write "caption", not "copy", in new docs and UI. The launch video's current cut is `brag-output/bistec-studio-v2.mp4` (local only, gitignored).
+  - **Work lives on branch `v2`** (pushed). All roadmap work, 004–012, lands there and merges to `main` **in one go, only once confirmed working and on the user's go-ahead**. `main` auto-deploys, so nothing on `v2` is on prod. **Exception: 004 Phase 0** ships as its own PR to `main` on `fix/ci-deploy-pipeline`, because deploy steps only run on `main`.
+  - **🔴 Merges to `main` build but do NOT deploy.** Since 2026-09-15 the Coolify redeploy returns **401**: `COOLIFY_API_TOKEN` is dead ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)). Prod runs `9ea4c045`, the same code as `main`, because `09a38b71` was docs-only.
+    - The token is rotated by the **Coolify administrator**, using [`docs/coolify-token-rotation.md`](docs/coolify-token-rotation.md). **The new token needs the `deploy` and `read` abilities**: the verify step reads the scheduler's deployment status, and Coolify gates that endpoint on `read`.
+    - The code hardening is **004 Wave 1** (T2–T6; task IDs renumbered 2026-09-27, old→new table at the top of `tasks.md`): readable failures, both redeploys always attempted, `/api/health` → `{ ok, commit }`, CI verifying the deployed commit, actions off Node 20, Node 20 → 22.
+    - **Built 2026-09-27 on `fix/ci-deploy-pipeline`** (worktree `../designer-ci`; pushed, **PR #42**, not merged; also carries the MinIO → silo commits `edb20b10`, `f52189e8`). Commits: T2 redeploy step `8f45f9dd`; T3 `/api/health` `4c5b311d`; T4 verify + action majors `a7862026` + poll-auth/dispatch-guard fix `4c919162` + Coolify POST/scope hardening `d8d144c0`; T5 Node 22 `5f44828d` (its own commit, so it reverts alone). A manual `workflow_dispatch` only deploys `main`.
+    - **The deploy rule once that PR merges and the token is rotated:** a deploy is confirmed only when `https://studio.bistecglobal.com/api/health` returns the merged commit SHA. CI polls it for up to about 10 minutes and goes red if prod never serves the new commit. The scheduler is confirmed by its Coolify deployment status. That proves the container deployed, not that the worker loops (B4 / 006).
+    - **Until then, a green `main` build is not evidence of a deploy.**
+  - **New proposals:**
+    - **008** model selection: Haiku/Sonnet/Opus per surface; per post/chat, remembered; Opus open to all by default.
+    - **009** hero imagery: the image model makes the subject, not wallpaper; measurable layout archetypes.
+    - **010** WhatsApp **Channel** posting, **assisted**: Meta has no official Channel API.
+    - **011** app visual redesign: a **new direction**, opaque floating surfaces.
+  - **004 re-planned to 24 tasks:** Phase 0 + T10 (design prompt says no emoji; monochrome symbols only) + T19 ("Use anyway" adopts a rejected refine). The verifier is pinned to Haiku.
+  - **004 Phase 1 (Wave 2) built on `v2`:** commits `744f4b83`, `da54f2fc`, `7f880b07`, `404b0030`, `3a7dc4d0` plus the Wave 2 fix commit. **One new migration `20260927120000_draft_font_set`** — a redeploy applies it; locally run `npx prisma migrate deploy` after pulling `v2`. New `npm run test:render` real-render harness.
 
 - **✅ 2026-08-03 — the model's chat preamble was being PAINTED onto exported posts.** Reported as "unnecessary text is printed on top" on a prod regenerate; the exported PNG carried a caption across its top edge reading _"The file write wasn't permitted, so here's the complete HTML document directly:"_ — the design model's own prose.
   - **Root cause — the reply was trusted to arrive clean.** CLI-mode design is a single-shot: every prompt says "Output ONLY … No markdown code fences, no commentary" (`prompts/shared.ts` `outputProtocol`, `prompts/refine.ts`). That run reached for a `Write` tool it was never granted (the design call passes **no** `allowedTools`), was denied, and narrated the fallback before printing the document. Nothing downstream removed it: **`stripCodeFences` is anchored** (`/^```[a-zA-Z]*\s*\n([\s\S]*?)\n```$/`) so it only strips when the _entire_ reply is one fenced block and returns the whole string otherwise, and the sanity check merely asked whether `<!doctype` appeared **anywhere** — a preamble sailed through both.
@@ -35,7 +114,7 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
   - Design generation needed no change — it is selected by `DESIGN_PROVIDER`, not an `AvailableProvider` row (there is no DESIGN slot, only COPY and IMAGE), so it already defaults to `claude -p`.
 - **2026-07-26 session (see `docs/handoff.md`):** the prod **Bistec** team's brand kits were rebuilt via the `/admin/brandkits` UI — **Bistec** (default) + **Hearts Academy**, each with colours/fonts/3 labelled logos/active voice prompt, verified against the local DB. **One gap:** Hearts Academy's 1.9 MB inline-base64 "Hearts Talk" template was **skipped** (add later via a direct API POST or a slim URL-referencing rebuild). Note these are brand **kits under the Bistec team** — a separate _Hearts Academy team_ is a different tenant and starts with zero kits.
 - **Everything is merged to `main` now (2026-07-24):** the prod-fix branch (**PR #30** `4e8e6e3e` "Fix/prod render and cli copy", merged 2026-07-23), **PR #35** `d01ac4d2` multiple-brandkit-logos, and **PR #36** `3dcac485` draft-inline-edit (both merged 2026-07-24). All three branches can be deleted. The GHCR image built after these merges (`.github/workflows/docker-publish.yml` → `ghcr.io/bistec-oss/studio:latest` + `:sha`, run green ~06:04 2026-07-24) contains **all** of them.
-- **Deploy topology (confirmed from `.github/workflows/docker-publish.yml`):** the build job pushes to GHCR **and then calls the Coolify deploy API** for both resource UUIDs (added 2026-07-24, commit `1116189`) — so a green `main` build **does** now redeploy prod. Coolify runs **two resources off the one image** (app = default CMD; scheduler = CMD override `node dist/scheduler/worker.js`, per `docker-compose.yml`). **A redeploy now also applies migrations, via the PR #39 entrypoint — it did not before 2026-07-27.** Verify a deploy at Coolify → resource → Deployments (running tag/SHA).
+- **Deploy topology (confirmed from `.github/workflows/docker-publish.yml`):** the build job pushes to GHCR **and then calls the Coolify deploy API** for both resource UUIDs (added 2026-07-24, commit `1116189`) — so a green `main` build **does** now redeploy prod. **⚠️ Broken since 2026-09-15: Coolify rejects the call with 401 (dead `COOLIFY_API_TOKEN`), so the build goes red at the redeploy step and prod is NOT updated. See the 2026-09-23 entry at the top and `docs/coolify-token-rotation.md`.** Coolify runs **two resources off the one image** (app = default CMD; scheduler = CMD override `node dist/scheduler/worker.js`, per `docker-compose.yml`). **A redeploy now also applies migrations, via the PR #39 entrypoint — it did not before 2026-07-27.** Verify a deploy at Coolify → resource → Deployments (running tag/SHA), or — once 004 Phase 0 is merged — `curl https://studio.bistecglobal.com/api/health`, which returns `{ ok, commit }`.
 - **Prod redeployed and B3/B5 are FIXED (2026-07-24, see [`docs/prod-e2e-findings-2026-07-24.md`](docs/prod-e2e-findings-2026-07-24.md)).** The auto-redeploy webhook worked; prod is on the post-fix image. **B3 (HTML→PNG render) is fixed** — full Path B generation reached **EXPORTED in ~195s** with a real gpt-image background, and all three async draft actions + from-image vision + both new features passed. **B5** (exported PNGs unreachable in-browser — presigned EXPORTS URLs pointed at the internal Coolify MinIO container host) was found in that run and fixed by **PR #37** `fb8216c3`, merged the same day.
   - **🟠 B4 (still open) — scheduled-gen worker not running.** A past-due HOLD entry stayed PENDING through >3 poll cycles (185s), `retryCount:0`, never claimed. `retryCount:0` with no `errorReason` is the load-bearing detail: the entry was never **claimed**, so no process ran the claim UPDATE. B4 only disables **scheduled generation**; manual generation works.
     - **✅ Code side audited clean 2026-08-03 — do NOT re-audit it** ([`docs/scheduler-b4-diagnosis-2026-08-03.md`](docs/scheduler-b4-diagnosis-2026-08-03.md)): the worker IS in the image (`Dockerfile:52-57` esbuild bundle → `:109` copies `dist/`), the CMD override still migrates (`docker-compose.yml:22` overrides `command:` only, so it boots through the entrypoint), CI redeploys the scheduler UUID (`docker-publish.yml:64-68`), and the poll loops + claim SQL are correct (`worker.ts`, `generationRunner.ts:26-42`). **This is Coolify resource config, not code.**
@@ -47,7 +126,7 @@ This repo contains planning documents for **bistec-studio**, an internal marketi
 - **🔑 CLI-mode credential chain (verified in code 2026-07-27 — supersedes the stale note in the per-user-token section below):** exactly **two tiers, personal → team, with NO env or dev-session fallback** (`src/lib/agent/claudeAuth.ts` header + `resolveClaudeAuth` in `userToken.ts`). A personal `UserClaudeToken` is used only when `status === 'ACTIVE'` and the user isn't disabled; a _rejected_ personal token is marked INVALID and retried **once** against the team token. No credential at all ⇒ `runClaudeCliOnce` hard-fails. **The asymmetry that bites:** interactive routes pass the acting user (`withClaudeAuth(user.userId, user.teamId, …)`, `startBackgroundGeneration(draftId, userId, teamId)`), but the **scheduler and MCP pass `null`** (`generationRunner.ts`, `mcp/tools/generate.ts`) — they have **no personal tier** and need a _team_ token.
 - **🟠 Neither prod team has a team Claude token** (`/api/team/claude-token` → `{connected:false}` for both Bistec and Hearts Academy, checked 2026-07-27). Interactive generation works off the acting user's personal token, but **scheduled generation and MCP will hard-fail on credentials for both teams** — a second blocker behind B4, so fixing the scheduler resource alone won't make scheduled posts work. Set a team token at `/team`. (The 2026-07-16 "scheduled generation runtime-verified in CLI mode" note predates team tenancy, when a shared env token still caught this.)
 - **🟠 Both prod IMAGE providers are `isEnabled: true` but `isDefault: false`.** `resolveImageProvider` tier 3 requires `isDefault`, so a teammate **without** a personal OpenAI key silently gets no AI background — generation still completes (it never throws; design falls back to CSS/SVG). Mark the IMAGE row default on each team to fix.
-- **Prompt-injection review (analysis only):** feasible on chat/enhance surfaces; blast radius narrow (content manipulation; tenancy holds, no stored-XSS sink). Sharpest vector = CLI-mode vision's `--allowedTools Read` (server file disclosure), LIVE on prod since the CLI switch. PR #30 landed the prompt-level hardening (`fenceUntrusted`/`UNTRUSTED_CONTENT_GUARD` + CLI-vision "read only listed files"); residual follow-up = OS-level sandbox for the CLI `Read` tool. See the security doc.
+- **Prompt-injection review (analysis only):** feasible on chat/enhance surfaces; blast radius narrow (content manipulation; tenancy holds, no stored-XSS sink). Sharpest vector = CLI-mode vision's `--allowedTools Read` (server file disclosure), LIVE on prod since the CLI switch. PR #30 landed the prompt-level hardening (`fenceUntrusted`/`UNTRUSTED_CONTENT_GUARD` + CLI-vision "read only listed files"); residual follow-up = OS-level sandbox for the CLI `Read` tool. See the security doc. **Closed on `v2` by 005 T4/T5 (not yet on prod):** every `claude -p` spawn now runs with `--tools ""` (no tool at all), and CLI vision sends the images as base64 blocks in one stream-json message on stdin, so there is no `Read` tool to abuse and no OS sandbox is needed for this vector.
 - **🏗️ Prod data built 2026-07-27 (Hearts Academy team — real data, not test data, do NOT wipe):**
   - **Team "Hearts Academy"** `cms3izrx90000t5ijbsepjstm` — the creation that proved PR #39.
   - **Brand kit "Hearts Academy"** `cms3jg09p000at5ijivpi3zhe`, **team default**: 6 colours, Poppins + JetBrains Mono, 3 labelled logos (primary "BISTEC Hearts Academy"), voice prompt. Copied from the Bistec team's kit, but with its **own** uploaded logo objects under `brand-kits/cms3jg09p000at5ijivpi3zhe/` — no cross-team object references. Source filenames preserved deliberately: the voice prompt says "the file names identify them".
@@ -141,10 +220,10 @@ Six features from a planning session, built in dependency order and merged to `m
 - **F2 — Free version switching.** New `Draft.currentRevisionNumber` pointer; generation records a **v1 "Original design"** revision; refine/regenerate append the new state and advance the pointer, so reverting moves back **and forward** to any version (fixes the old lost-forward bug). Restore reuses each revision's already-stored PNG instead of re-rendering (instant switch). Migration `20260713130000`.
 - **F1 — Async generation + skeletons.** The wizard's `assemble-a/b` now **validate synchronously, return `202 {draftId}`, and generate in-process** (fire-and-forget via `src/lib/agent/backgroundGeneration.ts`); the draft page lands immediately with copy/image skeletons that resolve independently. Failure → `Draft.failureReason` + inline error + **Retry** (`POST /api/drafts/[id]/retry`); stale `IN_PROGRESS` drafts (>15 min) are swept to `FAILED` lazily on read. `generateDraft.ts` split into `createPendingDraft` + `runGenerationForDraft` (async) vs `generateDraftForBrief` (sync — MCP/ACP + scheduler unchanged, no orphan FAILED drafts). Migration `20260713140000`. **Deploy note: existing E2E generation callers now poll (`waitForDraft`).**
 - **F4 — Chat-driven auto-scheduling.** The campaign briefing chat emits a ` ```schedule ` block; the admin reviews/edits/reorders the plan, then **batch-creates** queue entries (`POST /api/campaigns/[id]/queue/batch`, all-in-one-transaction, admin-only auto-publish gate). No migration.
-- **F5 — Brand-kit from reference images (vision).** The app's **first real image-input path**: `src/lib/agent/vision.ts` (`runVisionModel` — Anthropic image blocks in API mode / `claude -p --allowedTools Read` on temp files in CLI mode). A brand-kit assistant chat grounds on the kit's `feedToAI` reference artifacts and proposes voice/tone/style/font-guesses (` ```brandkit ` block) + a **programmatically sampled** color palette (`sampleImageColors` in `puppeteer.ts` — font guesses are vision, colors are sampled, never vision-guessed). Apply = new voice prompt + kit colors. No migration.
+- **F5 — Brand-kit from reference images (vision).** The app's **first real image-input path**: `src/lib/agent/vision.ts` (`runVisionModel` — Anthropic image blocks in API mode / in CLI mode, since 005 T5, the same base64 image blocks in one stream-json message to `claude -p --tools ""`; originally `--allowedTools Read` on temp files). A brand-kit assistant chat grounds on the kit's `feedToAI` reference artifacts and proposes voice/tone/style/font-guesses (` ```brandkit ` block) + a **programmatically sampled** color palette (`sampleImageColors` in `puppeteer.ts` — font guesses are vision, colors are sampled, never vision-guessed). Apply = new voice prompt + kit colors. No migration.
 - **F6 — Upload image → Path A template (vision).** "From image" turns an upload into a slot-based Path A template (sample content the fill agent replaces — **not** mustache tokens), opens it in the template editor, snaps the aspect ratio from the image (`getImageDimensions` + `nearestAspectRatio`, admin-overridable), and keeps the source as a `REFERENCE_IMAGE` artifact. `POST /api/admin/brandkits/[id]/templates/from-image`. No migration.
 
-**⚠️ Deploy:** `npx prisma migrate deploy` applies **three** new migrations (`20260713120000`, `20260713130000`, `20260713140000`); no new env vars. **F5/F6 vision is MOCK-verified only** — the live API-image and CLI-`Read` paths aren't yet runtime-verified (the CLI mechanism was proven by a spike); smoke-test with real credentials before relying on it.
+**⚠️ Deploy:** `npx prisma migrate deploy` applies **three** new migrations (`20260713120000`, `20260713130000`, `20260713140000`); no new env vars. **F5/F6 vision is MOCK-verified only** — the live API-image path isn't yet runtime-verified; smoke-test with real credentials before relying on it. ~~CLI-`Read` paths~~ **Superseded by 005 T5/T6 (on `v2`):** CLI vision no longer uses temp files or the Read tool — it sends the images inline over stream-json to `claude -p --tools ""`; that path was verified on the local CLI 2.1.287 (a red test PNG → "Red"), and the in-image proof is the operator-run `scripts/cli-sandbox-check.mjs` (AC-16).
 
 **✅ Per-user Claude OAuth tokens (CLI mode) — 2026-07-07** (see `docs/handoff.md` top section):
 
@@ -266,6 +345,9 @@ Stack: Next.js 14, TypeScript, Prisma, PostgreSQL, MinIO, better-auth (self-host
 Before building or modifying any page, read the design system:
 
 - **[`docs/ui-reference/DESIGN_SYSTEM.md`](docs/ui-reference/DESIGN_SYSTEM.md)** — the design system for bistec-studio. Read this before writing any component or page. Also reference [`docs/ui-reference/screen-dark.png`](docs/ui-reference/screen-dark.png) and [`docs/ui-reference/screen-light.png`](docs/ui-reference/screen-light.png) for visual reference, and [`docs/ui-reference/synthetix-original-reference.html`](docs/ui-reference/synthetix-original-reference.html) for the source HTML reference.
+- **⚠️ Being replaced by 011 (2026-10-07).** That document is still Frozen Light, and it stays authoritative until 011 T3 writes the new one from the user's pick, after which Frozen Light moves to `docs/ui-reference/archive/frozen-light/`.
+  - The three candidate directions are in [`docs/ui-reference/direction-studies/`](docs/ui-reference/direction-studies/): `pick.html` is the comparison page, and `study-*.html` are the full studies with token blocks.
+  - New UI built before T4 lands should follow Frozen Light.
 
 ### Architecture & technical design
 
@@ -286,6 +368,8 @@ Before writing any backend code, API routes, Prisma models, or provider logic, r
 
 ### Specification & planning
 
+- **[`.specclaw/ROADMAP.md`](.specclaw/ROADMAP.md)** — changes 004–012 (004 built and verified PARTIAL, Phase 0 only; 005 built and verified PASS; 011 planned, wave 1 built, waiting on the direction pick; 006–010 and 012 proposals): recommended order, hard/soft dependencies, and which change owns what where they overlap. **Read before planning or building any of them.** Each change's `proposal.md` is the source of truth for its own scope.
+- **[`docs/coolify-token-rotation.md`](docs/coolify-token-rotation.md)** — ops handoff for the dead Coolify deploy token (merges don't deploy until it's rotated).
 - **[`docs/handoff.md`](docs/handoff.md)** — session handoff with current decisions, Path A/B design descriptions, AGUI spec, provider registration flow, v2 interoperability target, and the latest code-review remediation summary
 - **[`.specclaw/changes/001-marketing-post-studio-v1/spec.md`](.specclaw/changes/001-marketing-post-studio-v1/spec.md)** — full functional requirements (FR-01 through FR-33) and non-functional requirements
 - **[`.specclaw/changes/001-marketing-post-studio-v1/design.md`](.specclaw/changes/001-marketing-post-studio-v1/design.md)** — architecture, Prisma schema, API routes, provider abstraction layer, file tree

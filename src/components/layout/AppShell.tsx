@@ -10,6 +10,7 @@ import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { ClaudeTokenPrompt } from '@/components/settings/ClaudeTokenPrompt'
 import { TeamSwitcher } from '@/components/layout/TeamSwitcher'
+import { CreatePostButton } from '@/components/layout/CreatePostButton'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { authClient } from '@/lib/auth-client'
 
@@ -219,6 +220,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </main>
         </div>
+
+        {/* Floating Create post shortcut, hidden on the wizard it opens.
+            usePathname() carries no query string, so /brief?resume=… matches too. */}
+        {pathname !== '/brief' && <CreatePostButton />}
       </div>
     </ConfirmProvider>
   )

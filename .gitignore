@@ -31,3 +31,7 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# Brag video output (/brag skill) — large rendered MP4s, screenshots and a
+# scaffolded Hyperframes project with its own node_modules. All regenerable.
+brag-output*/

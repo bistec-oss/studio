@@ -65,13 +65,25 @@ WORKDIR /app
 # ships only Latin-capable fonts, so without this Sinhala copy rasterizes as tofu
 # boxes. Installed OS-wide so Chromium's fontconfig fallback picks it up for any
 # Sinhala codepoint automatically — no CSS/@import required in the generated HTML.
-RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala
+# font-noto-symbols: monochrome symbol glyphs (Noto Sans Symbols + Symbols 2 —
+# ★ ✓ ✦ → • and the rest of the arrows/dingbats/misc-symbols blocks). Without it
+# symbols the design agent uses rasterize as tofu boxes. Symbols only, no Latin,
+# so it never displaces the default text font; deliberately NOT a colour emoji
+# set. Picked up by the same fontconfig fallback as Sinhala, no CSS needed.
+# scripts/glyph-check/check-glyphs.mjs proves the coverage inside the built image.
+RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala font-noto-symbols
 
 # Claude Code CLI — CLI-mode generation (DESIGN_PROVIDER=cli) spawns `claude -p`
-# per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN env (the shared server
-# token, or a user's personal token injected per-call by claudeCli.ts). Installed
-# as root so `claude` lands on PATH at /usr/local/bin.
-RUN npm install -g @anthropic-ai/claude-code
+# per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN in the child's env: the
+# acting user's personal token, else the team's token, injected per call by
+# claudeCli.ts (there is no shared server token). Installed as root so `claude`
+# lands on PATH at /usr/local/bin.
+# PINNED (005 FR-11): CLI vision parses the stream-json event schema and relies
+# on --tools "", --no-session-persistence, --safe-mode and --setting-sources —
+# all of which can drift between CLI releases. Bump only after re-running
+# scripts/cli-sandbox-check.mjs (AC-16) in the rebuilt image. claudeCli.ts also
+# sets DISABLE_AUTOUPDATER=1 so the pinned CLI never replaces itself.
+RUN npm install -g @anthropic-ai/claude-code@2.1.287
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -113,6 +125,10 @@ COPY --from=builder /app/dist ./dist
 # track the executable bit.
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
+
+# The operator-run AC-16 check (005): CLI vision + injection inside this image
+# with the pinned CLI. Inert unless someone runs it with a token — see its header.
+COPY scripts/cli-sandbox-check.mjs ./scripts/cli-sandbox-check.mjs
 
 USER nextjs
 

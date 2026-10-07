@@ -1,0 +1,8 @@
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-06T16:52:48Z","ts":1791305568}
+{"ev":"stop","span":"plan","at":"2026-10-06T16:57:33Z","ts":1791305853,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-06T17:00:48Z","ts":1791306047}
+{"ev":"start","span":"T1","kind":"task","label":"T1","parent":"W1","model":"claude","attempt":"1","at":"2026-10-06T17:00:48Z","ts":1791306048}
+{"ev":"start","span":"T2","kind":"task","label":"T2","parent":"W1","model":"claude","attempt":"1","at":"2026-10-06T17:00:48Z","ts":1791306048}
+{"ev":"stop","span":"T1","at":"2026-10-06T17:15:28Z","ts":1791306928,"status":"ok"}
+{"ev":"stop","span":"T2","at":"2026-10-06T17:23:38Z","ts":1791307418,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-06T17:25:42Z","ts":1791307542,"status":"ok"}
