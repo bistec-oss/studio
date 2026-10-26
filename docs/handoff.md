@@ -7,7 +7,15 @@
 
 ---
 
-## ⏸️ 2026-10-26 — PICK UP HERE: 031 (v2 final polish) is VERIFIED PASS (46/46 ACs, 2026-10-27; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md)); next: the user's go-ahead for the `v2` → `main` merge, after the pre-merge prod checklist
+## ⏸️ 2026-10-27 — PICK UP HERE: the `v2` → `main` release PR [#45](https://github.com/bistec-oss/studio/pull/45) is open as a draft; it merges only on the user's go-ahead, after the pre-merge prod checklist
+
+**State.** 031 is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md)), so every change on `v2` is verified. #45 carries changes 004 to 031: 414 commits and 22 new migrations. `main` (`671ad6e`) is the merge base, so there are no conflicts and the merge can fast-forward. `main` has no branch protection; #45 is a draft so it cannot be merged by accident. Close or recreate the ten old Dependabot PRs (#21 to #34) after the release.
+
+**For DevOps:** [`devops-deploy-handover.md`](devops-deploy-handover.md). Prod still runs `sha-09a38b71` (no deploy since 2026-09-15, no `/api/health`); `main` is one commit ahead (PR #42, Node 22, no migration), and the handover suggests deploying it first once the token is rotated.
+
+**Left running:** the app on :3002 against `bistec_studio_op1` with real models, for the user's review. Stop it before any build or E2E run.
+
+## 2026-10-27 (superseded as the pickup point by the section above) — 031 (v2 final polish) is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md))
 
 **State.** Every 031 group is built and committed on `v2`: T1 to T18, plus the CI timeout commit `5621bff`. T19 wrote these docs, recaptured `docs/ui-reference/screen-light.png` and `screen-dark.png` (011 T13's method), and ran the full gate below. Nothing merges to `main`. The plan is in [`.specclaw/changes/031-v2-final-polish/`](../.specclaw/changes/031-v2-final-polish/) (spec, design, tasks, `reports/T1.md` to `T19.md`, `measure/` and `look-check/`).
 
