@@ -4,6 +4,7 @@ import { withAuth, parseBody } from '@/lib/api/handler'
 import { prisma } from '@/lib/prisma'
 import { encrypt } from '@/lib/crypto'
 import type { OpenAiKeyInfo } from '@/lib/api-types'
+import { validImageKey } from '@/providers/keyPrefix'
 
 // Self-service management of the user's personal OpenAI API key (used for
 // image generation ahead of the team's configured IMAGE provider — see
@@ -18,6 +19,7 @@ import type { OpenAiKeyInfo } from '@/lib/api-types'
 type KeyRow = {
   status: string
   keyPrefix: string
+  provider: string
 }
 
 function toInfo(row: KeyRow | null): OpenAiKeyInfo {
@@ -26,10 +28,11 @@ function toInfo(row: KeyRow | null): OpenAiKeyInfo {
     connected: true,
     status: row.status === 'INVALID' ? 'INVALID' : 'ACTIVE',
     keyPrefix: row.keyPrefix,
+    provider: row.provider === 'gemini' ? 'gemini' : 'openai',
   }
 }
 
-const KEY_SELECT = { status: true, keyPrefix: true } as const
+const KEY_SELECT = { status: true, keyPrefix: true, provider: true } as const
 
 export const GET = withAuth(async (_req, _ctx, user) => {
   const row = await prisma.userOpenAiKey.findUnique({
@@ -39,14 +42,17 @@ export const GET = withAuth(async (_req, _ctx, user) => {
   return NextResponse.json(toInfo(row))
 })
 
+// 031 FR-11: the provider comes from the key's prefix (one detector,
+// providers/keyPrefix.ts) and is never defaulted: an Anthropic key, a random
+// string or a malformed AIza key is a 400 and nothing is stored.
 const putSchema = z.object({
   key: z
     .string()
     .trim()
-    .regex(/^sk-[A-Za-z0-9_-]{20,}$/, 'Paste a valid OpenAI API key (it starts with sk-)'),
+    .refine((k) => validImageKey(k) !== null, 'Paste an OpenAI key (starts with sk-) or a Gemini key (starts with AIza).'),
 })
 
-// Connect or replace (upsert) — shape-validated only, then stored ACTIVE.
+// Connect or replace (upsert) — shape-validated only, then stored ACTIVE with its detected provider.
 export const PUT = withAuth(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, putSchema)
   if (body.response) return body.response
@@ -57,6 +63,7 @@ export const PUT = withAuth(async (req: NextRequest, _ctx, user) => {
     encryptedKey: encrypt(key),
     keyPrefix: `…${key.slice(-4)}`,
     status: 'ACTIVE',
+    provider: validImageKey(key) as 'openai' | 'gemini',
   }
   const row = await prisma.userOpenAiKey.upsert({
     where: { userId: user.userId },

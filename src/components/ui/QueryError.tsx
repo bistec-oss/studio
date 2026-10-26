@@ -1,6 +1,6 @@
 import React from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { GlassPanel } from '@/components/ui/GlassPanel'
+import { Panel } from '@/components/ui/Panel'
 import { Button } from '@/components/ui/Button'
 
 interface QueryErrorProps {
@@ -20,14 +20,14 @@ function messageFor(error: unknown): string {
 // to (the request errored, it isn't that there's nothing there).
 export function QueryError({ error, message, onRetry, className }: QueryErrorProps) {
   return (
-    <GlassPanel className={`p-8 text-center ${className ?? ''}`}>
-      <AlertTriangle size={28} className="mx-auto mb-3 text-red-500/80" />
-      <p className="text-sm text-light-text dark:text-dark-text mb-3">
+    <Panel className={`p-8 text-center ${className ?? ''}`}>
+      <AlertTriangle size={28} className="mx-auto mb-3 text-status-failed" />
+      <p className="text-ui-sm text-fg mb-3">
         {message ?? messageFor(error)}
       </p>
       <Button variant="secondary" size="sm" onClick={onRetry}>
         Retry
       </Button>
-    </GlassPanel>
+    </Panel>
   )
 }

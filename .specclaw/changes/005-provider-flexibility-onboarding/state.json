@@ -1,0 +1,16 @@
+{
+  "change": "005-provider-flexibility-onboarding",
+  "phase": "verify",
+  "branch": "v2",
+  "phases": {
+    "spec": { "status": "done", "at": "2026-10-01T14:53:48Z" },
+    "design": { "status": "done", "at": "2026-10-01T14:55:34Z" },
+    "tasks": { "status": "done", "at": "2026-10-01T14:56:32Z" },
+    "build": {
+      "status": "done",
+      "at": "2026-10-06T15:50:24Z",
+      "tasks": { "done": 10, "total": 10, "failed": 0 }
+    },
+    "verify": { "status": "passed", "at": "2026-10-06T16:47:04Z", "verdict": "PASS" }
+  }
+}

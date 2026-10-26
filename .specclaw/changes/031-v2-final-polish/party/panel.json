@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "2200094538 11757",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Generalises the stored personal OpenAI key into a multi-provider image key with a data migration, adds an HTML splice that writes user-supplied headline text into stored design HTML, and adds a new BrandKit font field read by the design prompts, so a persisted-data-shape change and a credential and untrusted-input boundary both change.",
+  "domains": ["security", "data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

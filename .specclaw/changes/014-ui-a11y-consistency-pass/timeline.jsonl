@@ -1,0 +1,46 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-09T04:09:27Z","ts":1791518967}
+{"ev":"stop","span":"propose","at":"2026-10-09T04:41:49Z","ts":1791520909,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-09T17:22:03Z","ts":1791566523}
+{"ev":"start","span":"T1","kind":"task","label":"capture compare + baseline","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:22:03Z","ts":1791566523}
+{"ev":"stop","span":"T1","at":"2026-10-09T17:27:45Z","ts":1791566865,"status":"ok"}
+{"ev":"start","span":"T2","kind":"task","label":"shared primitives","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:27:51Z","ts":1791566871}
+{"ev":"stop","span":"T2","at":"2026-10-09T17:38:09Z","ts":1791567489,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"dashboard/library/brief head/choose-team/shell","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:38:09Z","ts":1791567489}
+{"ev":"stop","span":"T3","at":"2026-10-09T17:43:43Z","ts":1791567823,"status":"ok"}
+{"ev":"start","span":"T4","kind":"task","label":"brief wizard","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:43:57Z","ts":1791567837}
+{"ev":"stop","span":"T4","at":"2026-10-09T17:49:28Z","ts":1791568168,"status":"ok"}
+{"ev":"start","span":"T5","kind":"task","label":"draft page","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:49:28Z","ts":1791568168}
+{"ev":"stop","span":"T5","at":"2026-10-09T17:55:10Z","ts":1791568510,"status":"ok"}
+{"ev":"start","span":"T6","kind":"task","label":"campaigns + projects","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T17:55:11Z","ts":1791568511}
+{"ev":"stop","span":"T6","at":"2026-10-09T18:02:49Z","ts":1791568969,"status":"ok"}
+{"ev":"start","span":"T7","kind":"task","label":"brand kits","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T18:02:49Z","ts":1791568969}
+{"ev":"stop","span":"T7","at":"2026-10-09T18:10:04Z","ts":1791569404,"status":"ok"}
+{"ev":"start","span":"T8","kind":"task","label":"team/settings/admin + StatusWord + name guard + docs","parent":"W1","model":"claude","attempt":"1","at":"2026-10-09T18:10:04Z","ts":1791569404}
+{"ev":"stop","span":"T8","at":"2026-10-09T18:26:29Z","ts":1791570389,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-09T18:36:49Z","ts":1791571009,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-09T18:37:14Z","ts":1791571034}
+{"ev":"start","span":"T9","kind":"task","label":"field-label style","parent":"W2","model":"claude","attempt":"1","at":"2026-10-09T18:37:14Z","ts":1791571034}
+{"ev":"stop","span":"T9","at":"2026-10-09T18:54:34Z","ts":1791572074,"status":"ok"}
+{"ev":"start","span":"T10","kind":"task","label":"control heights","parent":"W2","model":"claude","attempt":"1","at":"2026-10-09T18:54:34Z","ts":1791572074}
+{"ev":"stop","span":"T10","at":"2026-10-09T22:16:37Z","ts":1791584197,"status":"ok"}
+{"ev":"start","span":"T11","kind":"task","label":"brand kits a11y+consistency","parent":"W2","model":"claude","attempt":"1","at":"2026-10-09T22:16:37Z","ts":1791584197}
+{"ev":"stop","span":"T11","at":"2026-10-09T22:32:47Z","ts":1791585167,"status":"ok"}
+{"ev":"start","span":"T12","kind":"task","label":"guard tokens + tabular-nums","parent":"W2","model":"claude","attempt":"1","at":"2026-10-09T22:32:47Z","ts":1791585167}
+{"ev":"stop","span":"T12","at":"2026-10-09T22:38:33Z","ts":1791585513,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-10T17:45:05Z","ts":1791654305,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-10T17:45:33Z","ts":1791654333}
+{"ev":"start","span":"T13","kind":"task","label":"login/library/brief labels","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T17:45:33Z","ts":1791654333}
+{"ev":"stop","span":"T13","at":"2026-10-10T18:06:46Z","ts":1791655606,"status":"ok"}
+{"ev":"start","span":"T14","kind":"task","label":"campaigns/projects labels","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T18:06:47Z","ts":1791655607}
+{"ev":"stop","span":"T14","at":"2026-10-10T18:20:46Z","ts":1791656446,"status":"ok"}
+{"ev":"start","span":"T15","kind":"task","label":"draft page labels","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T18:20:47Z","ts":1791656446}
+{"ev":"stop","span":"T15","at":"2026-10-10T18:28:24Z","ts":1791656904,"status":"ok"}
+{"ev":"start","span":"T16","kind":"task","label":"team labels + On/Off","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T18:28:25Z","ts":1791656905}
+{"ev":"stop","span":"T16","at":"2026-10-10T18:39:04Z","ts":1791657544,"status":"ok"}
+{"ev":"start","span":"T17","kind":"task","label":"ARIA states","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T18:39:04Z","ts":1791657544}
+{"ev":"stop","span":"T17","at":"2026-10-10T18:57:46Z","ts":1791658666,"status":"ok"}
+{"ev":"start","span":"T18","kind":"task","label":"axe scan + close-out","parent":"W3","model":"claude","attempt":"1","at":"2026-10-10T18:57:47Z","ts":1791658667}
+{"ev":"stop","span":"T18","at":"2026-10-10T22:37:26Z","ts":1791671846,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-10T22:48:33Z","ts":1791672513,"status":"ok"}
+{"ev":"start","span":"verify-1791672541","kind":"phase","label":"verify","at":"2026-10-10T22:49:01Z","ts":1791672541}
+{"ev":"stop","span":"verify","at":"2026-10-10T22:54:43Z","ts":1791672883,"status":"ok"}

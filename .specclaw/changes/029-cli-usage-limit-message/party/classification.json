@@ -1,0 +1,10 @@
+{
+  "tier": "thin",
+  "domains": [],
+  "rationale": "The change reworks one regex and one error-message builder in src/lib/agent/claudeCli.ts, with no open question that alters the file list, no persisted data shape or release machinery touched, and a plain git revert to undo it.",
+  "signals": {
+    "blast_radius": "One file (src/lib/agent/claudeCli.ts) plus its unit test; the error path of runClaudeCli only, with stream-json mode and the scheduler explicitly out of scope",
+    "unresolved": "None; the proposal's only open question is closed by a deliberate decision not to quote stdout into the message",
+    "irreversibility": "Pure code revert with no migration, env var or model call; a broader regex could mislabel a failure as a usage limit, but that affects only the scheduler's reason prefix and not retry timing"
+  }
+}

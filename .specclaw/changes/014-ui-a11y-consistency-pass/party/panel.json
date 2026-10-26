@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "sig": "1257317862 5333",
+  "tier": "standard",
+  "tier_source": "classifier",
+  "rationale": "Consolidates eight duplicate page-head/section patterns into one shared primitive while adding accessible names and ARIA attributes across 45 files and updating DESIGN_SYSTEM.md; all changes are visual/accessibility consistency with no data or API impact and are fully revertible.",
+  "domains": [],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" }
+  ],
+  "dropped": []
+}

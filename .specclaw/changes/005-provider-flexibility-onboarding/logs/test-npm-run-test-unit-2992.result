@@ -1,0 +1,7 @@
+exit=0
+duration_s=5
+log=.specclaw/changes/005-provider-flexibility-onboarding/logs/test-npm-run-test-unit-2992.log
+head=ed57e62d9d2e98f06e1e6ac39fd352121f995838
+dirty=true
+cmd=npm run test:unit
+interrupted=false

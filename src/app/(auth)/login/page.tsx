@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { authClient } from "@/lib/auth-client"
-import { GlassPanel, GlassInput, Button } from "@/components/ui"
+import { Input, Button, Panel } from "@/components/ui"
 import { Logo } from "@/components/Logo"
 
 export default function LoginPage() {
@@ -34,15 +34,18 @@ export default function LoginPage() {
     router.refresh()
   }
 
+  // A bezel card on the canvas (021 design.md §5): the Bistec Studio logo
+  // (021 A6), a muted line, the fields and a full-width primary Button.
   return (
-    <main className="min-h-screen flex items-center justify-center bg-light-background dark:bg-dark-background">
-      <GlassPanel className="w-full max-w-sm p-8 space-y-6">
-        <div className="flex flex-col items-center text-center">
-          <Logo height={48} />
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted mt-3">Sign in to continue</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <GlassInput
+    <main className="min-h-screen flex items-center justify-center bg-canvas text-fg px-4 py-12">
+      <Panel bezel className="w-full max-w-sm p-8">
+        {/* The page's one h1, for screen readers (014 FR-14): the logo is an img. */}
+        <h1 className="sr-only">Sign in to Studio</h1>
+        <Logo height={48} />
+        <p className="mt-3 text-ui-sm text-fg-muted">Sign in to continue</p>
+        <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+          <Input
+            label="Username"
             type="text"
             placeholder="Username"
             value={username}
@@ -50,7 +53,8 @@ export default function LoginPage() {
             required
             autoComplete="username"
           />
-          <GlassInput
+          <Input
+            label="Password"
             type="password"
             placeholder="Password"
             value={password}
@@ -59,13 +63,13 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
           {error && (
-            <p className="text-sm text-red-400">{error}</p>
+            <p className="text-ui-sm text-status-failed">{error}</p>
           )}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
         </form>
-      </GlassPanel>
+      </Panel>
     </main>
   )
 }

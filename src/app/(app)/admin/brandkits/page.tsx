@@ -5,14 +5,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, Trash2, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { GlassPanel } from '@/components/ui/GlassPanel'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { QueryError } from '@/components/ui/QueryError'
+import { PageHead } from '@/components/ui/PageHead'
+import { FOCUS, ICON, ICON_BUTTON, PILL_BADGE, SCROLL_FOCUS } from '@/components/ui/atoms'
 import { apiFetch } from '@/lib/apiFetch'
 import type { AdminBrandKitSummary, AdminBrandKitDetail } from '@/lib/api-types'
 import { AddKitModal } from '@/components/admin/brandkits/AddKitModal'
 import { KitDetail } from '@/components/admin/brandkits/KitDetail'
 import { ColorSwatch } from '@/components/admin/brandkits/shared'
+import { rowCls } from '@/components/admin/brandkits/classes'
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -63,83 +65,108 @@ export default function BrandKitsPage() {
     <>
       {adding && <AddKitModal onClose={() => setAdding(false)} onCreated={handleCreated} />}
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-light-text dark:text-dark-text">Brand Kits</h1>
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted mt-0.5">
-            Manage brand identities, templates, and voice prompts.
-          </p>
-        </div>
-        <Button onClick={() => setAdding(true)}>
-          <Plus size={16} /> Add Kit
-        </Button>
-      </div>
+      {/* Page head (DESIGN_SYSTEM.md §6): an eyebrow, the title, a lead. */}
+      {/* One accent primary per view: once a kit is open, its own Save is the
+          contextual primary, and Add Kit shows as an Outline button. */}
+      <PageHead
+        className="mb-6"
+        eyebrow="Admin"
+        title="Brand kits"
+        lead="Manage brand identities, templates, and voice prompts."
+        actions={
+          <Button variant={selectedId ? 'secondary' : 'primary'} onClick={() => setAdding(true)}>
+            <Plus {...ICON} /> Add Kit
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        {/* Sidebar list */}
-        <div className="space-y-2">
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* The kit list: one card of ruled rows; the open kit takes the nav
+            "current" look, as the sidebar marks the current page (021 design.md
+            §8). Capped at about eight rows (014 FR-09), so it scrolls inside its
+            own box: a focusable, labelled region whether or not it overflows now
+            (the static rule, FR-17). */}
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Brand kits"
+          className={`surface max-h-[32rem] min-w-0 overflow-y-auto p-1.5 ${SCROLL_FOCUS}`}
+        >
           {loading && (
-            <div className="text-sm text-light-text-muted dark:text-dark-text-muted px-2 py-4">Loading…</div>
+            <div className="px-2 py-4 text-ui-sm text-fg-muted">Loading…</div>
           )}
           {!loading && kitsQuery.isError && (
-            <QueryError error={kitsQuery.error} onRetry={() => kitsQuery.refetch()} />
+            <div className="p-2">
+              <QueryError error={kitsQuery.error} onRetry={() => kitsQuery.refetch()} />
+            </div>
           )}
           {!loading && !kitsQuery.isError && kits.length === 0 && (
-            <GlassPanel className="p-4 text-center">
-              <p className="text-sm text-light-text-muted dark:text-dark-text-muted">No brand kits yet.</p>
+            <div className="py-6 text-center">
+              <p className="text-ui-sm text-fg-muted">No brand kits yet.</p>
               <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAdding(true)}>
-                <Plus size={13} /> Create one
+                <Plus {...ICON} /> Create one
               </Button>
-            </GlassPanel>
-          )}
-          {kits.map(kit => (
-            // Row select is a real button (keyboard reachable); the delete
-            // button sits beside it rather than nested inside (nested
-            // interactive elements are invalid HTML).
-            <div
-              key={kit.id}
-              className={`glass-panel rounded-xl transition-all flex items-center gap-2 ${
-                selectedId === kit.id
-                  ? 'border-primary/40 dark:border-primary-light/30 bg-primary/5 dark:bg-primary-light/5'
-                  : 'hover:bg-primary/5 dark:hover:bg-primary-light/5'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setSelectedId(kit.id)}
-                aria-current={selectedId === kit.id ? 'true' : undefined}
-                className="flex-1 min-w-0 text-left pl-4 py-3 rounded-xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:focus-visible:ring-primary-light/50"
-              >
-                <div className="text-sm font-medium text-light-text dark:text-dark-text truncate">{kit.name}</div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  {kit.colors.slice(0, 5).map(c => <ColorSwatch key={c} color={c} />)}
-                  {kit.isDefault && (
-                    <span className="text-xs text-primary dark:text-primary-light font-mono ml-1">default</span>
-                  )}
-                </div>
-              </button>
-              <div className="flex items-center gap-1 flex-shrink-0 pr-4 py-3">
-                <button
-                  onClick={() => handleDelete(kit.id)}
-                  aria-label={`Delete brand kit ${kit.name}`}
-                  className="p-1 rounded-lg text-light-text-muted dark:text-dark-text-muted hover:text-red-500 transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <ChevronRight size={14} aria-hidden="true" className={`text-light-text-muted dark:text-dark-text-muted transition-transform ${selectedId === kit.id ? 'rotate-90' : ''}`} />
-              </div>
             </div>
-          ))}
+          )}
+          {kits.length > 0 && (
+            <ul>
+              {kits.map(kit => {
+                const selected = selectedId === kit.id
+                return (
+                  // Row select is a real button (keyboard reachable); the delete
+                  // button sits beside it rather than nested inside (nested
+                  // interactive elements are invalid HTML). It sits flush with
+                  // the list edge, so its focus outline is inset: the list's own
+                  // overflow would clip an outset one.
+                  <li key={kit.id} className={rowCls(selected, 'flex items-center gap-1 pr-1')}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(kit.id)}
+                      aria-current={selected ? 'true' : undefined}
+                      className={`min-w-0 flex-1 cursor-pointer rounded-ui-sm py-2.5 pl-2.5 text-left ${SCROLL_FOCUS}`}
+                    >
+                      <span
+                        className={`block truncate text-ui-sm ${selected ? 'font-semibold text-fg' : 'font-medium text-fg'}`}
+                        title={kit.name}
+                      >
+                        {kit.name}
+                      </span>
+                      <span className="mt-1.5 flex items-center gap-1.5">
+                        {kit.colors.slice(0, 5).map(c => <ColorSwatch key={c} color={c} decorative />)}
+                        {kit.isDefault && (
+                          <span className={`ml-1 ${PILL_BADGE}`}>default</span>
+                        )}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(kit.id)}
+                      aria-label={`Delete brand kit ${kit.name}`}
+                      title="Delete"
+                      className={`${ICON_BUTTON} hover:text-status-failed ${FOCUS}`}
+                    >
+                      <Trash2 {...ICON} />
+                    </button>
+                    <ChevronRight
+                      {...ICON}
+                      aria-hidden="true"
+                      className={`flex-shrink-0 text-fg-muted transition-transform duration-fast ease-standard ${selected ? 'rotate-90' : ''}`}
+                    />
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
 
-        {/* Detail panel */}
-        <div>
+        {/* Detail */}
+        <div className="min-w-0">
           {selectedKit ? (
             <KitDetail kit={selectedKit} onRefresh={handleRefresh} />
           ) : (
-            <GlassPanel className="p-8 text-center text-light-text-muted dark:text-dark-text-muted">
+            <div className="surface-bezel py-12 text-center text-ui-sm text-fg-muted">
               Select a brand kit to view details
-            </GlassPanel>
+            </div>
           )}
         </div>
       </div>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
-import { enhanceBriefing } from '@/lib/campaign/briefingAssistant'
+import { AssistantModelError, enhanceBriefing } from '@/lib/campaign/briefingAssistant'
 import { withClaudeAuth } from '@/lib/agent/userToken'
 
 type Params = { id: string }
@@ -26,9 +26,18 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
 
   // CLI mode bills the acting user's personal Claude token when connected
   // (the team token otherwise) — see src/lib/agent/userToken.ts.
-  const draft = await withClaudeAuth(user.userId, user.teamId, () =>
-    enhanceBriefing(params.id, body.data.content, user.teamId)
-  )
+  let draft: string
+  try {
+    draft = await withClaudeAuth(user.userId, user.teamId, () =>
+      enhanceBriefing(params.id, body.data.content, user.teamId, user.userId)
+    )
+  } catch (err) {
+    // 008: no model the team can run — nothing ran; say why.
+    if (err instanceof AssistantModelError) {
+      return NextResponse.json({ code: err.code, message: err.message }, { status: 422 })
+    }
+    throw err
+  }
   if (!draft) {
     return NextResponse.json({ error: 'The model returned an empty draft — try again' }, { status: 502 })
   }

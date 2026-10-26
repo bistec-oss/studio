@@ -1,0 +1,7 @@
+exit=0
+duration_s=6
+log=.specclaw/changes/016-fresh-start-cleanup/logs/test-npm-run-test-unit-8642.log
+head=26e4990cf6e0e6c8165f762346f8e444b218aadf
+dirty=false
+cmd=npm run test:unit
+interrupted=false

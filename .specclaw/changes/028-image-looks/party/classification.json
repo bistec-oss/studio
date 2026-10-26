@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": [],
+  "rationale": "Adds five new looks and STORY contracts across the designData dataset, prompts, render fixtures, the resolver and the insights page (about 25 files), and changes unattended queue, MCP and ACP behaviour so they use a look only after a real-image allow-list entry, with open questions on the full-bleed measurement and the number of sizes that change what is built.",
+  "signals": {
+    "blast_radius": "About 25 files across designData/composition and validation, postStyles styles and resolve, prompt text, render fixtures and tests, the OP-1 runner, the insights query and section, the wizard and briefs route, E2E and docs; mostly additive, but the resolver's unattended rule changes behaviour on scheduled, MCP and ACP surfaces",
+    "unresolved": "OQ2 (whether a full-bleed band is measured on the raw image or on a rendered scrim) changes the check itself, and OQ4 (17 contracts or fewer sizes) changes the fixture and dataset set; OQ1 changes the post-style defaults",
+    "irreversibility": "Low: no migration, code-owned dataset, and a look that fails falls back to classic with no second call; the cost is about 34 one-off hero image calls, and unattended exposure is gated on the allow-list"
+  }
+}

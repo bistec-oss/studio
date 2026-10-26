@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { cn } from '@/lib/utils'
+import { FOCUS } from './atoms'
 
 interface SegmentOption {
   value: string
@@ -12,21 +13,29 @@ interface SegmentedToggleProps {
   options: SegmentOption[]
   value: string
   onChange: (value: string) => void
+  /** The tablist's accessible name (014 FR-13): every tablist is named. */
+  label: string
   className?: string
 }
 
+// The segmented toggle (DESIGN_SYSTEM.md §8.4, the study's .theme-btn): a
+// canvas pill track with a hairline ring, and the selected segment raised on
+// it (--surface-2, --fg, the panel shadow). Nothing clips the track, so the
+// focus outline sits outside the segment like everywhere else.
 export function SegmentedToggle({
   options,
   value,
   onChange,
+  label,
   className,
 }: SegmentedToggleProps) {
   return (
     <div
       role="tablist"
+      aria-label={label}
       className={cn(
-        'inline-flex items-center gap-0.5 p-1',
-        'glass-panel rounded-xl',
+        'inline-flex items-center gap-0.5 p-[3px]',
+        'rounded-ui-pill bg-canvas ring-1 ring-inset ring-line-subtle',
         className,
       )}
     >
@@ -39,21 +48,10 @@ export function SegmentedToggle({
             aria-selected={isActive}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:focus-visible:ring-primary-light/50',
-              isActive
-                ? [
-                    'bg-primary/10 dark:bg-primary-light/15',
-                    'text-primary dark:text-primary-light',
-                    'border border-primary/20 dark:border-primary-light/25',
-                    'shadow-sm',
-                  ].join(' ')
-                : [
-                    'text-light-text-muted dark:text-dark-text-muted',
-                    'hover:text-light-text dark:hover:text-dark-text',
-                    'hover:bg-primary/5 dark:hover:bg-primary-light/5',
-                    'border border-transparent',
-                  ].join(' '),
+              'rounded-ui-pill px-3 py-1.5 text-ui-xs font-semibold',
+              'transition-[background-color,color,box-shadow] duration-fast ease-standard',
+              FOCUS,
+              isActive ? 'bg-surface-raised text-fg shadow-panel' : 'text-fg-muted hover:text-fg',
             )}
           >
             {opt.label}

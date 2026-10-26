@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { createPromptVersion } from '@/lib/brandkit/promptVersion'
 
 type Params = { id: string }
 
@@ -43,33 +44,11 @@ export const POST = withTeamAdmin<Params>(async (req, { params }, user) => {
   const { content } = body.data
 
   // Allocate the next version, deactivate the current active prompt, and create
-  // the new active prompt atomically. Concurrent saves can read the same max
+  // the new active prompt atomically (createPromptVersion). Concurrent saves can read the same max
   // version and collide on @@unique([brandKitId, version]); surface that as 409
   // rather than a raw P2002 500.
   try {
-    const prompt = await prisma.$transaction(async (tx) => {
-      const latest = await tx.brandKitPrompt.findFirst({
-        where: { brandKitId: params.id },
-        orderBy: { version: 'desc' },
-        select: { version: true },
-      })
-      const nextVersion = (latest?.version ?? 0) + 1
-
-      await tx.brandKitPrompt.updateMany({
-        where: { brandKitId: params.id, isActive: true },
-        data: { isActive: false },
-      })
-
-      return tx.brandKitPrompt.create({
-        data: {
-          brandKitId: params.id,
-          content,
-          version: nextVersion,
-          isActive: true,
-          createdBy: userId,
-        },
-      })
-    })
+    const prompt = await prisma.$transaction((tx) => createPromptVersion(tx, params.id, content, userId))
 
     return NextResponse.json(prompt, { status: 201 })
   } catch (err) {

@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["data"],
+  "rationale": "Persisted data shape changes (model stamps on Draft/DraftCaption/DraftRevision, plus new TeamModelPolicy and UserModelPreference tables) and model resolution sits on the generation critical path with server-side allow-list validation.",
+  "signals": {
+    "blast_radius": "~30 files across caption/design/refine/assistant surfaces and UI pickers (brief wizard, /team, refine, chat headers); every edit wraps existing model calls with resolveModel(), no structural moves between components",
+    "unresolved": "None — all design decisions recorded (catalogue, cost labels, choice location, regenerate defaults, team-token notice); zero open questions",
+    "irreversibility": "Migrations add schema columns and tables; git revert removes code but leaves persisted columns/tables in production; full rollback requires explicit down-migration"
+  }
+}

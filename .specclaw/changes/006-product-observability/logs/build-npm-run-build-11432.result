@@ -1,0 +1,7 @@
+exit=0
+duration_s=19
+log=.specclaw/changes/006-product-observability/logs/build-npm-run-build-11432.log
+head=851f224097b7f6d8d6a1a387726bd35bebe686e8
+dirty=true
+cmd=npm run build
+interrupted=false

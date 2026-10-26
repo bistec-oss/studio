@@ -3,20 +3,41 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Sparkles, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
-import { GlassPanel } from '@/components/ui/GlassPanel'
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { Button } from '@/components/ui/Button'
+import { Panel } from '@/components/ui/Panel'
+import { SectionHead } from '@/components/ui/SectionHead'
+import {
+  FOCUS,
+  ICON_SM,
+  PILL_BADGE,
+  SCROLL_FOCUS,
+  TABLE_HEAD_ROW,
+  TEXT_LINK,
+} from '@/components/ui/atoms'
 import { apiFetch } from '@/lib/apiFetch'
 import type { DraftStatus } from '@prisma/client'
 import { channelLabel as sharedChannelLabel } from '@/lib/channels'
 
 // ─── Recent Drafts card (dashboard) ─────────────────────────────────────────
-// Collapsed it shows the first COLLAPSED_COUNT rows (the pre-existing look);
-// Expand grows the same card in place and scrolls the full server-provided
-// list internally — no overlay, no extra fetch, design unchanged.
+// Collapsed it shows the first COLLAPSED_COUNT rows; Expand grows the same
+// block in place and scrolls the full server-provided list internally — no
+// overlay, no extra fetch. A bezel card holding a ruled table (021 design.md
+// §8, the study's .ct).
 
 const COLLAPSED_COUNT = 8
+
+// The visible focus (DESIGN_SYSTEM.md §9), on a rounded-ui-sm box: the links
+// and buttons in this card draw their outline with the corner.
+const FOCUS_ROUNDED = `${FOCUS} rounded-ui-sm`
+// A row's title link: --fg, underlined on hover (--accent is ink in Graphite,
+// so a colour change would not show).
+const TOPIC_LINK =
+  'font-medium text-fg decoration-line underline-offset-4 hover:underline'
+// A header cell; the sentence-case style is on the row (TABLE_HEAD_ROW).
+const HEAD_CELL = 'py-2'
 
 const DRAFT_CHIP: Record<DraftStatus, 'draft' | 'exported' | 'published' | 'failed'> = {
   IN_PROGRESS: 'draft',
@@ -75,8 +96,8 @@ export function RecentDraftsCard({
 
   async function discardUnfinished(row: UnfinishedBriefRow) {
     const ok = await confirm({
-      title: 'Discard this unfinished brief?',
-      description: `"${row.topic || 'Untitled brief'}" and its uploaded images will be deleted.`,
+      title: 'Discard this unfinished post?',
+      description: `"${row.topic || 'Untitled post'}" and its uploaded images will be deleted.`,
       confirmLabel: 'Discard',
     })
     if (!ok) return
@@ -93,126 +114,109 @@ export function RecentDraftsCard({
   }
 
   return (
-    <GlassPanel className={className}>
-      <div className="mb-4 flex items-center gap-2">
-        <Sparkles size={16} className="text-primary dark:text-primary-light" />
-        <h2 className="text-sm font-semibold text-light-text dark:text-dark-text">Recent Drafts</h2>
+    <Panel bezel className={`p-5 ${className ?? ''}`}>
+      {/* The card head (the study's .card-hd), with Expand in its tail */}
+      <SectionHead title="Recent Drafts" className="mb-3">
         {hasMore && (
-          <button
-            type="button"
-            onClick={() => setExpanded(v => !v)}
-            className="ml-auto flex items-center gap-1 text-xs font-medium text-light-text-muted transition-colors hover:text-primary dark:text-dark-text-muted dark:hover:text-primary-light"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setExpanded(v => !v)}>
             {expanded ? (
               <>
-                Collapse <ChevronUp size={14} />
+                Collapse <ChevronUp {...ICON_SM} aria-hidden />
               </>
             ) : (
               <>
-                Expand <ChevronDown size={14} />
+                Expand <ChevronDown {...ICON_SM} aria-hidden />
               </>
             )}
-          </button>
+          </Button>
         )}
-      </div>
+      </SectionHead>
 
       {drafts.length === 0 && unfinished.length === 0 ? (
-        <p className="py-8 text-center text-sm text-light-text-muted dark:text-dark-text-muted">
+        <p className="py-8 text-center text-ui-sm text-fg-muted">
           No drafts yet.{' '}
-          <Link href="/brief" className="text-primary hover:underline dark:text-primary-light">
-            Create your first brief
+          <Link href="/brief" className={`${TEXT_LINK} ${FOCUS_ROUNDED}`}>
+            Create your first post
           </Link>
           .
         </p>
       ) : (
-        <div className={expanded ? 'max-h-96 overflow-y-auto overflow-x-auto' : 'overflow-x-auto'}>
-          <table className="w-full text-sm">
+        // A wide table scrolls inside its own container; the page never does.
+        // The container is a focusable, labelled region so keyboard users can
+        // scroll it (WCAG 2.1.1); its focus ring is inset so overflow can't clip it.
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Recent drafts"
+          className={`rounded-ui-sm ${SCROLL_FOCUS} ${expanded ? 'max-h-96 overflow-y-auto overflow-x-auto' : 'overflow-x-auto'}`}
+        >
+          {/* A data table (§8.15, the study's .ct): ruled rows, a sentence-case header row */}
+          <table className="w-full min-w-[600px] text-ui-sm">
             <thead>
-              <tr className="border-b border-black/5 text-left text-xs text-light-text-muted dark:border-white/10 dark:text-dark-text-muted">
-                <th className="pb-2 pr-3 font-medium">Topic</th>
-                <th className="pb-2 pr-3 font-medium">Campaign</th>
-                <th className="pb-2 pr-3 font-medium">Platform</th>
-                <th className="pb-2 pr-3 font-medium">Path</th>
-                <th className="pb-2 pr-3 font-medium">Status</th>
-                <th className="pb-2 font-medium">Created</th>
+              <tr className={TABLE_HEAD_ROW}>
+                <th scope="col" className={`${HEAD_CELL} pr-3`}>Topic</th>
+                <th scope="col" className={`${HEAD_CELL} pr-3`}>Campaign</th>
+                <th scope="col" className={`${HEAD_CELL} pr-3`}>Channels</th>
+                <th scope="col" className={`${HEAD_CELL} pr-3`}>Design mode</th>
+                <th scope="col" className={`${HEAD_CELL} pr-3`}>Status</th>
+                <th scope="col" className={HEAD_CELL}>Created</th>
               </tr>
             </thead>
             <tbody>
               {unfinishedRows.map(u => (
-                <tr
-                  key={`unfinished-${u.id}`}
-                  className="group border-b border-black/5 last:border-0 dark:border-white/5"
-                >
+                <tr key={`unfinished-${u.id}`} className="group border-b border-line-subtle last:border-b-0">
                   <td className="py-2.5 pr-3">
-                    <Link
-                      href={`/brief?resume=${u.id}`}
-                      className="font-medium text-light-text hover:text-primary dark:text-dark-text dark:hover:text-primary-light"
-                    >
-                      {u.topic || 'Untitled brief'}
+                    <Link href={`/brief?resume=${u.id}`} className={`${TOPIC_LINK} ${FOCUS_ROUNDED}`}>
+                      {u.topic || 'Untitled post'}
                     </Link>
                   </td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">—</td>
+                  <td className="py-2.5 pr-3 text-fg-muted">—</td>
+                  <td className="py-2.5 pr-3 text-fg-muted">—</td>
+                  <td className="py-2.5 pr-3 text-fg-muted">—</td>
                   <td className="py-2.5 pr-3">
-                    <StatusChip status="unfinished" />
+                    <span className={PILL_BADGE}>Unfinished</span>
                   </td>
-                  <td className="py-2.5 text-light-text-muted dark:text-dark-text-muted">
-                    <span className="inline-flex items-center gap-2">
+                  <td className="whitespace-nowrap py-2.5 text-ui-xs text-fg-muted">
+                    <span className="inline-flex items-center gap-3">
                       {u.updatedAtLabel}
-                      <Link
-                        href={`/brief?resume=${u.id}`}
-                        className="text-xs font-medium text-primary hover:underline dark:text-primary-light"
-                      >
+                      <Link href={`/brief?resume=${u.id}`} className={`text-ui-xs font-semibold ${TEXT_LINK} ${FOCUS_ROUNDED}`}>
                         Resume
                       </Link>
                       <button
                         type="button"
-                        aria-label="Discard unfinished brief"
+                        aria-label="Discard unfinished post"
                         disabled={discarding === u.id}
                         onClick={() => void discardUnfinished(u)}
-                        className="text-light-text-muted transition-colors hover:text-red-600 disabled:opacity-50 dark:text-dark-text-muted dark:hover:text-red-400"
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-ui-pill text-fg-muted transition-colors duration-fast ease-standard hover:bg-surface-raised hover:text-status-failed disabled:opacity-50 ${FOCUS}`}
                       >
-                        <Trash2 size={14} />
+                        <Trash2 {...ICON_SM} aria-hidden />
                       </button>
                     </span>
                   </td>
                 </tr>
               ))}
               {rows.map(d => (
-                <tr
-                  key={d.id}
-                  className="group border-b border-black/5 last:border-0 dark:border-white/5"
-                >
+                <tr key={d.id} className="group border-b border-line-subtle last:border-b-0">
                   <td className="py-2.5 pr-3">
-                    <Link
-                      href={`/drafts/${d.id}`}
-                      className="font-medium text-light-text hover:text-primary dark:text-dark-text dark:hover:text-primary-light"
-                    >
+                    <Link href={`/drafts/${d.id}`} className={`${TOPIC_LINK} ${FOCUS_ROUNDED}`}>
                       {d.brief?.topic ?? 'Untitled'}
                     </Link>
                   </td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                    {d.brief?.campaign?.name ?? '—'}
-                  </td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                    {channelLabel(d.brief?.channels ?? [])}
-                  </td>
-                  <td className="py-2.5 pr-3 text-light-text-muted dark:text-dark-text-muted">
-                    {d.brief?.designMode === 'TEMPLATE' ? 'A' : 'B'}
+                  <td className="py-2.5 pr-3 text-fg-muted">{d.brief?.campaign?.name ?? '—'}</td>
+                  <td className="py-2.5 pr-3 text-fg-muted">{channelLabel(d.brief?.channels ?? [])}</td>
+                  <td className="py-2.5 pr-3 text-fg-muted">
+                    {d.brief?.designMode === 'TEMPLATE' ? 'Template' : 'Freeform'}
                   </td>
                   <td className="py-2.5 pr-3">
                     <StatusChip status={DRAFT_CHIP[d.status]} />
                   </td>
-                  <td className="py-2.5 text-light-text-muted dark:text-dark-text-muted">
-                    {d.createdAtLabel}
-                  </td>
+                  <td className="whitespace-nowrap py-2.5 text-ui-xs text-fg-muted">{d.createdAtLabel}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
-    </GlassPanel>
+    </Panel>
   )
 }

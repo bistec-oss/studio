@@ -1,0 +1,7 @@
+exit=0
+duration_s=10
+log=.specclaw/changes/024-caption-credential-route/logs/lint-npm-run-lint-2112.log
+head=cd9d411ac465d10bafecee35c1fc11ef84d476f1
+dirty=true
+cmd=npm run lint
+interrupted=false

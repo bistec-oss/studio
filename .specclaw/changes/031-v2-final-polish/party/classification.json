@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["security", "data"],
+  "rationale": "Generalises the stored personal OpenAI key into a multi-provider image key with a data migration, adds an HTML splice that writes user-supplied headline text into stored design HTML, and adds a new BrandKit font field read by the design prompts, so a persisted-data-shape change and a credential and untrusted-input boundary both change.",
+  "signals": {
+    "blast_radius": "Architectural: a new claimed draft action with an HTML splice, a font catalogue and brand-kit field read by design prompts, a generalised credential table with a migration, a new look contract with a real-image gate, a typography dataset, and app-wide wording across about 80 to 120 files",
+    "unresolved": "Open questions 1, 3 and 5 change what gets built (whether Apply is offered on unconfirmed stamps, whether the Sinhala slot is null by default, and the order of groups), and the OP-031 result decides whether Promotion and Milestone move to a new look",
+    "irreversibility": "Migrations carry personal key data and BrandKit columns and need down scripts; the HTML splice writes into stored drafts and revisions; a wording sweep is cheap to revert, but the credential migration is not free to undo once rows are rewritten"
+  }
+}

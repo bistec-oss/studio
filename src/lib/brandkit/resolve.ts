@@ -11,10 +11,21 @@ export interface ResolvedBrandKit {
   name: string
   colors: string[]
   fonts: Array<{ name: string; url: string }>
+  // 031 FR-21: { [script]: family } (only `sinhala` is offered); null = none. Optional so a
+  // hand-built kit (tests, fixtures) needs no change; resolveBrandKit always sets it.
+  scriptFonts?: Record<string, string> | null
   logoUrl: string | null
   logos: LogoEntry[]
   voicePrompt: string | null
   source: BrandKitSource
+}
+
+// A tolerant read of BrandKit.scriptFonts: string values only; anything else is null.
+function scriptFontsOf(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) if (typeof v === 'string') out[k] = v
+  return Object.keys(out).length > 0 ? out : null
 }
 
 function normalise(kit: KitWithPrompts, source: BrandKitSource): ResolvedBrandKit {
@@ -23,6 +34,7 @@ function normalise(kit: KitWithPrompts, source: BrandKitSource): ResolvedBrandKi
     name: kit.name,
     colors: Array.isArray(kit.colors) ? (kit.colors as string[]) : [],
     fonts: Array.isArray(kit.fonts) ? (kit.fonts as Array<{ name: string; url: string }>) : [],
+    scriptFonts: scriptFontsOf(kit.scriptFonts),
     logoUrl: kit.logoUrl ?? null,
     logos: buildLogoList(
       (kit.artifacts ?? []).map((a) => ({ name: a.name, url: a.url })),

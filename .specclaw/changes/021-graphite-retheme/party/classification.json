@@ -1,0 +1,10 @@
+{
+  "tier": "standard",
+  "domains": [],
+  "rationale": "Restyles about 80 files across every screen and primitive, but every edit is a token, class or shape change with no behaviour, API, schema or copy change, and the open questions (wordmark font, change order, carry-over notes) are cosmetic or scheduling choices that do not alter what is built.",
+  "signals": {
+    "blast_radius": "Token layer in globals.css and tailwind config, three folio.ts helpers renamed, primitives in src/components/ui, about 67 screen files, layout.tsx fonts, three guard tests and DESIGN_SYSTEM.md; all restyles, no structural behaviour moved",
+    "unresolved": "Wordmark font and change order (cosmetic or scheduling) and carry-over notes (tuning); none changes the file list or the design",
+    "irreversibility": "Pure visual change revertible in git; no migrated data, no removed capability, no release machinery; main risk is E2E selectors keyed on small-caps label text, which is a test-fix cost, not a trust or data concern"
+  }
+}

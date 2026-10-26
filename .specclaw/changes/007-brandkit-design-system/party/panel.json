@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "sig": "614932529 7143",
+  "sig": "3468716910 15439",
   "tier": "deep",
   "tier_source": "classifier",
   "rationale": "Three unresolved design questions - dataset source, rewrite-vs-diff upgrade architecture, and whether design-system slices go into every-generation prompts or kit-authoring-only - materially change the implementation scope; changes to design prompts affect every future generation globally, and a bad rule would degrade output across all kits.",

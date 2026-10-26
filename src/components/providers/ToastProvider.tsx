@@ -2,40 +2,52 @@
 
 import React from 'react'
 import { Toaster } from 'sonner'
-import { useTheme } from '@/components/theme/ThemeProvider'
+import { FOCUS } from '@/components/ui/atoms'
 
-// App-wide toast outlet, styled to match the Frozen Light glass theme and
-// following the active light/dark theme. Fire toasts anywhere on the client
-// via `import { toast } from 'sonner'`.
+// App-wide toast outlet. Fire toasts anywhere on the client via
+// `import { toast } from 'sonner'`.
+//
+// Toasts (DESIGN_SYSTEM.md §8.8, the study's .toast): Sonner runs `unstyled`,
+// so its own theme colours never fight the tokens, and each part takes token
+// classes. The icon sits in a 30 px status disc on its 0.12 tint (021 A2).
+// The tokens switch with `.dark` on <html>, so no theme prop is passed: Sonner
+// keeps its default "light", which also keeps its dark-only close-button rule
+// (not gated on `unstyled`) from repainting the button.
 export function ToastProvider() {
-  const { theme } = useTheme()
-
-  const glass: React.CSSProperties =
-    theme === 'dark'
-      ? {
-          background: 'rgba(15, 23, 42, 0.75)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
-          color: '#f8fafc',
-        }
-      : {
-          background: 'rgba(255, 255, 255, 0.75)',
-          border: '1px solid rgba(15, 23, 42, 0.08)',
-          color: '#0f172a',
-        }
-
   return (
     <Toaster
-      theme={theme}
       position="bottom-right"
+      // Lift the stack clear of the floating Create post button (52 px tall,
+      // 24 px from the bottom edge) with a 20 px gap, as the study places its
+      // toast (021 design.md §4.3). Sonner goes full-width at <=600px, so the
+      // mobile offset needs the same bottom clearance.
+      offset={{ bottom: 96, right: 24 }}
+      mobileOffset={{ bottom: 96 }}
       closeButton
+      style={{ '--width': '340px' } as React.CSSProperties}
       toastOptions={{
-        style: {
-          ...glass,
-          borderRadius: '0.75rem',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          boxShadow:
-            theme === 'dark' ? '0 4px 30px rgba(0, 0, 0, 0.2)' : '0 4px 30px rgba(0, 0, 0, 0.06)',
+        unstyled: true,
+        classNames: {
+          // The opaque overlay surface at radius-lg (DESIGN_SYSTEM.md §4.1),
+          // rising in (globals.css: its fill mode hands the transform back to
+          // Sonner's stacking once the entrance ends).
+          toast:
+            'surface-overlay rounded-ui-lg animate-rise w-full flex items-start gap-3 py-3.5 pl-4 pr-10 text-ui-sm text-fg',
+          // The status disc: decorative, and not a control, so its 30 px is
+          // not a --control-* height (014 FR-07).
+          icon: 'grid size-[30px] flex-shrink-0 place-items-center rounded-full [&>svg]:h-4 [&>svg]:w-4',
+          content: 'flex flex-col gap-0.5 min-w-0 pt-1',
+          title: 'text-ui-sm font-semibold leading-snug text-fg',
+          description: 'text-ui-xs text-fg-muted',
+          closeButton: [
+            'absolute top-3 right-3 inline-flex h-6 w-6 items-center justify-center rounded-ui-sm',
+            'text-fg-muted hover:bg-canvas hover:text-fg',
+            FOCUS,
+          ].join(' '),
+          success: '[&_[data-icon]]:bg-status-published/12 [&_[data-icon]]:text-status-published',
+          error: '[&_[data-icon]]:bg-status-failed/12 [&_[data-icon]]:text-status-failed',
+          warning: '[&_[data-icon]]:bg-status-scheduled/12 [&_[data-icon]]:text-status-scheduled',
+          info: '[&_[data-icon]]:bg-canvas [&_[data-icon]]:text-fg-muted',
         },
       }}
     />

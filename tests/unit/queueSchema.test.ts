@@ -69,6 +69,12 @@ describe('queueEntrySchema', () => {
     expect(queueEntrySchema.safeParse({ ...base, channels: ['TIKTOK'] }).success).toBe(false)
     expect(queueEntrySchema.safeParse({ ...base, postAction: 'YOLO' }).success).toBe(false)
   })
+
+  it('rejects WHATSAPP (a Channel with no publisher) and accepts both publishable channels', () => {
+    expect(queueEntrySchema.safeParse({ ...base, channels: ['WHATSAPP'] }).success).toBe(false)
+    expect(queueEntrySchema.safeParse({ ...base, channels: ['INSTAGRAM', 'WHATSAPP'] }).success).toBe(false)
+    expect(queueEntrySchema.safeParse({ ...base, channels: ['INSTAGRAM', 'LINKEDIN'] }).success).toBe(true)
+  })
 })
 
 describe('requiresAdmin', () => {

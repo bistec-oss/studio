@@ -1,0 +1,7 @@
+exit=0
+duration_s=5
+log=.specclaw/changes/004-design-instruction-fidelity/logs/test-npm-run-test-unit-2425.log
+head=e88b55b61a1945bd4b0551bb049097122a03f894
+dirty=true
+cmd=npm run test:unit
+interrupted=false

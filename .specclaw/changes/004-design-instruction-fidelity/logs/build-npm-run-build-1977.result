@@ -1,0 +1,7 @@
+exit=0
+duration_s=20
+log=.specclaw/changes/004-design-instruction-fidelity/logs/build-npm-run-build-1977.log
+head=f8a6aa3fcc8fd52189d63f982edff86e1f7134c7
+dirty=true
+cmd=npm run build
+interrupted=false

@@ -1,0 +1,18 @@
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-20T11:18:01Z","ts":1792495081}
+{"ev":"stop","span":"plan","at":"2026-10-20T11:26:19Z","ts":1792495579,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-20T14:43:13Z","ts":1792507393}
+{"ev":"start","span":"T1","kind":"task","label":"claim-token column","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-20T14:43:13Z","ts":1792507393}
+{"ev":"stop","span":"T1","at":"2026-10-20T14:51:09Z","ts":1792507869,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-20T14:51:10Z","ts":1792507870,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-20T14:51:25Z","ts":1792507885}
+{"ev":"start","span":"T2","kind":"task","label":"token + lifecycle guards","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-20T14:51:25Z","ts":1792507885}
+{"ev":"stop","span":"T2","at":"2026-10-20T14:59:33Z","ts":1792508373,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"content-write guards","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-20T14:59:42Z","ts":1792508382}
+{"ev":"stop","span":"T3","at":"2026-10-20T15:07:53Z","ts":1792508873,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-20T15:07:53Z","ts":1792508873,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-20T15:08:04Z","ts":1792508884}
+{"ev":"start","span":"T4","kind":"task","label":"gate + docs","parent":"W3","model":"haiku","attempt":"1","at":"2026-10-20T15:08:04Z","ts":1792508884}
+{"ev":"stop","span":"T4","at":"2026-10-20T15:27:58Z","ts":1792510078,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-20T15:27:58Z","ts":1792510079,"status":"ok"}
+{"ev":"start","span":"verify-1792510119","kind":"phase","label":"verify","at":"2026-10-20T15:28:39Z","ts":1792510119}
+{"ev":"stop","span":"verify-1792510119","at":"2026-10-20T15:32:27Z","ts":1792510347,"status":"ok"}

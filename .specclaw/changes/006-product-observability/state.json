@@ -1,0 +1,14 @@
+{
+  "change": "006-product-observability",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "architectural",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-23T15:31:26Z" },
+    "spec": { "status": "done", "at": "2026-10-23T15:37:54Z" },
+    "design": { "status": "done", "at": "2026-10-23T15:40:20Z" },
+    "tasks": { "status": "done", "at": "2026-10-23T15:40:20Z" },
+    "build": { "status": "in-progress", "at": "2026-10-24T07:57:23Z" },
+    "verify": { "status": "passed", "at": "2026-10-24T10:23:56Z", "verdict": "PASS" }
+  }
+}

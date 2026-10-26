@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "1575852676 10183",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Adds persisted brief archetype and kit allow-list fields and rewrites the art-director, image and design prompts that every Path B post depends on, across roughly 20-30 files including schema, renderer sampling and the brief wizard, even though the default stays classic-background.",
+  "domains": ["data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

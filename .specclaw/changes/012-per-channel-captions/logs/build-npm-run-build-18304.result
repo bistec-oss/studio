@@ -1,0 +1,7 @@
+exit=0
+duration_s=16
+log=.specclaw/changes/012-per-channel-captions/logs/build-npm-run-build-18304.log
+head=3d6458990ec6bd7b7994539f0fe0d3f10052df0e
+dirty=true
+cmd=npm run build
+interrupted=false

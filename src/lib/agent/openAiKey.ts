@@ -6,12 +6,22 @@ import { prisma } from '@/lib/prisma'
 // see the PUT handler in src/app/api/me/openai-key/route.ts): the row starts
 // ACTIVE and is only flipped INVALID here, after an observed failure.
 //
-// Not yet wired to a call site: unlike Claude's isClaudeAuthFailure (which
-// classifies `claude -p` stderr), there is no existing classifier for OpenAI
-// SDK errors as "this was an auth failure" vs. any other failure (rate limit,
-// moderation, network). Inventing that classification is out of scope here —
-// see the TODO in src/lib/agent/background.ts at the provider.generateImage
-// call site for where this would be invoked once such a classifier exists.
+// Wired by background.ts (031 FR-13): when the personal key's provider answers
+// 401 or 403, isAuthRejection says so and the row is flagged INVALID.
+
+/**
+ * Whether a provider error is the provider rejecting the key (HTTP 401 or 403).
+ * The OpenAI SDK sets `status` on its errors; the Gemini provider writes the
+ * status into its message ("(HTTP 401)"). Anything else (a rate limit, a safety
+ * refusal, a network error) is not an auth rejection.
+ */
+export function isAuthRejection(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const status = (err as { status?: unknown }).status
+  if (status === 401 || status === 403) return true
+  const message = (err as { message?: unknown }).message
+  return typeof message === 'string' && /\(HTTP (?:401|403)\)/.test(message)
+}
 
 /**
  * Flags the stored personal OpenAI key after an observed auth failure so the

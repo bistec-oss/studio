@@ -1,0 +1,40 @@
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-10T22:55:18Z","ts":1791672918}
+{"ev":"start","span":"T1","kind":"task","label":"WHATSAPP + registry","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T22:55:18Z","ts":1791672918}
+{"ev":"stop","span":"T1","at":"2026-10-10T23:01:45Z","ts":1791673305,"status":"ok"}
+{"ev":"start","span":"T2","kind":"task","label":"prompt+extractor+headline","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T23:01:46Z","ts":1791673306}
+{"ev":"stop","span":"T2","at":"2026-10-10T23:09:26Z","ts":1791673766,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"migration planner + publish resolver","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T23:09:26Z","ts":1791673766}
+{"ev":"stop","span":"T3","at":"2026-10-10T23:16:16Z","ts":1791674176,"status":"ok"}
+{"ev":"start","span":"T4","kind":"task","label":"DraftCaption schema + store + backfill","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T23:16:16Z","ts":1791674176}
+{"ev":"stop","span":"T4","at":"2026-10-10T23:31:18Z","ts":1791675078,"status":"ok"}
+{"ev":"start","span":"T5","kind":"task","label":"writers + mock seam + headline in prompts","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T23:31:18Z","ts":1791675078}
+{"ev":"stop","span":"T5","at":"2026-10-10T23:46:20Z","ts":1791675980,"status":"ok"}
+{"ev":"start","span":"T6","kind":"task","label":"draft API + base CaptionPanels","parent":"W1","model":"claude","attempt":"1","at":"2026-10-10T23:46:20Z","ts":1791675980}
+{"ev":"stop","span":"T6","at":"2026-10-11T03:41:59Z","ts":1791690119,"status":"ok"}
+{"ev":"start","span":"T7","kind":"task","label":"publish resolver + terminal job runner","parent":"W1","model":"claude","attempt":"1","at":"2026-10-11T03:42:00Z","ts":1791690120}
+{"ev":"stop","span":"T7","at":"2026-10-11T04:41:31Z","ts":1791693691,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1 (resume)","at":"2026-10-11T04:45:14Z","ts":1791693914}
+{"ev":"start","span":"T8","kind":"task","label":"MCP/ACP and generate/copy outputs","parent":"W1","model":"opus","attempt":"1","at":"2026-10-11T04:45:14Z","ts":1791693914}
+{"ev":"stop","span":"T8","at":"2026-10-11T04:59:27Z","ts":1791694767,"status":"ok"}
+{"ev":"start","span":"T9","kind":"task","label":"legacyCaptionText rename","parent":"W1","model":"opus","attempt":"1","at":"2026-10-11T04:59:37Z","ts":1791694777}
+{"ev":"stop","span":"T9","at":"2026-10-11T05:06:43Z","ts":1791695203,"status":"ok"}
+{"ev":"start","span":"T10","kind":"task","label":"Wave-1 E2E gate","parent":"W1","model":"opus","attempt":"1","at":"2026-10-11T05:08:08Z","ts":1791695288}
+{"ev":"stop","span":"T10","at":"2026-10-11T05:32:18Z","ts":1791696738,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-11T05:32:18Z","ts":1791696738,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-11T05:32:29Z","ts":1791696749}
+{"ev":"start","span":"T11","kind":"task","label":"Per-channel regenerate, headline panel, undo, clipboard","parent":"W2","model":"opus","attempt":"1","at":"2026-10-11T05:32:29Z","ts":1791696749}
+{"ev":"stop","span":"T11","at":"2026-10-11T18:28:30Z","ts":1791743310,"status":"ok"}
+{"ev":"start","span":"T12","kind":"task","label":"Notices, WhatsApp guide, counters","parent":"W2","model":"opus","attempt":"1","at":"2026-10-11T18:28:40Z","ts":1791743320}
+{"ev":"stop","span":"T12","at":"2026-10-11T18:37:53Z","ts":1791743873,"status":"ok"}
+{"ev":"start","span":"T13","kind":"task","label":"Wave-2 E2E gate","parent":"W2","model":"opus","attempt":"1","at":"2026-10-11T18:37:56Z","ts":1791743875}
+{"ev":"stop","span":"T13","at":"2026-10-11T18:57:22Z","ts":1791745042,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-11T18:57:22Z","ts":1791745042,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-11T18:57:33Z","ts":1791745053}
+{"ev":"start","span":"T14","kind":"task","label":"copy->caption wording and guard","parent":"W3","model":"opus","attempt":"1","at":"2026-10-11T18:57:33Z","ts":1791745053}
+{"ev":"stop","span":"T14","at":"2026-10-11T19:15:23Z","ts":1791746123,"status":"ok"}
+{"ev":"start","span":"T15","kind":"task","label":"export/import carry captions","parent":"W3","model":"opus","attempt":"1","at":"2026-10-11T19:15:33Z","ts":1791746133}
+{"ev":"stop","span":"T15","at":"2026-10-11T19:25:40Z","ts":1791746740,"status":"ok"}
+{"ev":"start","span":"T16","kind":"task","label":"Docs","parent":"W3","model":"opus","attempt":"1","at":"2026-10-11T19:25:53Z","ts":1791746753}
+{"ev":"stop","span":"T16","at":"2026-10-12T01:34:16Z","ts":1791768856,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-12T01:34:16Z","ts":1791768856,"status":"ok"}
+{"ev":"start","span":"verify-1791769145","kind":"phase","label":"verify","at":"2026-10-12T01:39:06Z","ts":1791769146}

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveImageProvider } from '@/providers/registry'
+import { imageSizeFor } from '@/providers/imageCapabilities'
 import { persistDataUrlImage } from '@/lib/storage/minio'
 
 const bodySchema = z.object({ briefId: z.string(), prompt: z.string() })
@@ -33,7 +34,11 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
       )
     }
 
-    const result = await provider.generateImage(prompt)
+    const result = await provider.generateImage(
+      prompt,
+      brief.brandKitId ?? undefined,
+      imageSizeFor(provider.providerName, brief.aspectRatio)
+    )
     const rawUrl: string = result.url
 
     if (rawUrl.startsWith('data:')) {

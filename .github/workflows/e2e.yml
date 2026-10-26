@@ -4,11 +4,18 @@ name: E2E (security-fix regression gate)
 # cases that guard the 28 code-review security/correctness fixes (H1–H13, M*, L*)
 # and §A RBAC/IDOR. Block merges on this so those fixes can never silently break.
 # See docs/e2e-test-plan.md.
+#
+# This workflow gates every PR and every push to v2 and main: checks only
+# (typecheck, lint, E2E, unit, the upgrade path from main's schema, build, a
+# docker build with no push, and the boot-time env preflight in that image).
+# It publishes and deploys nothing. Deploying is docker-publish.yml's job: it
+# runs on pushes to main only, pushes the image to GHCR, redeploys both Coolify
+# resources and verifies the deployed commit at /api/health.
 
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [v2, main]
 
 # One run per ref — a new push cancels the in-flight run for the same branch/PR.
 concurrency:
@@ -18,7 +25,9 @@ concurrency:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 031 added suites: the run reached 578 passed in 22.4 min and was then cut at
+    # 25 min during teardown (run 40346142128).
+    timeout-minutes: 40
 
     services:
       postgres:
@@ -82,7 +91,7 @@ jobs:
         # this step from 2026-08 onward, when it still pointed at Hub), and
         # since 2026-09-24 quay.io/minio/minio also refuses anonymous pulls —
         # so the quay.io fallback pinned here stopped working too. Replaced
-        # with pgsty/silo, a maintained drop-in fork pinned by digest: it
+        # with pgsty/silo, a maintained drop-in replacement pinned by digest: it
         # reads/writes the same on-disk format as MinIO (verified both
         # directions) and its entrypoint translates `server /data` argv to
         # the `silo` binary, so nothing else in this step changes.
@@ -91,7 +100,7 @@ jobs:
             -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
             pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46 server /data
           # Wait for MinIO to accept connections.
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:9000/minio/health/live >/dev/null; then echo "minio ready"; break; fi
             sleep 2
           done
@@ -100,6 +109,15 @@ jobs:
         run: |
           npx prisma generate
           npx prisma migrate deploy
+
+      # Change 022 FR-03: the upgrade path from main's schema (company prod).
+      # Builds its own scratch database (bistec_studio_upgrade) on the same
+      # service, migrates it from main's head with prod-shaped legacy drafts,
+      # and proves the carry-over converts them before 016's drop, is a no-op
+      # on an already-dropped database, and fails atomically on bad content.
+      # It never touches bistec_studio_test and drops its scratch DB at the end.
+      - name: Upgrade path from main's schema (022)
+        run: npm run test:upgrade
 
       - name: Seed baseline (admin, editor, teams, kits, cli provider)
         # ORDER MATTERS — mirrors scripts/setup-test-db.mjs exactly:
@@ -152,7 +170,7 @@ jobs:
         run: |
           npx next dev -p 3001 &
           ready=0
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/login)" = "200" ]; then echo "app ready"; ready=1; break; fi
             sleep 2
           done
@@ -232,4 +250,63 @@ jobs:
         run: npm run build
 
       - name: Docker image build
-        run: docker build .
+        run: docker build -t bistec-studio:ci .
+
+      # Change 022 FR-04: the entrypoint's env preflight runs BEFORE
+      # `prisma migrate deploy`, so a bad env value stops the boot with the
+      # schema untouched. Booted with --network none and this job's validly
+      # shaped dummy env (passed by name); DATABASE_URL points at nothing.
+      #   CLAUDE_CLI_MODEL=default -> non-zero exit, names CLAUDE_CLI_MODEL,
+      #                               and never reaches the migrate step.
+      #   CLAUDE_CLI_MODEL=sonnet  -> preflight ok line, then the applying
+      #                               line; migrate then fails on the
+      #                               unreachable database, as expected.
+      - name: Env preflight runs before migrations (runner image)
+        run: |
+          boot() {
+            timeout 120 docker run --rm --network none \
+              -e DATABASE_URL -e TOKEN_ENCRYPTION_KEY -e BETTER_AUTH_SECRET \
+              -e MINIO_ACCESS_KEY -e MINIO_SECRET_KEY \
+              -e CLAUDE_CLI_MODEL="$1" \
+              bistec-studio:ci 2>&1
+          }
+          fail() { echo "::error::$1"; exit 1; }
+          applying='[entrypoint] applying pending Prisma migrations'
+          ok_line='[preflight] environment ok'
+
+          echo "--- CLAUDE_CLI_MODEL=default ---"
+          if out=$(boot default); then code=0; else code=$?; fi
+          printf '%s\n' "$out"
+          [ "$code" -ne 0 ] || fail "bad CLAUDE_CLI_MODEL booted (exit 0)"
+          [ "$code" -ne 124 ] || fail "bad CLAUDE_CLI_MODEL: container timed out"
+          grep -qF 'CLAUDE_CLI_MODEL' <<<"$out" || fail "preflight output does not name CLAUDE_CLI_MODEL"
+          if grep -qF "$applying" <<<"$out"; then fail "migrations started despite a bad CLAUDE_CLI_MODEL"; fi
+
+          echo "--- CLAUDE_CLI_MODEL=sonnet ---"
+          if out=$(boot sonnet); then code=0; else code=$?; fi
+          printf '%s\n' "$out"
+          [ "$code" -ne 124 ] || fail "good CLAUDE_CLI_MODEL: container timed out"
+          [ "$code" -ne 0 ] || fail "migrate deploy succeeded with no database reachable (exit 0)"
+          ok_at=$(grep -nF "$ok_line" <<<"$out" | head -n1 | cut -d: -f1 || true)
+          applying_at=$(grep -nF "$applying" <<<"$out" | head -n1 | cut -d: -f1 || true)
+          [ -n "$ok_at" ] || fail "no preflight ok line with a good CLAUDE_CLI_MODEL"
+          [ -n "$applying_at" ] || fail "the migrate step never started with a good CLAUDE_CLI_MODEL"
+          [ "$ok_at" -lt "$applying_at" ] || fail "the preflight ok line is not before the applying line"
+          echo "preflight gate: bad model stopped before migrate (exit $code for the good-model run is the unreachable database)"
+
+      # Change 004 AC-01: the runner image's own fonts must cover the symbols
+      # the design agent uses. Only an in-image run proves this — host Chrome
+      # has its own fonts. Mounted under /app so puppeteer-core resolves from
+      # the image's node_modules; --entrypoint skips the migrate-on-boot step.
+      - name: Glyph coverage inside the runner image
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/scripts/glyph-check:/app/glyph-check:ro" \
+            --entrypoint node bistec-studio:ci /app/glyph-check/check-glyphs.mjs
+
+      # Change 004 FR-23: the rasterizing harness (tests/render/**) through the
+      # real renderHtmlToPng, MOCK_PUPPETEER off. The runner has no Google Chrome;
+      # puppeteer.ts's COMMON_LINUX_PATHS resolves /usr/bin/chromium-browser first
+      # (a Chromium symlink), so this runs on Chromium, not Chrome.
+      - name: Render-fidelity harness (real Chromium)
+        run: npm run test:render

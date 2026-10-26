@@ -3,6 +3,8 @@ import { decrypt } from '@/lib/crypto'
 import { isCliMode } from '@/lib/agent/config'
 import { runClaudeCli } from '@/lib/agent/claudeCli'
 import { runWithClaudeAuth, type ClaudeCliAuth } from '@/lib/agent/claudeAuth'
+import { internalModel } from '@/lib/models/resolve'
+import { modelCallFor, recordModelCall } from '@/lib/models/modelCalls'
 import { MOCK_AI, mockClaudeTokenValidation } from '@/lib/testHooks'
 
 // Resolver layer for Claude CLI auth: personal UserClaudeToken → team
@@ -115,17 +117,21 @@ export type TokenValidationResult = { ok: true; skipped?: boolean } | { ok: fals
  *                mean we can't vouch for the token
  *   API mode   → { ok, skipped } — stored unvalidated/dormant; it only starts
  *                being used (and can then be live-validated) under CLI mode
+ * The ping runs the fixed INTERNAL_TOKEN_PING model (008 FR-15, A14) — a CLI
+ * call by nature, so it is resolved (and, under MOCK_AI, recorded) in CLI mode.
+ * Its 60 s bound is that entry's surface timeout.
  */
 export async function validateClaudeToken(token: string): Promise<TokenValidationResult> {
+  const model = internalModel('INTERNAL_TOKEN_PING', 'cli')
   if (MOCK_AI) {
+    recordModelCall(modelCallFor(model, 'cli', 'token-validate'))
     const mock = mockClaudeTokenValidation(token)
     return mock.ok ? { ok: true } : { ok: false, error: mock.error ?? 'Token validation failed' }
   }
   if (!isCliMode()) return { ok: true, skipped: true }
   try {
     await runClaudeCli('Reply with exactly: pong', {
-      model: 'haiku',
-      timeoutMs: 60_000,
+      model,
       label: 'token-validate',
       authToken: token,
     })

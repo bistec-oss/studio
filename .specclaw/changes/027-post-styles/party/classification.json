@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["data"],
+  "rationale": "It adds a post-style column to the brief, queue entry and campaign tables, and four open questions (how old goal-only briefs map, separate light-variant keys, whether a General style exists, and where the checklist sits relative to the briefing and kit voice) would each change what gets built, so it is deep despite the proposal's own 'large' claim being the only reason it is not thin.",
+  "signals": {
+    "blast_radius": "About 35 to 50 files across the wizard, briefs route, queue, campaign forms, MCP and ACP, four prompt builders, designData and 006 analytics, with new STORY contracts for every image style",
+    "unresolved": "Six open questions, of which the legacy-goal mapping, the light-variant key scheme, the General style and the checklist-versus-briefing precedence each change the file list or the prompt contract, and the unattended scheduled image-style fallback changes behaviour",
+    "irreversibility": "The additive migration is revertible with a down script, but every prompt version bump alters generations and scheduled entries gaining image styles changes unattended output"
+  }
+}

@@ -96,12 +96,12 @@ test.describe('Path A — template-fill generation', () => {
 
   // TC-GEN-03 — Brief validation: missing required fields / bad FK → 4xx.
   test('brief creation rejects missing fields and bad FKs', async () => {
-    // Missing goal.
+    // Missing goal: no longer an error (027 FR-06). The goal comes from the post
+    // style, so a brief without one is accepted and stores General's goal.
     const noGoal = await api.post('/api/briefs', {
       topic: 'x', tone: 'professional', channels: ['INSTAGRAM'], designMode: 'GENERATE', copyProviderKey: 'cli',
     })
-    expect(noGoal.status()).toBeGreaterThanOrEqual(400)
-    expect(noGoal.status()).toBeLessThan(500)
+    expect(noGoal.status()).toBe(201)
 
     // Missing channels.
     const noChannels = await api.post('/api/briefs', {
@@ -135,15 +135,9 @@ test.describe('Path A — template-fill generation', () => {
     expect(res.status()).toBeLessThan(500)
   })
 
-  // TC-GEN-05 — Generated raster images are stored as public (anonymously-readable)
-  // URLs so a later re-render can fetch them. Guards H10.
-  test('generated image is stored as a public URL', async () => {
-    // The MOCK_AI design agent short-circuits the tool-use loop and never calls
-    // generateImage, and no mock IMAGE-provider seam exists, so this cannot run
-    // deterministically today. The public-IMAGES-bucket guarantee it targets is
-    // exercised by TC-REG-H10a (brief-image upload → anonymous GET 200).
-    test.skip(true, 'needs a mock IMAGE-provider seam (see TC-REG-H10a for the H10 public-bucket guard)')
-  })
+  // TC-GEN-05 (generated image → public URL) moved to path-b.test.ts in 005 T2:
+  // only Path B generates an AI background, and it now runs on the background
+  // mock seam.
 
   // TC-GEN-06 — An oversized template (large inline data: assets) flows through the
   // pipeline without crashing — guards the inline-asset externalization fix.

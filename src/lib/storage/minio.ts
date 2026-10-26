@@ -2,6 +2,7 @@ import {
   S3Client,
   CreateBucketCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
@@ -244,4 +245,27 @@ export async function getPresignedUrl(
   expiresIn = SEVEN_DAYS
 ): Promise<string> {
   return getSignedUrl(s3Presign, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn })
+}
+
+// Reads a whole object into memory. Callers bound the size first (screenshots
+// are capped at 10 MB at upload). Throws when the object is missing.
+export async function getObjectBytes(bucket: string, key: string): Promise<Buffer> {
+  const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+  if (!res.Body) throw new Error(`Object ${bucket}/${key} has no body`)
+  return Buffer.from(await res.Body.transformToByteArray())
+}
+
+// Size and type of an object, or null when it does not exist.
+export async function headObject(
+  bucket: string,
+  key: string,
+): Promise<{ size: number; contentType: string | null } | null> {
+  try {
+    const res = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }))
+    return { size: res.ContentLength ?? 0, contentType: res.ContentType ?? null }
+  } catch (e) {
+    const err = e as { name?: string; $metadata?: { httpStatusCode?: number } }
+    if (err.name === "NotFound" || err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) return null
+    throw e
+  }
 }

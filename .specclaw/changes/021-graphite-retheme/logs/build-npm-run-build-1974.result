@@ -1,0 +1,7 @@
+exit=0
+duration_s=17
+log=.specclaw/changes/021-graphite-retheme/logs/build-npm-run-build-1974.log
+head=aa5f7a82ba7318893bb9ba2461fe0d144077047c
+dirty=true
+cmd=npm run build
+interrupted=false

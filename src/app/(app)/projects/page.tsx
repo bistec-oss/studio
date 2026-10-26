@@ -6,13 +6,21 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, Trash2, RotateCcw, FolderOpen, Palette, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { GlassPanel } from '@/components/ui/GlassPanel'
-import { GlassInput } from '@/components/ui/GlassInput'
+import { Panel } from '@/components/ui/Panel'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { QueryError } from '@/components/ui/QueryError'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { PageHead } from '@/components/ui/PageHead'
+import { FOCUS, ICON, ICON_BUTTON, ICON_SM, TAG } from '@/components/ui/atoms'
 import { apiFetch } from '@/lib/apiFetch'
+import { ROW_TITLE } from '@/components/campaigns/classes'
 import type { ProjectSummary, BrandKitSummary } from '@/lib/api-types'
+
+// A project row in the list card: ruled above on --line-subtle, except the
+// first row of each column (one column below lg, two from lg).
+const LIST_ROW =
+  'flex min-w-0 items-start gap-3 border-t border-line-subtle py-3.5 first:border-t-0 lg:[&:nth-child(2)]:border-t-0'
 
 export default function ProjectsPage() {
   const queryClient = useQueryClient()
@@ -88,34 +96,42 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-light-text dark:text-dark-text">Projects</h1>
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted mt-0.5">
-            Organise campaigns under projects with shared brand kits and tones.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setShowDeleted(v => !v)}>
-            {showDeleted ? 'Show active' : 'Show deleted'}
-          </Button>
-          <Button onClick={() => setCreating(v => !v)}>
-            <Plus size={16} /> New Project
-          </Button>
-        </div>
-      </div>
+      {/* Page head (DESIGN_SYSTEM.md §6): an eyebrow, the title, a lead. */}
+      <PageHead
+        className="mb-6"
+        eyebrow="Organize"
+        title="Projects"
+        lead="Organize campaigns under projects with shared brand kits and tones."
+        actions={
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setShowDeleted(v => !v)}>
+              {showDeleted ? 'Show active' : 'Show deleted'}
+            </Button>
+            {/* One accent primary per view: while the form is open its Create is
+                the primary, and this toggle shows as an open Outline button. */}
+            <Button
+              variant={creating ? 'secondary' : 'primary'}
+              aria-expanded={creating}
+              onClick={() => setCreating(v => !v)}
+            >
+              <Plus {...ICON} /> New Project
+            </Button>
+          </>
+        }
+      />
 
       {creating && (
-        <GlassPanel className="p-4 mb-4 animate-fade-in">
-          <form onSubmit={create} className="flex flex-col sm:flex-row gap-3 sm:items-end">
-            <GlassInput
-              label="Project name"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              placeholder="e.g. Q3 Product Launch"
-              className="flex-1"
-              autoFocus
-            />
+        <Panel className="mb-5 animate-fade-in p-5">
+          <form onSubmit={create} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1">
+              <Input
+                label="Project name"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="e.g. Q3 Product Launch"
+                autoFocus
+              />
+            </div>
             <div className="sm:w-64">
               <Select
                 label="Default brand kit"
@@ -129,11 +145,11 @@ export default function ProjectsPage() {
               <Button variant="ghost" type="button" onClick={() => { setCreating(false); setNewName(''); setNewBrandKitId('') }}>Cancel</Button>
             </div>
           </form>
-        </GlassPanel>
+        </Panel>
       )}
 
       {loading && (
-        <div className="text-sm text-light-text-muted dark:text-dark-text-muted py-8 text-center">Loading…</div>
+        <p className="py-8 text-center text-ui-sm text-fg-muted">Loading…</p>
       )}
 
       {isError && (
@@ -141,60 +157,58 @@ export default function ProjectsPage() {
       )}
 
       {!loading && !isError && visible.length === 0 && (
-        <GlassPanel className="p-8 text-center">
-          <FolderOpen size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
+        <Panel bezel className="py-12 text-center">
+          <FolderOpen size={28} strokeWidth={1.6} aria-hidden className="mx-auto mb-3 text-fg-muted" />
+          <p className="text-ui-sm text-fg-muted">
             {showDeleted ? 'No deleted projects.' : 'No projects yet.'}
           </p>
-        </GlassPanel>
+        </Panel>
       )}
 
-      {!isError && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Projects as ruled rows on --line-subtle (§6) in one bezel card (021
+          design.md §8), two columns on wide screens. */}
+      {!isError && visible.length > 0 && (
+        <ul className="surface-bezel grid grid-cols-1 px-5 py-1.5 lg:grid-cols-2 lg:gap-x-10">
           {visible.map(project => (
-            <GlassPanel key={project.id} className="p-4 flex flex-col gap-3">
-              <div className="flex items-start justify-between gap-2">
-                <Link
-                  href={`/projects/${project.id}`}
-                  className="text-base font-semibold text-light-text dark:text-dark-text hover:text-primary dark:hover:text-primary-light transition-colors"
-                >
+            <li key={project.id} className={LIST_ROW}>
+              <div className="min-w-0 flex-1">
+                <Link href={`/projects/${project.id}`} className={`rounded-ui-sm ${ROW_TITLE} ${FOCUS}`}>
                   {project.name}
                 </Link>
-                {project.isDeleted ? (
-                  <Button variant="ghost" size="sm" onClick={() => restore(project.id)}>
-                    <RotateCcw size={13} /> Restore
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="sm" onClick={() => softDelete(project.id)}>
-                    <Trash2 size={13} />
-                  </Button>
-                )}
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-ui-xs text-fg-muted">
+                  <span>{project._count.campaigns} campaign{project._count.campaigns !== 1 ? 's' : ''}</span>
+                  {project.defaultBrandKit && (
+                    <span title={`Default brand kit: ${project.defaultBrandKit.name}`} className={TAG}>
+                      <Palette {...ICON_SM} aria-hidden className="flex-shrink-0 text-fg-muted" />
+                      <span className="truncate">{project.defaultBrandKit.name}</span>
+                    </span>
+                  )}
+                  {project.defaultTone && (
+                    <span title="Default tone" className={`${TAG} capitalize`}>
+                      <MessageCircle {...ICON_SM} aria-hidden className="flex-shrink-0 text-fg-muted" />
+                      <span className="truncate">{project.defaultTone}</span>
+                    </span>
+                  )}
+                </div>
               </div>
-
-              <div className="flex flex-wrap gap-2 text-xs text-light-text-muted dark:text-dark-text-muted">
-                <span>{project._count.campaigns} campaign{project._count.campaigns !== 1 ? 's' : ''}</span>
-                {project.defaultBrandKit && (
-                  <span
-                    title="Default brand kit"
-                    className="inline-flex items-center gap-1 bg-primary/8 dark:bg-primary-light/8 text-primary dark:text-primary-light px-2 py-0.5 rounded-full"
-                  >
-                    <Palette size={11} />
-                    {project.defaultBrandKit.name}
-                  </span>
-                )}
-                {project.defaultTone && (
-                  <span
-                    title="Default tone"
-                    className="inline-flex items-center gap-1 bg-primary/5 dark:bg-primary-light/5 px-2 py-0.5 rounded-full capitalize"
-                  >
-                    <MessageCircle size={11} />
-                    {project.defaultTone}
-                  </span>
-                )}
-              </div>
-            </GlassPanel>
+              {project.isDeleted ? (
+                <Button variant="ghost" size="sm" onClick={() => restore(project.id)}>
+                  <RotateCcw {...ICON} /> Restore
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Delete ${project.name}`}
+                  title="Delete"
+                  onClick={() => softDelete(project.id)}
+                  className={`${ICON_BUTTON} hover:text-status-failed ${FOCUS}`}
+                >
+                  <Trash2 {...ICON} />
+                </button>
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </>
   )

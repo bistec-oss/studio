@@ -1,0 +1,7 @@
+exit=0
+duration_s=6
+log=.specclaw/changes/022-prod-data-and-deploy-restore/logs/test-npm-run-test-unit-17801.log
+head=12ef7e6c8f6bf60e81284da778fc6742f00a2aa3
+dirty=true
+cmd=npm run test:unit
+interrupted=false

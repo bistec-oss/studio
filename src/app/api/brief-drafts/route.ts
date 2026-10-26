@@ -36,6 +36,9 @@ export const PUT = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     if (result.reason === 'not_found') {
       return NextResponse.json({ error: 'Draft no longer exists' }, { status: 404 })
     }
+    if (result.reason === 'bad_source') {
+      return NextResponse.json({ error: 'compositeSource must be a screenshot you uploaded' }, { status: 400 })
+    }
     if (result.reason === 'too_large') {
       return NextResponse.json({ error: 'Draft payload too large' }, { status: 413 })
     }

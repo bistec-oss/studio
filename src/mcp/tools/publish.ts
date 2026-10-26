@@ -1,11 +1,17 @@
 import { prisma } from '@/lib/prisma'
 import { getSystemUserId } from '@/mcp/systemUser'
 import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
+import { isPublishableChannel, PUBLISHABLE_CHANNELS } from '@/lib/channels'
 
 // ACP publish — a thin adapter over the same publish state machine as the API
 // path, so every attempt (success or failure) leaves a Post row (FR-20/NFR-9)
 // and stale/incomplete drafts can't be pushed to a platform.
-export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' | 'LINKEDIN'; teamId: string }) {
+export async function publishPost(args: { draftId: string; channel: string; teamId: string }) {
+  // Rejected before any lookup or Post row: a channel with no publisher
+  // (WhatsApp: 010 was dropped on 2026-10-23) is never attempted.
+  if (!isPublishableChannel(args.channel)) {
+    throw new Error(`channel must be ${PUBLISHABLE_CHANNELS.join(' or ')}`)
+  }
   const draft = await prisma.draft.findUnique({
     where: { id: args.draftId },
     select: { exportUrl: true, status: true, teamId: true },
@@ -36,9 +42,12 @@ export async function publishPost(args: { draftId: string; channel: 'INSTAGRAM' 
     draftId: args.draftId,
     channel: args.channel,
     userId: await getSystemUserId(args.teamId),
+    source: 'mcp',
   })
 
   // The FAILED row is recorded either way; surface the failure to the caller.
+  // A refused caption (012 FR-17) is one of these: publishToChannel refuses it
+  // before signing the export, and the row carries the resolver's reason.
   if (error) {
     throw new Error(`Publish failed (${error.reason}) — recorded as post ${post.id} with status FAILED`)
   }

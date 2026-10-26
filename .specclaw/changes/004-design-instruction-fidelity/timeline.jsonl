@@ -1,0 +1,20 @@
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-09-28T00:50:16Z","ts":1790556616}
+{"ev":"start","span":"T20","kind":"task","label":"Deterministic verification-miss seam","parent":"W4","model":"sonnet","attempt":"1","at":"2026-09-28T00:50:16Z","ts":1790556616}
+{"ev":"stop","span":"T20","at":"2026-09-28T01:09:21Z","ts":1790557761,"status":"ok"}
+{"ev":"start","span":"T17","kind":"task","label":"Wire refine verification","parent":"W4","model":"opus","attempt":"1","at":"2026-09-28T01:09:21Z","ts":1790557761}
+{"ev":"stop","span":"T17","at":"2026-09-28T05:35:34Z","ts":1790573734,"status":"ok"}
+{"ev":"start","span":"T18","kind":"task","label":"Surface not-applied in UI","parent":"W4","model":"sonnet","attempt":"1","at":"2026-09-28T05:35:35Z","ts":1790573735}
+{"ev":"stop","span":"T18","at":"2026-09-28T05:53:05Z","ts":1790574785,"status":"ok"}
+{"ev":"start","span":"T19","kind":"task","label":"Use anyway adopt","parent":"W4","model":"sonnet","attempt":"1","at":"2026-09-28T05:53:05Z","ts":1790574785}
+{"ev":"stop","span":"T19","at":"2026-09-28T06:28:55Z","ts":1790576935,"status":"ok"}
+{"ev":"start","span":"T21","kind":"task","label":"E2E refine fidelity","parent":"W4","model":"opus","attempt":"1","at":"2026-09-28T06:28:56Z","ts":1790576936}
+{"ev":"stop","span":"T21","at":"2026-09-28T14:35:45Z","ts":1790606145,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-09-28T14:35:45Z","ts":1790606145,"status":"ok"}
+{"ev":"start","span":"W5","kind":"wave","label":"wave 5","at":"2026-09-28T14:35:48Z","ts":1790606148}
+{"ev":"stop","span":"T22","at":"2026-09-30T19:08:51Z","ts":1790795331,"status":"ok"}
+{"ev":"stop","span":"T23","at":"2026-09-30T19:08:52Z","ts":1790795332,"status":"ok"}
+{"ev":"start","span":"T24","kind":"task","label":"Click-to-select element mode","parent":"W5","model":"opus","at":"2026-09-30T19:08:52Z","ts":1790795332}
+{"ev":"stop","span":"T24","at":"2026-09-30T21:34:31Z","ts":1790804072,"status":"ok"}
+{"ev":"stop","span":"W5","at":"2026-09-30T21:34:32Z","ts":1790804072,"status":"ok"}
+{"ev":"start","span":"verify-1790830140","kind":"phase","label":"verify","at":"2026-10-01T04:49:00Z","ts":1790830140}
+{"ev":"start","span":"verify-1791888610","kind":"phase","label":"verify","at":"2026-10-13T10:50:10Z","ts":1791888610}

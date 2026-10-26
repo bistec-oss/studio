@@ -1,13 +1,18 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, waitForDraft, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
+import { pageLogin } from '../helpers/ui'
 
 // Requires MOCK_SOCIAL=true (and MOCK_AI/MOCK_PUPPETEER to mint a draft) in the
 // APP's environment + seeded 'cli' COPY provider.
 //
 // Real contract (src/app/api/posts/route.ts):
 //   POST /api/posts {draftId, channel, scheduledAt?}  (admin-only)
-//     → 201 {postId, status}  — SINGULAR channel; PUBLISHED | SCHEDULED | FAILED
+//     → 201 {postId, status}  — SINGULAR channel; PUBLISHED | SCHEDULED
+//     → 502 {error, code: 'PUBLISH_FAILED', postId, status: 'FAILED'} when the
+//       platform refuses an immediate publish (017 FR-01); the FAILED row persists.
+//   POST /api/posts/[id]/publish (retry a FAILED post)
+//     → 200 {postId, status: 'PUBLISHED'} | 502 in the same shape (017 FR-02)
 //   The response is an object (NOT an array) and does not echo platformId/scheduledAt.
 //
 // Deterministic publish failures: the MOCK_AI copy seam embeds the brief topic in
@@ -125,22 +130,83 @@ test.describe('Publishing flow', () => {
     expect(retryRes.status()).toBe(409)
   })
 
-  // TC-PUB-03 — Publish failure → FAILED, never PENDING. Guards H7.
-  test('a failing publish lands in FAILED with an errorReason, no PENDING orphan', async () => {
+  // TC-PUB-03 — Publish failure → 502 PUBLISH_FAILED and a FAILED row, never
+  // PENDING. Guards H7; 017 AC-01 (a failed publish is not a 2xx), and AC-02
+  // (a retry that fails again is a 502 in the same shape).
+  test('a failing publish is 502 PUBLISH_FAILED with a FAILED row, no PENDING orphan', async () => {
     if (!MOCKED()) { test.skip(); return }
     const topic = `__FAIL_ALWAYS__ publish fail ${Date.now()}`
     const draftId = await createExportedDraft(api, { topic })
 
     const postRes = await api.post('/api/posts', { draftId, channel: 'INSTAGRAM' })
-    expect(postRes.status()).toBe(201)
+    expect(postRes.status()).toBe(502)
     const body = await postRes.json()
+    expect(body.code).toBe('PUBLISH_FAILED')
     expect(body.status).toBe('FAILED')
+    expect(body.postId).toBeTruthy()
+    expect(body.error).toBe('Mock Instagram publish failure')
 
     const fetched = await (await api.get(`/api/posts/${body.postId}`)).json()
     expect(fetched.status).toBe('FAILED')
-    expect(fetched.errorReason).toBeTruthy()
+    expect(fetched.errorReason).toBe(body.error)
     // H7: the row is terminal, never left transiently PENDING.
     expect(fetched.status).not.toBe('PENDING')
+
+    // AC-02: retrying it fails again — 502, same shape, still FAILED.
+    const retryRes = await api.post(`/api/posts/${body.postId}/publish`, {})
+    expect(retryRes.status()).toBe(502)
+    expect(await retryRes.json()).toEqual({
+      error: 'Mock Instagram publish failure',
+      code: 'PUBLISH_FAILED',
+      postId: body.postId,
+      status: 'FAILED',
+    })
+    const after = await (await api.get(`/api/posts/${body.postId}`)).json()
+    expect(after.status).toBe('FAILED')
+  })
+
+  // TC-PUB-10 — 017 AC-03 (FR-03): the publish dialog shows a platform refusal.
+  // Instagram's caption carries __FAIL_ALWAYS__; LinkedIn's is rewritten clean,
+  // so one submission gets one ✓ and one ✕, and the dialog stays open.
+  test('the publish dialog shows ✕ failed with the reason and stays open', async ({ page }) => {
+    if (!MOCKED()) { test.skip(); return }
+    const topic = `__FAIL_ALWAYS__ dialog ${Date.now()}`
+    const draftId = await createExportedDraft(api, { topic })
+    const clean = await api.patch(`/api/drafts/${draftId}`, { channel: 'LINKEDIN', text: `Clean LinkedIn caption ${Date.now()}` })
+    expect(clean.status()).toBe(200)
+
+    await pageLogin(page)
+    await page.goto(`/drafts/${draftId}`)
+    const publishBtn = page.getByRole('button', { name: /^publish$/i })
+    await expect(publishBtn).toBeVisible({ timeout: 20_000 })
+    await publishBtn.click()
+
+    const dialog = page.getByRole('dialog', { name: 'Publish post' })
+    await expect(dialog).toBeVisible()
+    const instagram = dialog.getByRole('checkbox', { name: 'Instagram' })
+    const linkedin = dialog.getByRole('checkbox', { name: 'LinkedIn' })
+    await instagram.check()
+    await linkedin.check()
+
+    const [igRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith('/api/posts') && r.request().method() === 'POST' && r.request().postData()?.includes('INSTAGRAM') === true,
+      ),
+      dialog.getByRole('button', { name: /^publish$/i }).click(),
+    ])
+    expect(igRes.status()).toBe(502)
+
+    // The refusal is shown, with its reason, on the channel it belongs to.
+    await expect(dialog.getByText('✕ failed')).toHaveCount(1)
+    await expect(dialog.getByText('Mock Instagram publish failure')).toBeVisible()
+    await expect(instagram).toHaveAccessibleDescription('Mock Instagram publish failure')
+    // The channel that worked shows ✓ and is locked; the failed one is not.
+    await expect(dialog.getByText('✓ published')).toHaveCount(1)
+    await expect(linkedin).toBeDisabled()
+    await expect(instagram).toBeEnabled()
+    // The dialog did not close.
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText(/Instagram failed/)).toBeVisible()
   })
 
   // TC-PUB-04 — Retry a FAILED post → PUBLISHED; retryCount/nextRetryAt reset. Guards H12.

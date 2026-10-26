@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma'
-import { BUCKET_IMAGES, deleteObject } from '@/lib/storage/minio'
+import { track } from '@/lib/analytics/track'
+import { BUCKET_DOCS, BUCKET_IMAGES, deleteObject } from '@/lib/storage/minio'
+import { isOwnScreenshotKey } from '@/lib/brief/compositeSource'
 import {
   BRIEF_DRAFT_CAP,
   BRIEF_DRAFT_TTL_MS,
@@ -31,7 +33,18 @@ export interface BriefDraftRow {
 export async function deleteBriefDraftImages(
   userId: string,
   payload: BriefDraftPayload,
+  teamId: string,
 ): Promise<void> {
+  // 025 FR-11: the product screenshot lives in the private docs bucket; only a key
+  // under this owner's screenshots/<teamId>/<userId>/ prefix is ever deleted.
+  const shot = payload.compositeSource?.key
+  if (shot && isOwnScreenshotKey(shot, teamId, userId)) {
+    try {
+      await deleteObject(BUCKET_DOCS, shot)
+    } catch (e) {
+      console.error(`[briefDrafts] failed to delete screenshot ${shot}:`, (e as Error).message)
+    }
+  }
   for (const image of payload.images) {
     const key = briefImageKeyFromUrl(image.url, BUCKET_IMAGES, userId)
     if (!key) continue
@@ -50,9 +63,26 @@ function parsePayload(raw: unknown): BriefDraftPayload | null {
   return result.success ? result.data : null
 }
 
-async function deleteRowWithImages(row: { id: string; userId: string; payload: unknown }) {
+// 006 FR-08: a brief draft that ends without a Generate. Only the TTL sweep
+// ('expired') and a Discard ('discarded') call this; eviction past the cap and
+// the Generate-success delete do not. `step` is the last step in the stored
+// payload (null when it no longer parses). No brief text is ever sent.
+async function trackAbandoned(
+  row: { userId: string; teamId: string; payload: unknown },
+  reason: 'expired' | 'discarded',
+): Promise<void> {
+  const step = parsePayload(row.payload)?.step
+  await track('brief.abandoned', {
+    source: 'web',
+    teamId: row.teamId,
+    userId: row.userId,
+    payload: { reason, step: typeof step === 'number' && step >= 0 && step <= 4 ? step : null },
+  })
+}
+
+async function deleteRowWithImages(row: { id: string; userId: string; teamId: string; payload: unknown }) {
   const payload = parsePayload(row.payload)
-  if (payload) await deleteBriefDraftImages(row.userId, payload)
+  if (payload) await deleteBriefDraftImages(row.userId, payload, row.teamId)
   await prisma.briefDraft.deleteMany({ where: { id: row.id } })
 }
 
@@ -64,7 +94,10 @@ export async function sweepExpiredBriefDrafts(userId: string): Promise<void> {
   const expired = await prisma.briefDraft.findMany({
     where: { userId, updatedAt: { lt: cutoff } },
   })
-  for (const row of expired) await deleteRowWithImages(row)
+  for (const row of expired) {
+    await deleteRowWithImages(row)
+    await trackAbandoned(row, 'expired')
+  }
 }
 
 // Newest-first list for the dashboard. Sweeps first; silently drops (and
@@ -102,7 +135,7 @@ export async function getBriefDraft(userId: string, id: string): Promise<BriefDr
 
 export type SaveBriefDraftResult =
   | { ok: true; id: string }
-  | { ok: false; reason: 'not_found' | 'trivial' | 'too_large' }
+  | { ok: false; reason: 'not_found' | 'trivial' | 'too_large' | 'bad_source' }
 
 // Upsert the working state. An explicit id targets an existing OWNED row —
 // a missing/foreign id is not_found (NOT create: a late autosave after
@@ -119,6 +152,11 @@ export async function saveBriefDraft(
 ): Promise<SaveBriefDraftResult> {
   if (isTrivialBriefDraft(payload)) return { ok: false, reason: 'trivial' }
   if (briefDraftPayloadTooLarge(payload)) return { ok: false, reason: 'too_large' }
+  // 025 FR-11: a screenshot key that is not this team's and user's own is refused
+  // at save, so a row never holds a key its cleanup would skip.
+  if (payload.compositeSource && !isOwnScreenshotKey(payload.compositeSource.key, teamId, userId)) {
+    return { ok: false, reason: 'bad_source' }
+  }
   const topic = payload.topic.trim()
 
   if (id) {
@@ -159,6 +197,7 @@ export async function deleteBriefDraft(
     await prisma.briefDraft.deleteMany({ where: { id: row.id } })
   } else {
     await deleteRowWithImages(row)
+    await trackAbandoned(row, 'discarded')
   }
   return true
 }

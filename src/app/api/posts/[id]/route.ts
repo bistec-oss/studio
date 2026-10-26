@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withTeamAuth, withTeamAdmin } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
+import { loadCaptionText } from '@/lib/captions/store'
 
 type Params = { id: string }
 
@@ -10,7 +11,7 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
   const post = await prisma.post.findUnique({
     where: { id: params.id },
     include: {
-      draft: { select: { id: true, copyText: true, exportUrl: true, brief: { select: { campaignId: true } } } },
+      draft: { select: { id: true, exportUrl: true, brief: { select: { campaignId: true } } } },
     },
   })
 
@@ -24,10 +25,15 @@ export const GET = withTeamAuth<Params>(async (_req, { params }, user) => {
 
   // draft.exportUrl is stored as an EXPORTS object key — sign for the browser.
   // brief is only fetched here for the campaign visibility check — never returned.
+  // draft.caption is the text for the post's own channel (012 FR-13).
   const { brief: _brief, ...draftRest } = post.draft
   return NextResponse.json({
     ...post,
-    draft: { ...draftRest, exportUrl: await resolveExportUrl(post.draft.exportUrl) },
+    draft: {
+      ...draftRest,
+      caption: await loadCaptionText(post.draft.id, post.channel),
+      exportUrl: await resolveExportUrl(post.draft.exportUrl),
+    },
   })
 })
 

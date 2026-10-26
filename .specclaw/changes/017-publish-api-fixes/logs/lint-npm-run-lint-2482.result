@@ -1,0 +1,7 @@
+exit=0
+duration_s=9
+log=.specclaw/changes/017-publish-api-fixes/logs/lint-npm-run-lint-2482.log
+head=e539395db0a550f74e8d384464e0b8e269041d89
+dirty=true
+cmd=npm run lint
+interrupted=false

@@ -79,7 +79,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
           }
         >
           {options.description && (
-            <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
+            <p className="text-ui-base text-fg-muted">
               {options.description}
             </p>
           )}

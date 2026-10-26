@@ -1,0 +1,22 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-23T15:15:21Z","ts":1792768520}
+{"ev":"stop","span":"propose","at":"2026-10-23T15:28:24Z","ts":1792769304,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-23T15:32:21Z","ts":1792769541}
+{"ev":"stop","span":"plan","at":"2026-10-23T15:40:53Z","ts":1792770053,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-24T07:57:38Z","ts":1792828658}
+{"ev":"stop","span":"T1","at":"2026-10-24T08:08:15Z","ts":1792829295,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-24T08:08:21Z","ts":1792829301}
+{"ev":"stop","span":"T2","at":"2026-10-24T08:32:25Z","ts":1792830745,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-24T08:32:25Z","ts":1792830745,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-24T08:32:26Z","ts":1792830746}
+{"ev":"stop","span":"T3","at":"2026-10-24T09:14:32Z","ts":1792833272,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-24T09:14:32Z","ts":1792833272,"status":"ok"}
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-10-24T09:14:59Z","ts":1792833299}
+{"ev":"stop","span":"T4","at":"2026-10-24T09:34:26Z","ts":1792834466,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-10-24T09:34:27Z","ts":1792834467,"status":"ok"}
+{"ev":"start","span":"W5","kind":"wave","label":"wave 5","at":"2026-10-24T09:34:27Z","ts":1792834467}
+{"ev":"stop","span":"T5","at":"2026-10-24T09:43:05Z","ts":1792834985,"status":"ok"}
+{"ev":"stop","span":"W5","at":"2026-10-24T09:43:05Z","ts":1792834985,"status":"ok"}
+{"ev":"start","span":"W6","kind":"wave","label":"wave 6","at":"2026-10-24T09:43:15Z","ts":1792834995}
+{"ev":"stop","span":"T6","at":"2026-10-24T09:58:12Z","ts":1792835892,"status":"ok"}
+{"ev":"stop","span":"W6","at":"2026-10-24T09:58:12Z","ts":1792835892,"status":"ok"}
+{"ev":"start","span":"verify-1792837229","kind":"phase","label":"verify","at":"2026-10-24T10:20:29Z","ts":1792837229}

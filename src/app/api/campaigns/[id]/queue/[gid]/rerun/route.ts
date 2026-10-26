@@ -24,14 +24,17 @@ export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
   // Re-arming an auto-publish entry re-arms a deferred publish — team-admin-only.
   if (requiresAdmin(existing.postAction) && !(user.teamRole === 'ADMIN' || user.isSuperAdmin)) {
     return NextResponse.json(
-      { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
+      { error: 'Auto-publish actions require a team admin — use HOLD to generate for review.' },
       { status: 403 }
     )
   }
 
-  if (existing.status !== 'FAILED' && existing.status !== 'CANCELLED') {
+  // 027 FR-12: a COMPLETED entry can be re-run only when its post was held
+  // (heldReason set); a normal COMPLETED entry stays refused.
+  const heldCompleted = existing.status === 'COMPLETED' && existing.heldReason != null
+  if (existing.status !== 'FAILED' && existing.status !== 'CANCELLED' && !heldCompleted) {
     return NextResponse.json(
-      { error: `Only FAILED or CANCELLED entries can be re-run (status: ${existing.status})` },
+      { error: `Only FAILED, CANCELLED or held entries can be re-run (status: ${existing.status})` },
       { status: 409 }
     )
   }
@@ -42,6 +45,7 @@ export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
       status: 'PENDING',
       retryCount: 0,
       errorReason: null,
+      heldReason: null,
       nextRetryAt: null,
       generateAt: new Date(),
     },

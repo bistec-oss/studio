@@ -1,0 +1,7 @@
+exit=0
+duration_s=19
+log=.specclaw/changes/019-draft-action-claim-token/logs/build-npm-run-build-917.log
+head=b21d71c9bfddf59199c3bd41ab7db53ea610812a
+dirty=true
+cmd=npm run build
+interrupted=false

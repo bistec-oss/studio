@@ -5,8 +5,12 @@ import { runDesignAgent } from '@/lib/agent/designAgent'
 import { runDesignAgentCli } from '@/lib/agent/designAgentCli'
 import { extractInlineAssets } from '@/lib/agent/inlineAssets'
 import { dimensionsFor } from '@/lib/aspectRatio'
-import { isCliMode, modelFor, pipelineMode } from '@/lib/agent/config'
+import { isCliMode, pipelineMode } from '@/lib/agent/config'
+import type { ResolvedModel } from '@/lib/models/resolve'
 import { buildPathASystemPrompt, buildPathAUserMessage } from '@/lib/agent/prompts/pathA'
+import { imageRulesFor } from '@/lib/agent/briefInput'
+import { applyPostFonts } from '@/lib/fonts/inject'
+import { postFontPlan, postFontsUrl } from '@/lib/fonts/plan'
 
 // Template/brief mismatch — thrown by the guards below so both HTTP routes
 // (mapped to 400) and the headless scheduler (recorded as errorReason) get the
@@ -45,16 +49,18 @@ export function assertTemplateMatchesBrief(brief: Brief, template: BrandKitTempl
 }
 
 // Runs the Path A (template fill) design pipeline for a given brief + template +
-// already-generated copy, dispatching CLI vs API. Single source of truth shared
-// by the assemble-a route and the scheduled-generation runner, mirroring
-// runPathBDesign's shape.
+// on-image headline (012 FR-09: the design never reads a caption), dispatching
+// CLI vs API. Single source of truth shared by the assemble-a route and the
+// scheduled-generation runner, mirroring runPathBDesign's shape.
 export async function runPathADesign(
   brief: Brief,
   kit: ResolvedBrandKit | null,
   template: BrandKitTemplate,
-  copyText: string,
+  headline: string,
   campaignBriefing: string | null | undefined,
   actor: GenerationActor,
+  // 008 FR-07: the DESIGN_TEMPLATE model, resolved by the caller.
+  model: ResolvedModel,
 ): Promise<DesignAgentResult> {
   assertTemplateMatchesBrief(brief, template)
 
@@ -80,12 +86,21 @@ export async function runPathADesign(
   })
   const userMessage = buildPathAUserMessage({
     slimTemplate,
-    copyText,
+    headline,
+    topic: brief.topic,
+    description: brief.description,
     mode,
     width,
     height,
     additionalImageUrl: brief.additionalImageUrl,
+    // 027 FR-09: Path A gets the image rules only (the template fixes the look).
+    imageRules: imageRulesFor(brief),
   })
+
+  // 031 FR-22: code adds the kit's fonts to the filled HTML before every render and upload, so
+  // the stored document carries the marked link and the script font in its stacks.
+  const fontPlan = postFontPlan(kit)
+  const postProcess = (html: string) => applyPostFonts(html, fontPlan, postFontsUrl)
 
   return isCliMode()
     ? runDesignAgentCli({
@@ -95,17 +110,21 @@ export async function runPathADesign(
         inlineAssets,
         width,
         height,
-        model: modelFor('A', 'cli'),
+        model,
+        headline,
+        postProcess,
       })
     : runDesignAgent({
         systemPrompt,
         userMessage,
         briefId: brief.id,
-        model: modelFor('A', 'api'),
+        model,
         maxToolCalls: 15,
         inlineAssets,
         width,
         height,
         actor,
+        headline,
+        postProcess,
       })
 }

@@ -1,0 +1,7 @@
+exit=0
+duration_s=11
+log=.specclaw/changes/023-scheduler-heartbeat/logs/lint-npm-run-lint-1396.log
+head=df65aa0d66b3b8907175dd8d6352c3d8249ce59f
+dirty=true
+cmd=npm run lint
+interrupted=false

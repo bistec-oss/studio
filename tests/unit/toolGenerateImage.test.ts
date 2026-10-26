@@ -88,10 +88,29 @@ describe('toolGenerateImage — actor vs. brief owner', () => {
     expect(h.resolveImageProvider).toHaveBeenCalledWith({ teamId: 'owner-team', userId: OWNER_ID })
   })
 
+  it('passes the provider-mapped size for the aspect ratio (FR-12); no aspect falls back to square', async () => {
+    const generateImage = vi.fn(async () => ({ url: 'https://cdn.example.com/x.png' }))
+    h.resolveImageProvider.mockResolvedValue({ providerName: 'gemini', generateImage })
+    const actor = { userId: ACTOR_ID, teamId: TEAM_ID }
+    await toolGenerateImage('p', 'kit-1', 'brief-1', actor, 'STORY')
+    expect(generateImage).toHaveBeenLastCalledWith('p', 'kit-1', '9:16')
+    await toolGenerateImage('p', 'kit-1', 'brief-1', actor)
+    expect(generateImage).toHaveBeenLastCalledWith('p', 'kit-1', '1:1')
+  })
+
   it('a null resolveImageProvider result throws (no image provider configured)', async () => {
     h.resolveImageProvider.mockResolvedValue(null)
     await expect(
       toolGenerateImage('a prompt', 'kit-1', 'brief-1', { userId: ACTOR_ID, teamId: TEAM_ID })
     ).rejects.toThrow('No image provider configured for this team')
+  })
+})
+
+describe('toolGenerateImage — quality (009 FR-16)', () => {
+  it('never passes the hero quality option: the design agent tool call keeps its three arguments', async () => {
+    const generateImage = vi.fn(async () => ({ url: 'https://cdn.example.com/x.png' }))
+    h.resolveImageProvider.mockResolvedValue({ providerName: 'openai', generateImage })
+    await toolGenerateImage('p', 'kit-1', 'brief-1', { userId: 'u', teamId: 't' }, 'SQUARE')
+    expect(generateImage.mock.calls[0]).toHaveLength(3)
   })
 })

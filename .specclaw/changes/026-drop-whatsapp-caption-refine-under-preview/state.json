@@ -1,0 +1,17 @@
+{
+  "change": "026-drop-whatsapp-caption-refine-under-preview",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "bounded",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-23T17:23:26Z" },
+    "spec": { "status": "done", "at": "2026-10-23T17:26:01Z" },
+    "tasks": { "status": "done", "at": "2026-10-23T17:26:02Z" },
+    "build": {
+      "status": "done",
+      "at": "2026-10-23T18:42:26Z",
+      "tasks": { "done": 3, "total": 3, "failed": 0 }
+    },
+    "verify": { "status": "passed", "at": "2026-10-23T19:52:13Z", "verdict": "PASS" }
+  }
+}

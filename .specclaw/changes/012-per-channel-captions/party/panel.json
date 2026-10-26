@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "2119604627 11671",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Restructures persisted Draft caption storage from a single copyText column to a DraftCaption table, rewires publish routing to select per-channel captions, and touches multiple subsystems (schema, generation, publish, UI, MCP/ACP) across 30+ files.",
+  "domains": ["data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

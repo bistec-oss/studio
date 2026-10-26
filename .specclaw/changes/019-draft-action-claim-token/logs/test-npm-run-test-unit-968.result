@@ -1,0 +1,7 @@
+exit=0
+duration_s=6
+log=.specclaw/changes/019-draft-action-claim-token/logs/test-npm-run-test-unit-968.log
+head=b21d71c9bfddf59199c3bd41ab7db53ea610812a
+dirty=true
+cmd=npm run test:unit
+interrupted=false

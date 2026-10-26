@@ -1,0 +1,14 @@
+{
+  "change": "007-brandkit-design-system",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "architectural",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-23T00:45:25Z" },
+    "spec": { "status": "done", "at": "2026-10-23T00:52:52Z" },
+    "design": { "status": "done", "at": "2026-10-23T00:52:53Z" },
+    "tasks": { "status": "done", "at": "2026-10-23T00:52:53Z" },
+    "build": { "status": "in-progress", "at": "2026-10-23T00:55:26Z" },
+    "verify": { "status": "passed", "at": "2026-10-23T05:08:26Z", "verdict": "PASS" }
+  }
+}

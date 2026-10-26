@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "sig": "3306364941 4244",
+  "tier": "standard",
+  "tier_source": "classifier",
+  "rationale": "Deletes the company deploy workflow and adds v2 to the CI triggers, spanning workflows, Dockerfile comments, and docs with all edits independently revertible; the only unknown is operational (GitHub runner timeout), not design-affecting.",
+  "domains": ["ops"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" }
+  ],
+  "dropped": []
+}

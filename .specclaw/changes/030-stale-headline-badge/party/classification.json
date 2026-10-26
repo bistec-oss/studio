@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["security", "data"],
+  "rationale": "Adds a new render-stamp column to Draft and DraftRevision that every render writer must carry, and a new draft action that splices user-edited headline text into stored HTML that is then rendered, which the proposal itself says the party-security panel blocked on escaping and matching.",
+  "signals": {
+    "blast_radius": "About 15 files: a migration and down script, RenderStamp and every render-stamp writer (generation, regenerate, refine, inline edit, Override, adopt, restore), a new parse-match-splice module, a new apply route, the draft GET, the badge and the analytics catalogue.",
+    "unresolved": "Open Question 2 (how null-stamp drafts behave) and Open Question 5 (Path A match behaviour, not yet measured) would change the rule that gets built, and the apply rule's 28-of-35 match bar depends on a parser choice still open in Open Question 3.",
+    "irreversibility": "The stamp is a schema migration on Draft and DraftRevision, and apply rewrites stored HTML and commits a new revision that re-renders the PNG; reverting the code leaves the columns and any applied revisions in place."
+  }
+}

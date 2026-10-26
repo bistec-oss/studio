@@ -3,8 +3,18 @@
 import React from 'react'
 import { Check } from 'lucide-react'
 import { STEPS } from './constants'
+import { FOCUS, SMALL_CAPS } from '@/components/ui/atoms'
 
 // ─── Stepper ─────────────────────────────────────────────────────────────────
+// Graphite (021 design.md §8, DESIGN_SYSTEM.md §5.2, §6): the steps sit on one
+// card, the current one raised in the nav "current" look. Each step shows a
+// 22 px disc (the study's .st), ink with the step number for the current step,
+// a check once done, the number on the canvas ahead, and beneath it the label
+// as a micro-label (021 FR-07). The state is never colour alone: the current
+// step carries aria-current="step", a done step its check, a step ahead
+// aria-disabled (014 FR-15; it stays focusable). The number stays in the
+// button's name, as before (021 FR-12). Below sm the label is sr-only, not
+// removed, so a done step (whose number became a check) still has a name.
 
 interface StepperProps {
   step: number
@@ -13,47 +23,43 @@ interface StepperProps {
 
 export function Stepper({ step, onJump }: StepperProps) {
   return (
-    <div className="flex items-center gap-1 mb-8">
+    <ol className="surface grid grid-cols-5 gap-1 p-1.5 mb-5">
       {STEPS.map((label, i) => {
         const done = i < step
         const active = i === step
         return (
-          <React.Fragment key={label}>
+          <li key={label} className="min-w-0">
             <button
               type="button"
               onClick={() => done && onJump(i)}
+              aria-current={active ? 'step' : undefined}
+              aria-disabled={(!done && !active) || undefined}
               className={[
-                'flex items-center gap-1.5 text-xs font-semibold transition-colors',
+                'flex w-full flex-col items-center sm:items-start gap-2 rounded-ui-md p-2 sm:px-3 text-left',
+                'transition-[background-color,color,box-shadow] duration-fast ease-standard',
+                FOCUS,
                 active
-                  ? 'text-primary dark:text-primary-light'
+                  ? 'bg-surface-raised text-fg shadow-panel ring-1 ring-inset ring-line-subtle'
                   : done
-                    ? 'text-primary/70 dark:text-primary-light/70 cursor-pointer'
-                    : 'text-light-text-muted dark:text-dark-text-muted',
+                    ? 'text-fg cursor-pointer hover:bg-canvas'
+                    : 'text-fg-muted cursor-default',
               ].join(' ')}
             >
               <span
                 className={[
-                  'w-5 h-5 rounded-full flex items-center justify-center text-[0.6rem] flex-shrink-0 border',
-                  active || done
-                    ? 'bg-primary/15 dark:bg-primary-light/20 text-primary dark:text-primary-light border-primary/30 dark:border-primary-light/30'
-                    : 'bg-white/30 dark:bg-white/5 text-light-text-muted dark:text-dark-text-muted border-white/40 dark:border-white/10',
+                  'flex size-[22px] flex-shrink-0 items-center justify-center rounded-full text-ui-2xs font-semibold leading-none tabular-nums',
+                  active ? 'bg-accent text-accent-fg' : 'bg-canvas ring-1 ring-inset ring-line-subtle',
                 ].join(' ')}
               >
-                {done ? <Check size={11} /> : i + 1}
+                {done ? <Check size={13} strokeWidth={2} aria-hidden /> : i + 1}
               </span>
-              <span className="hidden sm:inline">{label}</span>
+              <span className={`sr-only sm:not-sr-only sm:block ${SMALL_CAPS} leading-snug`}>
+                {label}
+              </span>
             </button>
-            {i < STEPS.length - 1 && (
-              <div
-                className={[
-                  'flex-1 h-px mx-1',
-                  done ? 'bg-primary/30 dark:bg-primary-light/30' : 'bg-white/30 dark:bg-white/10',
-                ].join(' ')}
-              />
-            )}
-          </React.Fragment>
+          </li>
         )
       })}
-    </div>
+    </ol>
   )
 }

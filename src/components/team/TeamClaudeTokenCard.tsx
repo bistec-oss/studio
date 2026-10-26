@@ -1,15 +1,18 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { KeyRound, Unplug } from 'lucide-react'
-import { GlassPanel } from '@/components/ui/GlassPanel'
-import { GlassInput } from '@/components/ui/GlassInput'
+import { Unplug } from 'lucide-react'
+import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { SectionHead } from '@/components/ui/SectionHead'
+import { StatusChip } from '@/components/ui/StatusChip'
+import { ICON, SUB_HEAD } from '@/components/ui/atoms'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { apiFetch } from '@/lib/apiFetch'
 import type { TeamClaudeTokenInfo } from '@/lib/api-types'
+import { ClaudeConnectGuide } from '@/components/settings/ClaudeConnectGuide'
 
 // Team-admin management of the TEAM's shared Claude OAuth token — the
 // fallback tier below each member's personal token (src/lib/agent/userToken.ts
@@ -20,27 +23,8 @@ import type { TeamClaudeTokenInfo } from '@/lib/api-types'
 const QUERY_KEY = ['team', 'claude-token'] as const
 
 function statusPill(info: TeamClaudeTokenInfo) {
-  const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-medium border'
-  if (!info.connected) {
-    return (
-      <span className={`${base} bg-status-draft/10 dark:bg-status-draft-dark/15 text-status-draft dark:text-status-draft-dark border-status-draft/25 dark:border-status-draft-dark/30`}>
-        Not connected
-      </span>
-    )
-  }
-  return (
-    <span className={`${base} bg-status-published/10 dark:bg-status-published-dark/15 text-status-published dark:text-status-published-dark border-status-published/25 dark:border-status-published-dark/30`}>
-      Connected
-    </span>
-  )
-}
-
-function Code({ children }: { children: React.ReactNode }) {
-  return (
-    <code className="font-mono text-xs px-1.5 py-0.5 rounded-md bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
-      {children}
-    </code>
-  )
+  if (!info.connected) return <StatusChip tone="draft">Not connected</StatusChip>
+  return <StatusChip tone="published">Connected</StatusChip>
 }
 
 export function TeamClaudeTokenCard() {
@@ -82,7 +66,7 @@ export function TeamClaudeTokenCard() {
   const handleDisconnect = async () => {
     const ok = await confirm({
       title: 'Disconnect the team Claude account?',
-      description: 'Members without a personal Claude token will fall back to the shared server credential until this is reconnected.',
+      description: 'Members without a personal Claude token will have no Claude account to generate with until this is reconnected, and scheduled posts, MCP and ACP runs will fail.',
       confirmLabel: 'Disconnect',
     })
     if (ok) disconnectMutation.mutate()
@@ -91,81 +75,65 @@ export function TeamClaudeTokenCard() {
   const info = data ?? ({ connected: false } as TeamClaudeTokenInfo)
 
   return (
-    <GlassPanel className="p-6 flex flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
-            <KeyRound size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-light-text dark:text-dark-text">Team Claude account</h2>
-            <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-              Shared fallback used by members who haven&apos;t connected their own Claude account.
-            </p>
-          </div>
-        </div>
+    // A bezel card (021 design.md §8), its head the study's .card-hd.
+    <section className="surface-bezel min-w-0 p-5">
+      <SectionHead title="Team Claude account" className="mb-3">
         {!isLoading && statusPill(info)}
-      </div>
+      </SectionHead>
 
-      {info.connected && (
-        <div className="flex items-center gap-4 text-sm text-light-text-muted dark:text-dark-text-muted">
-          <span className="font-mono">token {info.keyPrefix}</span>
+      <div className="flex flex-col gap-5">
+        <p className="text-ui-sm text-fg-muted">
+          Shared fallback used by members who haven&apos;t connected their own Claude account. It is also the only credential scheduled posts, MCP and ACP runs can use.
+        </p>
+
+        {info.connected && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui-sm text-fg-muted">
+            <span className="font-mono">token {info.keyPrefix}</span>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <h3 className={SUB_HEAD}>
+            {info.connected ? 'Replace the team token' : 'Connect a team Claude account'}
+          </h3>
+          <ClaudeConnectGuide variant="team" />
         </div>
-      )}
 
-      <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-light-text dark:text-dark-text">
-          {info.connected ? 'Replace the team token' : 'Connect a team Claude account'}
-        </h3>
-        <ol className="list-decimal list-inside flex flex-col gap-1.5 text-sm text-light-text-muted dark:text-dark-text-muted">
-          <li>
-            Install Claude Code: <Code>npm install -g @anthropic-ai/claude-code</Code>
-          </li>
-          <li>
-            Run <Code>claude setup-token</Code> and finish the sign-in it opens in your browser.
-          </li>
-          <li>
-            Copy the printed token — it starts with <Code>sk-ant-oat01-</Code> and lasts about a
-            year.
-          </li>
-          <li>Paste it below.</li>
-        </ol>
-      </div>
-
-      <form
-        className="flex flex-col sm:flex-row gap-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (token.trim()) saveMutation.mutate(token.trim())
-        }}
-      >
-        <div className="flex-1">
-          <GlassInput
-            type="password"
-            autoComplete="off"
-            placeholder="sk-ant-oat01-…"
-            aria-label="Team Claude OAuth token"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button type="submit" disabled={!token.trim() || saveMutation.isPending}>
-            {saveMutation.isPending ? 'Validating…' : info.connected ? 'Replace' : 'Connect'}
-          </Button>
-          {info.connected && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleDisconnect}
-              disabled={disconnectMutation.isPending}
-            >
-              <Unplug size={16} />
-              Disconnect
+        <form
+          className="flex flex-col gap-3 sm:flex-row sm:items-center"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (token.trim()) saveMutation.mutate(token.trim())
+          }}
+        >
+          <div className="min-w-0 flex-1">
+            <Input
+              type="password"
+              autoComplete="off"
+              placeholder="sk-ant-oat01-…"
+              aria-label="Team Claude OAuth token"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="ink" disabled={!token.trim() || saveMutation.isPending}>
+              {saveMutation.isPending ? 'Validating…' : info.connected ? 'Replace' : 'Connect'}
             </Button>
-          )}
-        </div>
-      </form>
-    </GlassPanel>
+            {info.connected && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleDisconnect}
+                disabled={disconnectMutation.isPending}
+              >
+                <Unplug {...ICON} />
+                Disconnect
+              </Button>
+            )}
+          </div>
+        </form>
+      </div>
+    </section>
   )
 }

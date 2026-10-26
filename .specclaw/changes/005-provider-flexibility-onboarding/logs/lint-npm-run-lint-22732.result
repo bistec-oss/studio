@@ -1,0 +1,7 @@
+exit=0
+duration_s=8
+log=.specclaw/changes/005-provider-flexibility-onboarding/logs/lint-npm-run-lint-22732.log
+head=8bd91ff574acfc028cc86a0c6642671caede06a1
+dirty=true
+cmd=npm run lint
+interrupted=false

@@ -7,6 +7,25 @@
 import { describe, it, expect } from 'vitest'
 import { resolveBriefCopyKey, canSubmitBrief } from '@/lib/brief/copyProvider'
 
+describe('resolveBriefCopyKey — a chosen caption route (024 FR-05, decision C)', () => {
+  it("ignores any provided key and stores the 'cli' marker with no existence check, in either mode", () => {
+    for (const cliMode of [true, false]) {
+      for (const key of [undefined, '', '   ', 'anthropic-123']) {
+        expect(resolveBriefCopyKey(key, cliMode, true)).toEqual({ key: 'cli', validateExists: false })
+      }
+    }
+  })
+
+  it('API mode no longer needs a key once the team has chosen (no "required" error)', () => {
+    expect(resolveBriefCopyKey(undefined, false, true)).toEqual({ key: 'cli', validateExists: false })
+  })
+
+  it('a never-chosen team (routeChosen false) is exactly today', () => {
+    expect(resolveBriefCopyKey('anthropic-123', false, false)).toEqual({ key: 'anthropic-123', validateExists: true })
+    expect(resolveBriefCopyKey(undefined, false, false)).toEqual({ error: 'copyProviderKey is required' })
+  })
+})
+
 describe('resolveBriefCopyKey', () => {
   it('uses an explicitly provided key and marks it for existence validation', () => {
     expect(resolveBriefCopyKey('anthropic-123', false)).toEqual({
@@ -57,8 +76,17 @@ describe('canSubmitBrief', () => {
   it('agrees with resolveBriefCopyKey for every combination', () => {
     for (const key of [undefined, '', '   ', 'anthropic-123']) {
       for (const cliMode of [true, false]) {
-        expect(canSubmitBrief(key, cliMode)).toBe(!('error' in resolveBriefCopyKey(key, cliMode)))
+        for (const routeChosen of [true, false]) {
+          expect(canSubmitBrief(key, cliMode, routeChosen)).toBe(
+            !('error' in resolveBriefCopyKey(key, cliMode, routeChosen)),
+          )
+        }
       }
     }
+  })
+
+  it('a chosen route is submittable with no key in API mode (024)', () => {
+    expect(canSubmitBrief(undefined, false, true)).toBe(true)
+    expect(canSubmitBrief(undefined, false, false)).toBe(false)
   })
 })

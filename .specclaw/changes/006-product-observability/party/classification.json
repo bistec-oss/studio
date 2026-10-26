@@ -1,10 +1,10 @@
 {
   "tier": "deep",
-  "domains": ["security", "data", "ops"],
-  "rationale": "Unresolved analytics-view scoping (super-admin global vs team-admin scoped) changes the data-fetch and filter design; new trust boundary (session replay with unresolved masking rules) and persisted data shape (WorkerHeartbeat table, event traces); expanded release machinery (PostHog + ClickHouse infrastructure and retention policies).",
+  "domains": ["security", "data"],
+  "rationale": "Adds a new persisted event table that stores user-typed refine instruction text readable across all teams through a new super-admin API, instruments the generation, refine and publish choke points, and adds a rendered-headline column to Draft with a badge that rewrites stored HTML, so it touches a trust boundary and persisted data shape.",
   "signals": {
-    "blast_radius": "Instrumentation threaded across brief wizard, draft actions, publish path, and scheduler; new WorkerHeartbeat table with scheduler polling logic; admin analytics view and routes; PostHog + ClickHouse services in compose; draft page stale-export indicator",
-    "unresolved": "Analytics view scoping (super-admin global vs team-admin scoped, changes filtering/row-level security); session replay masking scope (all text vs sensitive-region-only); consent requirement and disclosure UI; full-prompt-and-output in generation traces (privacy vs debuggability)",
-    "irreversibility": "ClickHouse and collected event data become operational and privacy liabilities; new migration adds WorkerHeartbeat rows; data retention and consent policies once deployed create ongoing compliance burden; infrastructure must be maintained or painstakingly decommissioned"
+    "blast_radius": "About 25 to 35 files: a new migration and event table, the track wrapper, emission in about 7 server choke points (generateDraft, draftActions, commitDraftRevision, publishDraft, jobRunner, generationRunner, MCP/ACP tools), token reads in anthropicCall and the CLI caller, a new POST /api/events, /admin/insights page and API, a third worker loop, and a draft-page badge that rewrites HTML.",
+    "unresolved": "Open questions change the build: the wizard abandonment definition, whether claude -p reports usage in the app's output mode (decides whether CLI events carry tokens), the exact-once headline match rule on freeform Path B HTML, attribution of MCP/ACP/scheduler events with no acting user, and whether deleted teams and users cascade or are anonymised.",
+    "irreversibility": "The migration adds a table and a nullable column that are cheap to revert, but stored refine text is kept 180 days and cannot be recalled once written, and the stale-badge replace commits revisions that alter draft HTML."
   }
 }

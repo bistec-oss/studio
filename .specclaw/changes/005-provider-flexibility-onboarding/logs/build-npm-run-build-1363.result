@@ -1,0 +1,7 @@
+exit=0
+duration_s=25
+log=.specclaw/changes/005-provider-flexibility-onboarding/logs/build-npm-run-build-1363.log
+head=9cb80ad1a6ece478a855f954652185721d0c2fb6
+dirty=true
+cmd=npm run build
+interrupted=false

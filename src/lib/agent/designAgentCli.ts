@@ -2,14 +2,14 @@ import type { DesignAgentOptions, DesignAgentResult } from "./types"
 import { runClaudeCli } from "./claudeCli"
 import { extractHtmlDocument } from "./htmlDocument"
 import { restoreInlineAssets, missingTokens } from "./inlineAssets"
-import { renderHtmlToPng } from "@/lib/renderer/puppeteer"
+import { renderPost } from "@/lib/renderer/puppeteer"
 import { uploadObject, exportKey, BUCKET_EXPORTS } from "@/lib/storage/minio"
+import type { ResolvedModel } from "@/lib/models/resolve"
 
-type CliAgentOptions = Pick<DesignAgentOptions, "systemPrompt" | "userMessage" | "briefId" | "inlineAssets" | "width" | "height"> & {
-  // Design model for this run: Path A (template fill) passes "haiku", Path B
-  // (freeform) passes "sonnet" (see agent/config.ts modelFor). Overridden by
-  // CLAUDE_CLI_MODEL when set.
-  model?: string
+type CliAgentOptions = Pick<DesignAgentOptions, "systemPrompt" | "userMessage" | "briefId" | "inlineAssets" | "width" | "height" | "postProcess" | "composites" | "headline"> & {
+  // 008 FR-07: the DESIGN_TEMPLATE / DESIGN_FREEFORM model the caller resolved.
+  // The CLI runs exactly its arg, and the spawn's timeout is its surface timeout.
+  model: ResolvedModel
 }
 
 // CLI-mode replacement for runDesignAgent. Drives a single-shot HTML generation
@@ -29,13 +29,16 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
     width = 1080,
     height = 1080,
     model,
+    postProcess,
+    composites = null,
+    headline,
   } = options
 
   const prompt = `${systemPrompt}\n\n${userMessage}`
 
-  // Freeform Path B design is a heavier single-shot than copy/template-fill and
-  // can run past 3 min on the local CLI; allow more headroom before timing out.
-  const raw = await runClaudeCli(prompt, { timeoutMs: 300_000, label: "design", model })
+  // The timeout is the model's (008 FR-12, design §5): freeform design on a
+  // slower model gets more headroom than template fill on Haiku.
+  const raw = await runClaudeCli(prompt, { label: "design", model })
 
   // Cut the document out of the reply rather than testing that one is in there
   // somewhere: any commentary the model wrapped around it would otherwise be
@@ -65,11 +68,32 @@ export async function runDesignAgentCli(options: CliAgentOptions): Promise<Desig
     html = restoreInlineAssets(html, inlineAssets)
   }
 
-  // Render HTML → PNG → MinIO (same pipeline as the export route).
-  const png = await renderHtmlToPng(html, width, height)
+  // 025 FR-15: code inserts the screenshot after extract and restore, before
+  // the render; the stored HTML is this inserted HTML with the token.
+  if (postProcess) html = postProcess(html)
+
+  // Render HTML → PNG → MinIO (same pipeline as the export route). A failed
+  // composite check throws before anything is uploaded.
+  const { png, headlineCheck, fontsMissing } = await renderPost(html, width, height, composites, { headline })
   const key = exportKey("cli", briefId)
   await uploadObject(png, BUCKET_EXPORTS, key, "image/png")
 
   // Persist the object key; it is signed per read.
-  return { htmlContent: html, exportUrl: key, toolCallCount: 0 }
+  return { htmlContent: html, exportUrl: key, toolCallCount: 0, headlineCheck, fontsMissing }
+}
+
+// ── Refine mode (change 004 Phase 2, T17) ────────────────────────────────────
+// Opt-in, used only by the refine route. Returns the model's RAW reply —
+// envelope header, document with __INLINE_ASSET_n__ tokens intact, any
+// narration — and does NOT cut, restore, render or upload anything: the route
+// (drafts/refineAttempt.ts) parses the envelope, reconciles the tokens and
+// verifies the edit, and renders only the document it finally keeps, so a
+// missed attempt leaves no orphaned export. runDesignAgentCli above is
+// untouched (AC-20: regenerate-design, generation and Path A use it).
+export async function runDesignAgentCliRefine(
+  options: Pick<CliAgentOptions, "systemPrompt" | "userMessage" | "model">,
+): Promise<string> {
+  const { systemPrompt, userMessage, model } = options
+  // The REFINE model runs on its own surface timeout (008 FR-12).
+  return runClaudeCli(`${systemPrompt}\n\n${userMessage}`, { label: "refine", model })
 }

@@ -1,0 +1,4 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-25T05:13:35Z","ts":1792905215}
+{"ev":"stop","span":"propose","at":"2026-10-25T05:16:24Z","ts":1792905384,"status":"ok"}
+{"ev":"start","span":"verify-1792907730","kind":"phase","label":"verify","at":"2026-10-25T05:55:31Z","ts":1792907730}
+{"ev":"stop","span":"verify","at":"2026-10-25T05:58:50Z","ts":1792907930,"status":"ok"}

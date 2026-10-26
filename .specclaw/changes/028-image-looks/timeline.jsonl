@@ -1,0 +1,24 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-24T17:00:40Z","ts":1792861240}
+{"ev":"stop","span":"propose","at":"2026-10-24T17:47:18Z","ts":1792864038,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-24T18:38:32Z","ts":1792867112}
+{"ev":"stop","span":"plan","at":"2026-10-24T18:55:26Z","ts":1792868126,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-24T18:57:31Z","ts":1792868251}
+{"ev":"start","span":"T1","kind":"task","label":"dataset","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-24T18:57:31Z","ts":1792868251}
+{"ev":"stop","span":"T1","at":"2026-10-24T19:09:45Z","ts":1792868985,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-24T19:09:45Z","ts":1792868985,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-24T19:09:52Z","ts":1792868992}
+{"ev":"start","span":"T2","kind":"task","label":"resolver","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-24T19:09:52Z","ts":1792868992}
+{"ev":"stop","span":"T2","at":"2026-10-24T19:14:35Z","ts":1792869276,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"fixtures","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-24T19:14:41Z","ts":1792869281}
+{"ev":"stop","span":"T3","at":"2026-10-24T19:22:17Z","ts":1792869737,"status":"ok"}
+{"ev":"start","span":"T5","kind":"task","label":"runner","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-24T19:22:23Z","ts":1792869743}
+{"ev":"stop","span":"T5","at":"2026-10-24T19:28:24Z","ts":1792870104,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-24T19:28:24Z","ts":1792870104,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-24T19:28:24Z","ts":1792870104}
+{"ev":"start","span":"T4","kind":"task","label":"e2e","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-24T19:28:24Z","ts":1792870104}
+{"ev":"stop","span":"T4","at":"2026-10-24T19:47:21Z","ts":1792871241,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-24T19:47:21Z","ts":1792871241,"status":"ok"}
+{"ev":"stop","span":"T6","at":"2026-10-24T20:33:04Z","ts":1792873984,"status":"ok"}
+{"ev":"start","span":"verify-1792874031","kind":"phase","label":"verify","at":"2026-10-24T20:33:51Z","ts":1792874031}
+{"ev":"start","span":"verify-1792907587","kind":"phase","label":"verify","at":"2026-10-25T05:53:07Z","ts":1792907587}
+{"ev":"stop","span":"verify","at":"2026-10-25T05:57:55Z","ts":1792907875,"status":"ok"}

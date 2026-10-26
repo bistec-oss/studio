@@ -1,6 +1,7 @@
 import OpenAI from "openai"
-import type { BriefInput, CopyProvider } from "../../interfaces/CopyProvider"
-import { buildCopyPrompt } from "@/lib/agent/prompts/copy"
+import type { BriefInput, CaptionReply, CopyProvider } from "../../interfaces/CopyProvider"
+import type { CaptionTarget } from "@/lib/channels"
+import { buildCaptionPrompt, CAPTION_MAX_TOKENS } from "@/lib/agent/prompts/caption"
 
 export class OpenAICopyProvider implements CopyProvider {
   private client: OpenAI
@@ -9,12 +10,14 @@ export class OpenAICopyProvider implements CopyProvider {
     this.client = new OpenAI({ apiKey })
   }
 
-  async generateCopy(brief: BriefInput): Promise<string> {
-    const prompt = buildCopyPrompt(brief)
+  // 008 open question 1: not a Claude provider, so the resolved CAPTION model
+  // does not apply here. The stamp records this provider's own model ID.
+  async generateCaptions(brief: BriefInput, targets: readonly CaptionTarget[]): Promise<CaptionReply> {
+    const prompt = buildCaptionPrompt(brief, targets)
 
     const response = await this.client.chat.completions.create({
       model: this.model,
-      max_tokens: 500,
+      max_tokens: CAPTION_MAX_TOKENS,
       temperature: 0.7,
       messages: [
         { role: "system", content: prompt.system },
@@ -26,6 +29,6 @@ export class OpenAICopyProvider implements CopyProvider {
     if (!content) {
       throw new Error("OpenAI returned an empty response")
     }
-    return content
+    return { raw: content, modelId: this.model, route: 'OTHER' }
   }
 }

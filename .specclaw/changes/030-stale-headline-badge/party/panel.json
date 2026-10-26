@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "1028103806 10570",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Adds a new render-stamp column to Draft and DraftRevision that every render writer must carry, and a new draft action that splices user-edited headline text into stored HTML that is then rendered, which the proposal itself says the party-security panel blocked on escaping and matching.",
+  "domains": ["security", "data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,13 @@
+{
+  "change": "019-draft-action-claim-token",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "bounded",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-13T15:44:23Z" },
+    "spec": { "status": "done", "at": "2026-10-20T11:25:52Z" },
+    "tasks": { "status": "done", "at": "2026-10-20T11:25:53Z" },
+    "build": { "status": "in-progress", "at": "2026-10-20T14:43:05Z" },
+    "verify": { "status": "passed", "at": "2026-10-20T15:32:00Z", "verdict": "PASS" }
+  }
+}

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { withTeamAuth } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
 import { startBackgroundGeneration } from '@/lib/agent/backgroundGeneration'
+import { CAPTION_CHANNELS } from '@/lib/channels'
 
 type Params = { id: string }
 
@@ -30,9 +31,32 @@ export const POST = withTeamAuth<Params>(async (_req, { params }, user) => {
     )
   }
 
+  // One update (one transaction): IN_PROGRESS and every caption row back to
+  // PENDING, so the rerun's caption write (guarded on PENDING) lands on all
+  // three (012 FR-10). createMany fills any registry channel the draft has no
+  // row for (a channel added to the registry after the draft was created).
   await prisma.draft.update({
     where: { id: params.id },
-    data: { status: 'IN_PROGRESS', failureReason: null },
+    data: {
+      status: 'IN_PROGRESS',
+      failureReason: null,
+      // A rerun writes a fresh headline; never leave a stale one on a FAILED draft.
+      // Its stamp goes with it (008 FR-08): the rerun stamps the new headline.
+      headline: null,
+      headlineModel: null,
+      headlineModelSubstitutedFrom: null,
+      captions: {
+        updateMany: {
+          // Registry channels only: a legacy WhatsApp row is left as it is (026 FR-05).
+          where: { channel: { in: CAPTION_CHANNELS.map((s) => s.channel) } },
+          data: { status: 'PENDING', failureReason: null },
+        },
+        createMany: {
+          data: CAPTION_CHANNELS.map(({ channel }) => ({ channel, status: 'PENDING' as const })),
+          skipDuplicates: true,
+        },
+      },
+    },
   })
   await startBackgroundGeneration(params.id, user.userId, user.teamId)
 

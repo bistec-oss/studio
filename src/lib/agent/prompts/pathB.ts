@@ -6,7 +6,16 @@ import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
 import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import type { PipelineMode } from '@/lib/agent/config'
 import type { BriefImage } from '@/lib/agent/briefInput'
-import { outputProtocol, SCRIPT_SUPPORT_NOTE } from './shared'
+import { designContractText, PRECEDENCE_LINE, type Contract, type SizeContract } from '@/lib/designData'
+import { onImageHeadline, outputProtocol, SCRIPT_SUPPORT_NOTE } from './shared'
+
+// A KEPT hero image style's contract for the canvas (009 FR-06). Present only
+// when the pixel check passed; under a fallback the classic line stands.
+export interface CompositionPromptContext {
+  label: string
+  contract: Contract
+  size: SizeContract
+}
 
 export interface PathBPromptOptions {
   kit: ResolvedBrandKit
@@ -19,10 +28,13 @@ export interface PathBPromptOptions {
   referenceTemplateHtml?: string | null
   // Pre-generated AI background image (see agent/background.ts pre-step).
   backgroundImageUrl?: string | null
+  // The kept hero archetype's contract (009). Replaces the classic background
+  // line (and its scrim advice) with the layout contract. Absent: unchanged.
+  composition?: CompositionPromptContext
 }
 
 export function buildPathBSystemPrompt(opts: PathBPromptOptions): string {
-  const { kit, mode, width, height, artifactUrls = [], referenceTemplateHtml, backgroundImageUrl } = opts
+  const { kit, mode, width, height, artifactUrls = [], referenceTemplateHtml, backgroundImageUrl, composition } = opts
 
   // data: URIs are unreadable base64 that blow the model context — filter them
   // out here, the single point where artifact URLs are joined into the prompt.
@@ -31,7 +43,14 @@ export function buildPathBSystemPrompt(opts: PathBPromptOptions): string {
     ? `\n- Brand reference images: ${referenceUrls.join(', ')}`
     : ''
 
-  const backgroundLine = backgroundImageUrl
+  const backgroundLine = backgroundImageUrl && composition
+    ? `
+
+Image style: ${composition.label}
+${designContractText(composition.contract, composition.size, { width, height }, backgroundImageUrl)}
+${PRECEDENCE_LINE}
+`
+    : backgroundImageUrl
     ? `\n- Background image (MUST use): a background image has been pre-generated for this post at ${backgroundImageUrl} — use it as the full-bleed background layer (CSS background-image with background-size: cover, or an absolutely-positioned <img> behind the content). Layer a subtle scrim/gradient overlay where needed so all text stays clearly legible over it.`
     : ''
 
@@ -63,7 +82,8 @@ export interface PathBUserMessageOptions {
   goal: string
   tone: string
   channels: string[]
-  copyText: string
+  // The on-image headline (012 FR-09) — never a caption.
+  headline: string
   mode: PipelineMode
   width: number
   height: number
@@ -71,19 +91,25 @@ export interface PathBUserMessageOptions {
   // Active campaign briefing — campaign-level context shared by every post in
   // the campaign, rendered above the per-post brief fields.
   campaignBriefing?: string | null
+  // A kept hero archetype is in force (009): the briefing's layout instructions
+  // yield to the layout contract in the system prompt.
+  heroPrecedence?: boolean
+  // 027 FR-09: the image-scope rules of the brief's post style, already
+  // rendered. Absent: the message is exactly what it was before 027.
+  imageRules?: string
 }
 
 export type { BriefImage }
 
 export function buildPathBUserMessage(opts: PathBUserMessageOptions): string {
-  const { topic, description, goal, tone, channels, copyText, mode, width, height, briefImages = [], campaignBriefing } = opts
+  const { topic, description, goal, tone, channels, headline, mode, width, height, briefImages = [], campaignBriefing, heroPrecedence, imageRules } = opts
 
   const imageSection = briefImages.length > 0
     ? `\n\nProvided images (follow intent rules from system prompt):\n${briefImages.map((img) => `- ${img.url} (intent: ${img.intent})`).join('\n')}`
     : ''
 
   const briefingSection = campaignBriefing
-    ? `Campaign briefing (applies to every post in this campaign — follow it alongside the brief below):
+    ? `Campaign briefing (applies to every post in this campaign — follow it alongside the brief below${heroPrecedence ? '; layout instructions in it yield to the image-style layout contract in the system prompt' : ''}):
 ${campaignBriefing}
 
 `
@@ -101,7 +127,9 @@ Goal: ${goal}
 Tone: ${tone}
 Channels: ${channels.join(', ')}
 
-Copy text to use: ${copyText}${imageSection}
+${onImageHeadline(headline)}${imageSection}${imageRules ? `
+
+${imageRules}` : ''}
 
 Design a complete, original HTML/CSS post. ${finalStep}`
 }

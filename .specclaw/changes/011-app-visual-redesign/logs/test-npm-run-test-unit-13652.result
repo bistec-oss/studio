@@ -1,0 +1,7 @@
+exit=0
+duration_s=4
+log=.specclaw/changes/011-app-visual-redesign/logs/test-npm-run-test-unit-13652.log
+head=c37357a3fa0a0c21e3269bf42a6b133e15cfaa28
+dirty=true
+cmd=npm run test:unit
+interrupted=false

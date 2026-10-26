@@ -55,10 +55,16 @@ export const DELETE = withSuperAdmin<Params>(async (_req, { params }) => {
     return NextResponse.json({ error: 'Team not found' }, { status: 404 })
   }
 
-  await prisma.team.update({
-    where: { id: params.id },
-    data: { isDeleted: true, deletedAt: new Date() },
-  })
+  // 006 FR-12: a deleted team's analytics events go with it (the content stays
+  // for audit; the events are a separate store with no foreign key, so the
+  // delete is explicit and in the same transaction).
+  await prisma.$transaction([
+    prisma.team.update({
+      where: { id: params.id },
+      data: { isDeleted: true, deletedAt: new Date() },
+    }),
+    prisma.analyticsEvent.deleteMany({ where: { teamId: params.id } }),
+  ])
 
   return new NextResponse(null, { status: 204 })
 })

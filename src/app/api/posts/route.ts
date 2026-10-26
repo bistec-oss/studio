@@ -5,7 +5,8 @@ import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { postVisibilityWhere } from '@/lib/authz/visibility'
 import { resolveExportUrl } from '@/lib/storage/minio'
 import { createAndPublishPost, findLivePost } from '@/lib/publish/publishDraft'
-import { Channel } from '@prisma/client'
+import { isPublishableChannel, PUBLISHABLE_CHANNELS } from '@/lib/channels'
+import { loadCaptionForPublish, loadCaptionTexts } from '@/lib/captions/store'
 
 // Permissive schema: only guards the JSON parse. The manual checks below keep
 // their exact error messages (asserted by tests).
@@ -24,8 +25,8 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, auth) => {
   if (!draftId?.trim()) {
     return NextResponse.json({ error: 'draftId is required' }, { status: 400 })
   }
-  if (!channel || !['INSTAGRAM', 'LINKEDIN'].includes(channel)) {
-    return NextResponse.json({ error: 'channel must be INSTAGRAM or LINKEDIN' }, { status: 400 })
+  if (!isPublishableChannel(channel)) {
+    return NextResponse.json({ error: `channel must be ${PUBLISHABLE_CHANNELS.join(' or ')}` }, { status: 400 })
   }
 
   const draft = await prisma.draft.findUnique({ where: { id: draftId } })
@@ -45,13 +46,22 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, auth) => {
 
   // Idempotency: a live post (PENDING/SCHEDULED/PUBLISHING/PUBLISHED) for the
   // same draft+channel means a double-click or client retry — reject instead of
-  // double-posting. Re-publishing after FAILED/CANCELLED stays allowed.
-  const existing = await findLivePost(draftId, channel as Channel)
+  // double-posting. Re-publishing after FAILED/CANCELLED stays allowed. Checked
+  // before the caption (017 FR-05), so a duplicate is always a 409.
+  const existing = await findLivePost(draftId, channel)
   if (existing) {
     return NextResponse.json(
       { error: 'A post for this draft and channel already exists', postId: existing.id, status: existing.status },
       { status: 409 }
     )
+  }
+
+  // The caption check (012 A10), up front for both paths so a refused caption
+  // never leaves a row. The scheduler re-checks at publish time, because the
+  // caption can change in between.
+  const caption = await loadCaptionForPublish(draftId, channel)
+  if (!caption.ok) {
+    return NextResponse.json({ error: caption.reason, code: 'CAPTION_UNPUBLISHABLE' }, { status: 422 })
   }
 
   // Scheduled path: persist a SCHEDULED row directly — no transient PENDING that
@@ -62,7 +72,7 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, auth) => {
         teamId: draft.teamId,
         draftId,
         userId: auth.userId,
-        channel: channel as Channel,
+        channel,
         status: 'SCHEDULED',
         scheduledAt: scheduledAtDate,
       },
@@ -77,12 +87,21 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, auth) => {
   }
 
   // Immediate path — shared PENDING → publish → PUBLISHED/FAILED state machine.
-  const { post } = await createAndPublishPost({
+  const { post, error } = await createAndPublishPost({
     draftId,
-    channel: channel as Channel,
+    channel,
     userId: auth.userId,
     scheduledAt: scheduledAtDate,
+    source: 'web',
   })
+  // A publish the platform refused is an error, not a 201 (017 FR-01). The
+  // FAILED row is still the record; its id and status ride along.
+  if (error) {
+    return NextResponse.json(
+      { error: post.errorReason ?? error.reason, code: 'PUBLISH_FAILED', postId: post.id, status: post.status },
+      { status: 502 }
+    )
+  }
   return NextResponse.json({ postId: post.id, status: post.status }, { status: 201 })
 })
 
@@ -97,7 +116,7 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
     prisma.post.findMany({
       where,
       include: {
-        draft: { select: { id: true, copyText: true, exportUrl: true } },
+        draft: { select: { id: true, exportUrl: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
@@ -107,10 +126,17 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   ])
 
   // draft.exportUrl is stored as an EXPORTS object key — sign for the browser.
+  // draft.caption is the text for the post's own channel (012 FR-13), read for
+  // the whole page in one query (017 FR-06).
+  const captions = await loadCaptionTexts(posts.map((p) => ({ draftId: p.draft.id, channel: p.channel })))
   const signedPosts = await Promise.all(
     posts.map(async (p) => ({
       ...p,
-      draft: { ...p.draft, exportUrl: await resolveExportUrl(p.draft.exportUrl) },
+      draft: {
+        ...p.draft,
+        caption: captions.get(`${p.draft.id}/${p.channel}`) ?? '',
+        exportUrl: await resolveExportUrl(p.draft.exportUrl),
+      },
     }))
   )
 

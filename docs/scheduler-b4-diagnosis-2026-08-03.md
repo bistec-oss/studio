@@ -4,6 +4,8 @@
 
 Companion to [`prod-e2e-findings-2026-07-24.md`](prod-e2e-findings-2026-07-24.md) §B4, which established the symptom. This doc records what has now been **ruled out**, the causes still standing, and how to tell them apart — so nobody re-audits the image again.
 
+**Check the banner first (since 023).** The campaign page's queue panel shows a "Scheduler offline" banner when a worker loop has stopped ticking. It names the loop that is down and when it was last seen, so it tells you the worker is not ticking before you open Coolify. A banner that stays after a deploy means the scheduler resource is not running, and the rest of this doc applies.
+
 ## The symptom (from the 2026-07-24 run)
 
 A HOLD queue entry with `generateAt` 10 minutes in the past was created (201, PENDING) and polled for **185s** — three worker poll cycles. It stayed **PENDING**, `retryCount: 0`, no draft, no `errorReason`. The app resource was demonstrably redeployed at the time.

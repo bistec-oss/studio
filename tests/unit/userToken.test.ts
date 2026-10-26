@@ -37,6 +37,7 @@ const {
   markTeamClaudeTokenInvalid,
   validateClaudeToken,
 } = await import('@/lib/agent/userToken')
+const { internalModel } = await import('@/lib/models/resolve')
 
 const PLAINTEXT = 'sk-ant-oat01-USER-personal-token-abc123'
 const TEAM_PLAINTEXT = 'sk-ant-oat01-TEAM-shared-token-xyz789'
@@ -245,8 +246,19 @@ describe('validateClaudeToken', () => {
     expect(result.ok).toBe(true)
     expect(h.runClaudeCli).toHaveBeenCalledWith(
       'Reply with exactly: pong',
-      expect.objectContaining({ authToken: PLAINTEXT, model: 'haiku', label: 'token-validate' })
+      expect.objectContaining({ authToken: PLAINTEXT, label: 'token-validate' })
     )
+  })
+
+  it('008 FR-15: the ping runs the fixed INTERNAL_TOKEN_PING model (Haiku 4.5), bounded by its 60 s entry', async () => {
+    await validateClaudeToken(PLAINTEXT)
+    const opts = h.runClaudeCli.mock.calls[0][1]
+    expect(opts).toEqual({
+      model: internalModel('INTERNAL_TOKEN_PING', 'cli'),
+      label: 'token-validate',
+      authToken: PLAINTEXT,
+    })
+    expect(opts.model).toMatchObject({ surface: 'INTERNAL_TOKEN_PING', key: 'HAIKU', arg: 'claude-haiku-4-5', timeoutMs: 60_000 })
   })
 
   it('CLI mode + ping failure → fail closed with an actionable error', async () => {
@@ -280,6 +292,30 @@ describe('validateClaudeToken under MOCK_AI (E2E seam)', () => {
       expect((await validate('sk-ant-oat01-good')).ok).toBe(true)
       const bad = await validate('sk-ant-oat01-invalid-token')
       expect(bad.ok).toBe(false)
+      expect(h.runClaudeCli).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('008 FR-16: each mock validation records the INTERNAL_TOKEN_PING call it stands in for (a CLI call)', async () => {
+    vi.stubEnv('MOCK_AI', 'true')
+    try {
+      const validate = await freshValidate()
+      const { setModelCallSink } = await import('@/lib/models/modelCalls')
+      const calls: Array<import('@/lib/models/modelCalls').ModelCallRecord> = []
+      setModelCallSink({ record: (r) => calls.push(r), read: () => [], clear: () => {} })
+      try {
+        await validate('sk-ant-oat01-good')
+        await validate('sk-ant-oat01-invalid-token')
+      } finally {
+        setModelCallSink(null)
+      }
+      expect(calls).toMatchObject([
+        { surface: 'INTERNAL_TOKEN_PING', key: 'HAIKU', arg: 'claude-haiku-4-5', mode: 'cli', source: 'system', label: 'token-validate' },
+        { surface: 'INTERNAL_TOKEN_PING', label: 'token-validate' },
+      ])
       expect(h.runClaudeCli).not.toHaveBeenCalled()
     } finally {
       vi.unstubAllEnvs()

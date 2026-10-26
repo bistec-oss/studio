@@ -28,7 +28,7 @@ export async function startBackgroundGeneration(
   // The IMAGE-provider actor is the same acting teammate as the Claude auth
   // above — background image generation must resolve THEIR personal OpenAI
   // key (or the team default), never the brief owner's.
-  const actor = { userId, teamId }
+  const actor = { userId, teamId, source: 'web' as const }
   // runGenerationForDraft catches its own errors and records FAILED on the draft,
   // so this should never reject; the .catch is a belt-and-braces guard against an
   // unexpected throw becoming an unhandled rejection.

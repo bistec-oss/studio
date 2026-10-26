@@ -1,0 +1,7 @@
+exit=0
+duration_s=11
+log=.specclaw/changes/007-brandkit-design-system/logs/lint-npm-run-lint-1089.log
+head=026b5bffe86ec3ba40a1ebdfd10fd12833904c95
+dirty=true
+cmd=npm run lint
+interrupted=false

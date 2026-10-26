@@ -88,11 +88,11 @@ test.describe('UI flows', () => {
     await publishBtn.click()
 
     // The dialog appears — select a channel and confirm.
-    await page.getByText('Publish Post').waitFor({ timeout: 5_000 })
+    await page.getByText('Publish post').waitFor({ timeout: 5_000 })
     await page.getByRole('checkbox').first().check()
     const [req] = await Promise.all([
       page.waitForRequest(r => r.url().includes('/api/posts') && r.method() === 'POST'),
-      page.getByRole('button', { name: /^confirm$/i }).click(),
+      page.getByRole('button', { name: /^publish$/i }).click(),
     ])
     expect(req).toBeTruthy()
   })

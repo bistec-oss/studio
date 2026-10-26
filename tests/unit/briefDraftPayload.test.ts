@@ -44,6 +44,46 @@ describe('briefDraftPayloadSchema', () => {
     const legacy = { topic: 'old', prompt: 'shape' }
     expect(briefDraftPayloadSchema.safeParse(legacy).success).toBe(false)
   })
+
+  // 008 FR-17 / AC-25: the Review step's model picks survive autosave → resume.
+  it('round-trips captionModel and designModel through JSON (a resumed brief restores the picks)', () => {
+    const picked: BriefDraftPayload = { ...base, captionModel: 'HAIKU', designModel: 'OPUS' }
+    const parsed = briefDraftPayloadSchema.safeParse(JSON.parse(JSON.stringify(picked)))
+    expect(parsed.success && parsed.data).toStrictEqual(picked)
+  })
+
+  it('the picks are optional: a payload without them (untouched pickers, or saved before 008) still parses, with none', () => {
+    const parsed = briefDraftPayloadSchema.safeParse(base)
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && 'captionModel' in parsed.data).toBe(false)
+    expect(parsed.success && 'designModel' in parsed.data).toBe(false)
+  })
+
+  // 009 FR-03 / AC-05: the image style survives autosave -> resume.
+  it('round-trips imageStyle through JSON', () => {
+    const picked: BriefDraftPayload = { ...base, designMode: 'GENERATE', imageStyle: 'editorial-split' }
+    const parsed = briefDraftPayloadSchema.safeParse(JSON.parse(JSON.stringify(picked)))
+    expect(parsed.success && parsed.data).toStrictEqual(picked)
+  })
+
+  it('imageStyle is optional: a payload without it (classic, or saved before 009) still parses, with none', () => {
+    const parsed = briefDraftPayloadSchema.safeParse(base)
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && 'imageStyle' in parsed.data).toBe(false)
+  })
+
+  it('an unknown stored style still parses (the wizard reads it back as classic); a non-string or over-long one does not', () => {
+    expect(briefDraftPayloadSchema.safeParse({ ...base, imageStyle: 'retired-style' }).success).toBe(true)
+    expect(briefDraftPayloadSchema.safeParse({ ...base, imageStyle: 7 }).success).toBe(false)
+    expect(briefDraftPayloadSchema.safeParse({ ...base, imageStyle: 'x'.repeat(41) }).success).toBe(false)
+  })
+
+  it('rejects a pick outside the closed model keys', () => {
+    for (const bad of ['opus', 'gpt-4o', 'claude-opus-5-5', null]) {
+      expect(briefDraftPayloadSchema.safeParse({ ...base, captionModel: bad }).success).toBe(false)
+      expect(briefDraftPayloadSchema.safeParse({ ...base, designModel: bad }).success).toBe(false)
+    }
+  })
 })
 
 describe('isTrivialBriefDraft', () => {
@@ -101,5 +141,64 @@ describe('briefImageKeyFromUrl', () => {
         uid,
       ),
     ).toBeNull()
+  })
+})
+
+// 027 FR-07: the post style survives autosave -> resume; goal is a legacy optional field.
+describe('briefDraftPayloadSchema: post style (027)', () => {
+  it('round-trips postStyle through JSON', () => {
+    const picked: BriefDraftPayload = { ...base, postStyle: 'launch' }
+    const parsed = briefDraftPayloadSchema.safeParse(JSON.parse(JSON.stringify(picked)))
+    expect(parsed.success && parsed.data).toStrictEqual(picked)
+  })
+
+  it('an old row with a goal and no style still parses (it resumes as General)', () => {
+    const parsed = briefDraftPayloadSchema.safeParse(base)
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.goal).toBe('awareness')
+    expect(parsed.success && 'postStyle' in parsed.data).toBe(false)
+  })
+
+  it('a new payload with no goal parses', () => {
+    const { goal: _goal, ...noGoal } = base
+    expect(briefDraftPayloadSchema.safeParse({ ...noGoal, postStyle: 'event' }).success).toBe(true)
+  })
+
+  it('postStyle is capped at 40 characters', () => {
+    expect(briefDraftPayloadSchema.safeParse({ ...base, postStyle: 'x'.repeat(41) }).success).toBe(false)
+  })
+})
+
+describe('briefDraftPayloadSchema: product screenshot (025 FR-11)', () => {
+  const source = { kind: 'brief-upload' as const, key: 'screenshots/t1/u1/1-abc.png', width: 1280, height: 800 }
+
+  it('round-trips compositeSource through JSON', () => {
+    const picked: BriefDraftPayload = { ...base, imageStyle: 'device-screen', compositeSource: source }
+    const parsed = briefDraftPayloadSchema.safeParse(JSON.parse(JSON.stringify(picked)))
+    expect(parsed.success && parsed.data).toStrictEqual(picked)
+  })
+
+  it('an old row with no screenshot parses and has no compositeSource', () => {
+    const parsed = briefDraftPayloadSchema.safeParse(base)
+    expect(parsed.success && 'compositeSource' in parsed.data).toBe(false)
+  })
+
+  it('refuses a traversal key, a key outside screenshots/, a deeper key and a URL', () => {
+    for (const key of [
+      'screenshots/t1/../u2/x.png',
+      'screenshots/t1/u1/../../x.png',
+      'briefs/u1/x.png',
+      'screenshots/t1/u1/a/b.png',
+      'screenshots/t1/x.png',
+      'https://example.com/screenshots/t1/u1/x.png',
+    ]) {
+      expect(briefDraftPayloadSchema.safeParse({ ...base, compositeSource: { ...source, key } }).success, key).toBe(false)
+    }
+  })
+
+  it('refuses a wrong kind, an extra field and a bad size', () => {
+    expect(briefDraftPayloadSchema.safeParse({ ...base, compositeSource: { ...source, kind: 'url' } }).success).toBe(false)
+    expect(briefDraftPayloadSchema.safeParse({ ...base, compositeSource: { ...source, url: 'x' } }).success).toBe(false)
+    expect(briefDraftPayloadSchema.safeParse({ ...base, compositeSource: { ...source, width: 0 } }).success).toBe(false)
   })
 })

@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["security", "data"],
+  "rationale": "Adds a new team-scoped upload type for product screenshots that may show unreleased UI, with a public-or-private storage choice still open, a new region purpose in the layout contract, and an optional field on the persisted composition stamp, so it touches an upload trust boundary, persisted data shape, and an unresolved storage decision that changes the design.",
+  "signals": {
+    "blast_radius": "About 20 to 30 files across designData, background.ts, the Path B prompts, the brief wizard, the kit admin UI and artifact route, testHooks, tests and docs, plus a new artifact type and a stamp field that 007 also extends",
+    "unresolved": "Whether OP-1 passes at all, whether a blank-screen device is achievable on gpt-image-2 or Gemini (open question 2), where screenshots live (kit, brief or both), public versus private bucket, and whether a new ArtifactType value or a reused type is used; each answer changes what gets built",
+    "irreversibility": "A new ArtifactType value needs a migration and stored screenshots may be publicly readable at a stable URL, so unreleased UI cannot be recalled once uploaded, and the stamp field becomes something other code reads back"
+  }
+}

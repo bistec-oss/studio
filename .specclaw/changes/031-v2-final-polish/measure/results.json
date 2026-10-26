@@ -1,0 +1,66 @@
+{
+  "pathB": {
+    "n": 35,
+    "ok": 34,
+    "styled": 29,
+    "failures": {
+      "not-found": 1
+    },
+    "detail": [
+      "wova90 ok tag=div children=false",
+      "7ef6mt ok tag=div children=false",
+      "f53nhy ok tag=div children=false",
+      "omcbky ok tag=div children=false",
+      "xhayj0 ok tag=h1 children=true",
+      "05rwh5 ok tag=h1 children=true",
+      "r06vbk ok tag=h1 children=true",
+      "0l55lb ok tag=h1 children=true",
+      "bjxxmm ok tag=h1 children=true",
+      "9e1oro ok tag=h1 children=true",
+      "vsxl80 ok tag=h1 children=true",
+      "99m9z0 ok tag=h1 children=true",
+      "5yjvv1 ok tag=h1 children=true",
+      "u03mfa ok tag=h1 children=true",
+      "h2ab7g ok tag=h1 children=true",
+      "2mtmgw ok tag=h1 children=true",
+      "lajjyk ok tag=h1 children=true",
+      "hls99r ok tag=h1 children=true",
+      "5nylwc ok tag=h1 children=true",
+      "rvkwf5 ok tag=h1 children=false",
+      "xjse6h ok tag=h1 children=true",
+      "dwdd6g ok tag=h1 children=true",
+      "t7btz5 ok tag=h1 children=true",
+      "2qyg71 ok tag=h1 children=true",
+      "jc7m1l ok tag=h1 children=true",
+      "7a7qpe ok tag=h1 children=true",
+      "w2xttc ok tag=h1 children=true",
+      "oiggmo ok tag=h1 children=true",
+      "zwvn0q not-found",
+      "8gvj17 ok tag=h1 children=true",
+      "a1qvi9 ok tag=h1 children=true",
+      "semcur ok tag=h1 children=true",
+      "wq1uk5 ok tag=h1 children=true",
+      "wi8ac0 ok tag=h1 children=true",
+      "7jh6q3 ok tag=h1 children=true"
+    ]
+  },
+  "pathA": {
+    "n": 1,
+    "ok": 1,
+    "styled": 0,
+    "failures": {},
+    "detail": ["7pm29f ok tag=h1 children=false"]
+  },
+  "templatesTotal": 2,
+  "templatesWithoutHeadline": 1,
+  "combined": {
+    "n": 36,
+    "ok": 35,
+    "styled": 29,
+    "rate": 0.9722222222222222,
+    "styledShare": 0.8285714285714286
+  },
+  "draftModes": {
+    "GENERATE": 35
+  }
+}

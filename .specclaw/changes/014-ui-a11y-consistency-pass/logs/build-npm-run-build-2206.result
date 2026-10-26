@@ -1,0 +1,7 @@
+exit=0
+duration_s=18
+log=.specclaw/changes/014-ui-a11y-consistency-pass/logs/build-npm-run-build-2206.log
+head=7c128f7b1bc99a33fb527abd4e80cd8fdb794589
+dirty=true
+cmd=npm run build
+interrupted=false

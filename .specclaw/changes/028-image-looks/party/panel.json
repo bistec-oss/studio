@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "4838218 13909",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Adds five new looks and STORY contracts across the designData dataset, prompts, render fixtures, the resolver and the insights page (about 25 files), and changes unattended queue, MCP and ACP behaviour so they use a look only after a real-image allow-list entry, with open questions on the full-bleed measurement and the number of sizes that change what is built.",
+  "domains": [],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

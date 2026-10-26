@@ -1,0 +1,1 @@
+ALTER TYPE "Channel" ADD VALUE 'WHATSAPP';

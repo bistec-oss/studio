@@ -1,0 +1,7 @@
+exit=0
+duration_s=4
+log=.specclaw/changes/015-draft-action-settle-race/logs/test-npm-run-test-unit-30555.log
+head=c4b805220501459b447e56b0d81ba3977ca40186
+dirty=true
+cmd=npm run test:unit
+interrupted=false

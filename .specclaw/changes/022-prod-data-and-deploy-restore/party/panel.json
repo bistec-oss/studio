@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "3241597836 6246",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Converts persisted prod captions from Draft.copyText into DraftCaption rows through a migration or restored backfill that must not lose text, restores the deleted deploy workflow (GHCR push, Coolify redeploy, health commit check), and changes the boot sequence, while the conversion mechanism and the prod data copy are still unresolved.",
+  "domains": ["data", "ops"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

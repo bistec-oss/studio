@@ -1,0 +1,7 @@
+exit=0
+duration_s=17
+log=.specclaw/changes/015-draft-action-settle-race/logs/build-npm-run-build-30671.log
+head=c4b805220501459b447e56b0d81ba3977ca40186
+dirty=true
+cmd=npm run build
+interrupted=false

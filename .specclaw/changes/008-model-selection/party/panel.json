@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "681493911 10508",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "Persisted data shape changes (model stamps on Draft/DraftCaption/DraftRevision, plus new TeamModelPolicy and UserModelPreference tables) and model resolution sits on the generation critical path with server-side allow-list validation.",
+  "domains": ["data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

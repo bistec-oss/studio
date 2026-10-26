@@ -1,0 +1,7 @@
+exit=0
+duration_s=17
+log=.specclaw/changes/018-post-008-small-fixes/logs/build-npm-run-build-11383.log
+head=432a036f7aa69a9b7b43361b195dabcd995df6cd
+dirty=true
+cmd=npm run build
+interrupted=false

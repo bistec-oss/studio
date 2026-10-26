@@ -1,0 +1,7 @@
+exit=0
+duration_s=10
+log=.specclaw/changes/019-draft-action-claim-token/logs/lint-npm-run-lint-422.log
+head=b21d71c9bfddf59199c3bd41ab7db53ea610812a
+dirty=true
+cmd=npm run lint
+interrupted=false

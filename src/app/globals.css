@@ -2,29 +2,98 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens: light (default) ─── */
+/* ─── Graphite semantic tokens (change 021, design.md §1) ───
+   Copied verbatim from the Graphite study's token block
+   (docs/ui-reference/direction-studies/study-a-graphite.html), except:
+   - its two --font-* lines: next/font serves the fonts under generated family
+     names, so --font-sans / --font-mono come from the next/font `variable`
+     classes on <body> (src/app/layout.tsx), with the fallback stacks there;
+   - the three --control-* heights, which the study does not declare (014
+     FR-07; 021 A1 sets them to 32 / 38 / 44 px).
+   tests/unit/designTokens.test.ts parses the study file and asserts every
+   other value is equal. Colours are R G B triplets: use rgb(var(--x)) or the
+   Tailwind names in tailwind.config.ts.
+   prettier-ignore below: Prettier would print 0.10 as 0.1; the block stays
+   byte-identical to the study. */
+/* prettier-ignore */
 :root {
-  --background: #f1f5f9;
-  --surface: #ffffff;
-  --surface-hover: #f8fafc;
-  --border: #cbd5e1;
-  --text: #0f172a;
-  --text-muted: #475569;
-
-  --primary: #0284c7;
-  --primary-light: #7dd3fc;
-  --primary-hover: #0369a1;
-  --primary-active: #075985;
+  /* colour */
+  --canvas: 241 240 237;
+  --surface-1: 251 251 250;
+  --surface-2: 255 255 255;
+  --fg: 24 24 22;
+  --fg-muted: 99 97 92;
+  --line: 134 131 124;
+  --line-subtle: 226 224 219;
+  --accent: 24 24 22;
+  --accent-fg: 250 250 249;
+  --focus: 24 24 22;
+  --status-draft: 95 93 87;
+  --status-exported: 105 65 198;
+  --status-scheduled: 138 76 0;
+  --status-published: 30 112 62;
+  --status-failed: 180 35 24;
+  /* elevation — soft layered shadows */
+  --shadow-panel: 0 1px 2px rgb(24 24 22 / 0.04), 0 6px 20px -10px rgb(24 24 22 / 0.10);
+  --shadow-raised: 0 1px 2px rgb(24 24 22 / 0.06), 0 14px 36px -14px rgb(24 24 22 / 0.22);
+  --shadow-overlay: 0 2px 6px rgb(24 24 22 / 0.06), 0 32px 64px -24px rgb(24 24 22 / 0.30);
+  --scrim: 24 24 22;
+  /* radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+  --radius-pill: 999px;
+  /* control heights — one per size: buttons, single-line fields, icon buttons
+     (014 FR-07, 021 A1) */
+  --control-sm: 32px;
+  --control-md: 38px;
+  --control-lg: 44px;
+  /* motion */
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 0.7, 0.2);
+  /* type */
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  /* spacing (4px base, comfortable) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 }
-
-/* ─── Design tokens: dark ─── */
+/* prettier-ignore */
 .dark {
-  --background: #020617;
-  --surface: #0f172a;
-  --surface-hover: #1e293b;
-  --border: #1e293b;
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
+  --canvas: 17 17 16;
+  --surface-1: 26 26 24;
+  --surface-2: 35 35 32;
+  --fg: 238 237 234;
+  --fg-muted: 160 157 150;
+  --line: 116 113 106;
+  --line-subtle: 46 46 43;
+  --accent: 238 237 234;
+  --accent-fg: 24 24 22;
+  --focus: 238 237 234;
+  --status-draft: 181 178 171;
+  --status-exported: 185 163 255;
+  --status-scheduled: 245 181 71;
+  --status-published: 111 207 142;
+  --status-failed: 255 138 122;
+  --shadow-panel: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.30), 0 8px 24px -12px rgb(0 0 0 / 0.50);
+  --shadow-raised: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 2px 4px rgb(0 0 0 / 0.30), 0 18px 44px -14px rgb(0 0 0 / 0.70);
+  --shadow-overlay: inset 0 1px 0 rgb(255 255 255 / 0.07), 0 4px 10px rgb(0 0 0 / 0.30), 0 40px 80px -24px rgb(0 0 0 / 0.80);
+  --scrim: 0 0 0;
 }
 
 /* ─── Base reset ─── */
@@ -33,97 +102,58 @@
     color-scheme: light dark;
   }
   body {
-    background-color: var(--background);
-    color: var(--text);
-    font-family: var(--font-inter), system-ui, sans-serif;
+    background-color: rgb(var(--canvas));
+    color: rgb(var(--fg));
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    background: rgba(2, 132, 199, 0.15);
-    color: #0f172a;
-  }
-  .dark ::selection {
-    background: rgba(125, 211, 252, 0.2);
-    color: #f8fafc;
+    background-color: rgb(var(--accent) / 0.2);
+    color: rgb(var(--fg));
   }
 }
 
-/* ─── Glassmorphism utilities (verbatim from DESIGN_SYSTEM.md §5) ─── */
+/* ─── Surface classes (change 011, DESIGN_SYSTEM.md §4.1; 021 design.md §4.1) ───
+   The only way a primitive gets a surface. Opaque (alpha 1), no
+   backdrop-filter (011 FR-08). background-COLOR, never the `background`
+   shorthand, which would erase a background-image set beside it. Hairlines
+   are box-shadow rings, as the Graphite study draws them, so a surface's
+   edge never adds to its box. */
 @layer components {
-  /* nav bars, top app bar */
-  .glass {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(15, 23, 42, 0.1);
+  /* in-flow panels and cards */
+  .surface {
+    background-color: rgb(var(--surface-1));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
   }
-  .dark .glass {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+  /* the double bezel (021 A4): page-level section cards and the preview
+     stage. A 6 px --line-subtle tray drawn as the border, so the card stays
+     one element; with radius-xl outside, the inner radius is 20 px. The
+     caller adds the padding. */
+  .surface-bezel {
+    background-color: rgb(var(--surface-1));
+    background-clip: padding-box;
+    border: 6px solid rgb(var(--line-subtle));
+    border-radius: var(--radius-xl);
   }
-
-  /* cards, content panels */
-  .glass-panel {
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+  /* dropdown menus, popovers, the font listbox */
+  .surface-raised {
+    background-color: rgb(var(--surface-2));
+    border-radius: var(--radius-md);
+    box-shadow:
+      var(--shadow-raised),
+      0 0 0 1px rgb(var(--line-subtle));
   }
-  .dark .glass-panel {
-    background: rgba(15, 23, 42, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
-  }
-
-  /* Floating menus/popovers (portaled over arbitrary content): near-opaque —
-     the .glass-panel 60%/50% alpha is fine for in-flow panels over the page
-     backdrop but lets underlying text bleed through a floating menu. */
-  .glass-popover {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-  }
-  .dark .glass-popover {
-    background: rgba(15, 23, 42, 0.96);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  }
-
-  /* inputs, selects, textareas.
-     background-COLOR, never the `background` shorthand: the shorthand resets
-     background-image, which erases the Select chevron (an inline-SVG
-     background-image utility) in dark mode and on focus. */
-  .glass-input {
-    background-color: rgba(255, 255, 255, 0.8);
-    border: 1px solid rgba(15, 23, 42, 0.15);
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease,
-      background-color 0.15s ease;
-  }
-  .glass-input:focus {
-    outline: none;
-    background-color: #ffffff;
-    border-color: #0284c7;
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
-  }
-  .dark .glass-input {
-    background-color: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #f8fafc;
-  }
-  .dark .glass-input:focus {
-    background-color: rgba(15, 23, 42, 0.8);
-    border-color: #7dd3fc;
-    box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.15);
-  }
-  .dark .glass-input::placeholder {
-    color: #94a3b8;
+  /* modals, the drawer, confirm dialogs, toasts, the lightbox chrome */
+  .surface-overlay {
+    background-color: rgb(var(--surface-2));
+    border-radius: var(--radius-lg);
+    box-shadow:
+      var(--shadow-overlay),
+      0 0 0 1px rgb(var(--line-subtle));
   }
 }
 
@@ -136,30 +166,11 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(15, 23, 42, 0.18);
+  background: rgb(var(--fg) / 0.18);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.28);
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* ─── Background glow blobs (decorative) ─── */
-.glow-blob {
-  pointer-events: none;
-  position: absolute;
-  border-radius: 9999px;
-  background: rgba(2, 132, 199, 0.08);
-  filter: blur(100px);
-  z-index: -1;
-}
-.dark .glow-blob {
-  background: rgba(125, 211, 252, 0.04);
+  background: rgb(var(--fg) / 0.28);
 }
 
 /* ─── Animations ─── */
@@ -173,20 +184,10 @@
     transform: translateY(0);
   }
 }
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
 /* Centered-modal variant: the dialog is positioned with left/top 50% plus a
    translate(-50%,-50%) class. A keyframe `transform` REPLACES the class
-   transform (and `fill: both` keeps the final frame applied forever), so plain
-   scaleIn wiped the centering translate — the modal's top-left corner landed at
+   transform (and `fill: both` keeps the final frame applied forever), so a plain
+   scale keyframe wiped the centering translate — the modal's top-left corner landed at
    the viewport center and tall dialogs bled off-screen with no way to scroll to
    them. These keyframes carry the translate through every frame. */
 @keyframes modalIn {
@@ -213,12 +214,92 @@
 .animate-fade-in {
   animation: fadeIn 0.3s ease both;
 }
-.animate-scale-in {
-  animation: scaleIn 0.25s ease both;
-}
 .animate-modal-in {
-  animation: modalIn 0.25s ease both;
+  animation: modalIn var(--dur-base) var(--ease-standard) both;
 }
 .animate-slide-in {
   animation: slideInRight 0.25s ease both;
+}
+/* The entrances (DESIGN_SYSTEM.md §7.2; the study's pop and rise). Neither is
+   for a transform-centred element (see modalIn above).
+   - pop: menus and popovers. The caller sets the transform-origin
+     (origin-top-left under a trigger, and so on).
+   - rise: toasts. `backwards`, not `both`: Sonner positions and stacks each
+     toast with its own transform, which a held final frame would override. */
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: pop var(--dur-base) var(--ease-standard) both;
+}
+.animate-rise {
+  animation: rise var(--dur-slow) var(--ease-standard) backwards;
+}
+
+/* Toasts (011 T5): Sonner runs `unstyled`, which also drops the rule that
+   hides the content of the toasts stacked behind the front one. Without it,
+   a taller back toast's text would show below the front toast. */
+[data-sonner-toast][data-expanded='false'][data-front='false'] > * {
+  opacity: 0;
+}
+
+/* ─── Reduced motion (NFR-03, DESIGN_SYSTEM.md §7.3) ───
+   Shorten every animation and transition instead of removing them: an
+   animation that still runs still applies its `fill: both` final frame, and
+   modalIn's final frame carries the modal's translate(-50%,-50%) centring.
+   One iteration, so an infinite loop (a spinner, a skeleton pulse) settles on
+   its end frame instead of flickering at 1 ms per cycle. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  /* Loading indicators are status, not decoration: they keep moving, slowly,
+     so a pending state still reads as pending. Capped to one 1 ms cycle above,
+     they would freeze; left infinite at 1 ms, they would strobe. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+  .animate-pulse {
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
+  }
+  /* Menus and toasts swap their entrance for a 150 ms opacity-only fade.
+     These selectors outrank `*`, so 150 ms wins over the 1 ms above; the
+     toast selector also outranks Sonner's own reduced-motion rule, which
+     switches every toast animation off. */
+  .surface-raised,
+  .animate-pop,
+  [data-sonner-toaster] [data-sonner-toast] {
+    animation: fade 150ms linear both !important;
+  }
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }

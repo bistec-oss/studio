@@ -1,0 +1,7 @@
+exit=0
+duration_s=20
+log=.specclaw/changes/007-brandkit-design-system/logs/build-npm-run-build-1164.log
+head=026b5bffe86ec3ba40a1ebdfd10fd12833904c95
+dirty=true
+cmd=npm run build
+interrupted=false

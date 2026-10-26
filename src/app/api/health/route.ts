@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { env } from '@/lib/env'
 
-// Public, unauthenticated version endpoint (FR-P0-4). CI polls this after a
-// deploy to prove prod is serving the pushed commit (see the verify step in
-// docker-publish.yml). Deliberately exposes nothing else: no env, no DB
+// Public, unauthenticated version endpoint (FR-P0-4). Reports the commit the
+// image was built from: whoever builds it passes --build-arg GIT_SHA=<sha>
+// (e.g. a future deploy workflow); without it, commit is "unknown".
+// Deliberately exposes nothing else: no env, no DB
 // detail — a commit SHA of a public repo isn't sensitive, those would be.
 // Do NOT wrap this route in withAuth/withTeamAuth, and keep the response
 // body to exactly these two keys.

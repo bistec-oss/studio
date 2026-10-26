@@ -1,0 +1,7 @@
+exit=0
+duration_s=8
+log=.specclaw/changes/013-fork-ci-checks-only/logs/lint-npm-run-lint-788.log
+head=cc92ba0ab15483c89382be4a8f90876608fb08dc
+dirty=true
+cmd=npm run lint
+interrupted=false

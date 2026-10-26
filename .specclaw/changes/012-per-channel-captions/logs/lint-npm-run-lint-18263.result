@@ -1,0 +1,7 @@
+exit=0
+duration_s=8
+log=.specclaw/changes/012-per-channel-captions/logs/lint-npm-run-lint-18263.log
+head=3d6458990ec6bd7b7994539f0fe0d3f10052df0e
+dirty=true
+cmd=npm run lint
+interrupted=false

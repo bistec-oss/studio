@@ -6,6 +6,9 @@ import {
   requiresAdmin,
   validateTemplateSelection,
   toEntryCreateData,
+  loadCampaignStyleDefaults,
+  type ResolvedEntryStyle,
+  resolveEntryStyle,
 } from '@/lib/campaign/queue'
 
 type Params = { id: string }
@@ -37,7 +40,7 @@ export const POST = withTeamAuth<Params>(async (req, { params }, user) => {
   // any entry needs it.
   if (entries.some((e) => requiresAdmin(e.postAction)) && !(user.teamRole === 'ADMIN' || user.isSuperAdmin)) {
     return NextResponse.json(
-      { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
+      { error: 'Auto-publish actions require a team admin — use HOLD to generate for review.' },
       { status: 403 }
     )
   }
@@ -48,10 +51,20 @@ export const POST = withTeamAuth<Params>(async (req, { params }, user) => {
     if (templateError) return templateError
   }
 
+  // 027 FR-06: resolve every entry's style before writing anything; an unknown
+  // key names the entry (1-based) and rejects the whole plan.
+  const defaults = await loadCampaignStyleDefaults(params.id)
+  const styles: ResolvedEntryStyle[] = []
+  for (const [i, entry] of entries.entries()) {
+    const style = resolveEntryStyle(defaults, entry, i + 1)
+    if (!style.ok) return style.response
+    styles.push(style.style)
+  }
+
   const created = await prisma.$transaction(
-    entries.map((entry) =>
+    entries.map((entry, i) =>
       prisma.scheduledGeneration.create({
-        data: toEntryCreateData(params.id, user.userId, entry, campaign.teamId),
+        data: toEntryCreateData(params.id, user.userId, entry, campaign.teamId, styles[i]),
         include: ENTRY_INCLUDE,
       })
     )

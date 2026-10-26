@@ -1,0 +1,151 @@
+[
+  {
+    "slot": "device-screen:SQUARE",
+    "attempt": 1,
+    "runId": "763888e5-5b7e-42d0-a579-5eb536c917f7",
+    "styleKept": false,
+    "fallbackReason": "busy",
+    "threshold": 0.04,
+    "promptHash": "3db759aea9748b09fd5748517c7014c70671e01b15d52a732b757193a0ecd4d4",
+    "render": "device-screen_SQUARE_1.png",
+    "error": null,
+    "accepted": null,
+    "recheck": {
+      "styleKept": false,
+      "fallbackReason": "busy",
+      "rect": null
+    }
+  },
+  {
+    "slot": "device-screen:SQUARE",
+    "attempt": 2,
+    "runId": "c31b92c7-9634-45ef-be39-562b4278e2f1",
+    "styleKept": false,
+    "fallbackReason": "composite-not-blank",
+    "threshold": 0.04,
+    "promptHash": "b2384f46707354d9b07fb50411395ef9c2428dddcd73e54c98f6568061ab910c",
+    "render": "device-screen_SQUARE_2.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 18.76,
+        "y": 39.72,
+        "w": 62.59,
+        "h": 37.78
+      }
+    }
+  },
+  {
+    "slot": "device-screen:PORTRAIT",
+    "attempt": 1,
+    "runId": "c31b92c7-9634-45ef-be39-562b4278e2f1",
+    "styleKept": false,
+    "fallbackReason": "composite-not-blank",
+    "threshold": 0.04,
+    "promptHash": "adfbdb1bed1621411620a6e1b3f39906065a68ada85a3e29b5f47a7b810a2129",
+    "render": "device-screen_PORTRAIT_1.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 9.17,
+        "y": 39,
+        "w": 81.48,
+        "h": 41.19
+      }
+    }
+  },
+  {
+    "slot": "device-screen:STORY",
+    "attempt": 1,
+    "runId": "c31b92c7-9634-45ef-be39-562b4278e2f1",
+    "styleKept": false,
+    "fallbackReason": "composite-not-blank",
+    "threshold": 0.04,
+    "promptHash": "2b49e927a86925b1b5a88c8a26fc00c01a6c11da4e35aee99ef8075d2ea1c40d",
+    "render": "device-screen_STORY_1.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 6.2,
+        "y": 41.95,
+        "w": 86.3,
+        "h": 30.83
+      }
+    }
+  },
+  {
+    "slot": "device-screen:SQUARE",
+    "attempt": 3,
+    "runId": "3272e5c9-b41a-46af-8780-7c3abc3706de",
+    "styleKept": true,
+    "fallbackReason": null,
+    "threshold": 0.04,
+    "promptHash": "b4016d88a8eebe217596a710dddd6836e23e51c02397c7892a60afc34159e7d4",
+    "render": "device-screen_SQUARE_3.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 19.31,
+        "y": 40.46,
+        "w": 61.48,
+        "h": 38.15
+      }
+    }
+  },
+  {
+    "slot": "device-screen:PORTRAIT",
+    "attempt": 2,
+    "runId": "3272e5c9-b41a-46af-8780-7c3abc3706de",
+    "styleKept": true,
+    "fallbackReason": null,
+    "threshold": 0.04,
+    "promptHash": "a17ad1d802a92d0e435a769e0481b65c8c6097e67b25187ce1354f8c6c121fad",
+    "render": "device-screen_PORTRAIT_2.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 13.98,
+        "y": 40.63,
+        "w": 72.04,
+        "h": 35.56
+      }
+    }
+  },
+  {
+    "slot": "device-screen:STORY",
+    "attempt": 2,
+    "runId": "3272e5c9-b41a-46af-8780-7c3abc3706de",
+    "styleKept": true,
+    "fallbackReason": null,
+    "threshold": 0.04,
+    "promptHash": "c2886de6df9799368cbae3e64d472744d7c4366a29ccac062a075c0bf6c9edd1",
+    "render": "device-screen_STORY_2.png",
+    "error": null,
+    "accepted": true,
+    "recheck": {
+      "styleKept": true,
+      "fallbackReason": null,
+      "rect": {
+        "x": 10.09,
+        "y": 46.84,
+        "w": 80,
+        "h": 28.13
+      }
+    }
+  }
+]

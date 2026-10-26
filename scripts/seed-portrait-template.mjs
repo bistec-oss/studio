@@ -1,5 +1,5 @@
 /**
- * Seeds a simple 3:4 PORTRAIT (1080×1350) HTML template onto the system-default
+ * Seeds a simple 4:5 PORTRAIT (1080×1350) HTML template onto the system-default
  * brand kit, so Path A has a portrait option out of the box (the brief wizard
  * filters templates by the chosen size).
  *
@@ -80,7 +80,7 @@ async function main() {
     },
   })
 
-  console.log(`Created 3:4 template "${template.name}" (${template.id}) on kit "${kit.name}"`)
+  console.log(`Created 4:5 template "${template.name}" (${template.id}) on kit "${kit.name}"`)
 }
 
 main()

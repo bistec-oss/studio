@@ -1,0 +1,7 @@
+exit=0
+duration_s=17
+log=.specclaw/changes/017-publish-api-fixes/logs/build-npm-run-build-2186.log
+head=e539395db0a550f74e8d384464e0b8e269041d89
+dirty=true
+cmd=npm run build
+interrupted=false

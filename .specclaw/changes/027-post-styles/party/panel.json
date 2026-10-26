@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "3829964973 8133",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "It adds a post-style column to the brief, queue entry and campaign tables, and four open questions (how old goal-only briefs map, separate light-variant keys, whether a General style exists, and where the checklist sits relative to the briefing and kit voice) would each change what gets built, so it is deep despite the proposal's own 'large' claim being the only reason it is not thin.",
+  "domains": ["data"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

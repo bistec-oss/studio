@@ -1,0 +1,7 @@
+exit=0
+duration_s=13
+log=.specclaw/changes/031-v2-final-polish/logs/lint-npm-run-lint-74627.log
+head=21dcda2dbeba91d19315499c8c9e7ba34e3f0c10
+dirty=true
+cmd=npm run lint
+interrupted=false

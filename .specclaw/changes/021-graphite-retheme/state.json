@@ -1,0 +1,13 @@
+{
+  "change": "021-graphite-retheme",
+  "phase": "verify",
+  "branch": "",
+  "size": "architectural",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-18T16:45:19Z" },
+    "spec": { "status": "done", "at": "2026-10-18T17:15:14Z" },
+    "design": { "status": "done", "at": "2026-10-18T17:15:15Z" },
+    "tasks": { "status": "done", "at": "2026-10-18T17:15:16Z" },
+    "verify": { "status": "passed", "at": "2026-10-20T11:16:33Z", "verdict": "PASS" }
+  }
+}

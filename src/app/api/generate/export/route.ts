@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
-import { renderHtmlToPng } from '@/lib/renderer/puppeteer'
+import { CompositePlacementError } from '@/lib/composite/render'
+import { draftCompositionStamp, renderDraftHtml } from '@/lib/drafts/revisions'
 import { uploadObject, resolveExportUrl, exportKey, BUCKET_EXPORTS } from '@/lib/storage/minio'
 import { dimensionsFor } from '@/lib/aspectRatio'
 
@@ -35,7 +36,17 @@ export const POST = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   }
 
   const { width, height } = dimensionsFor(draft.brief.aspectRatio)
-  const buffer = await renderHtmlToPng(draft.htmlContent, width, height)
+  let buffer: Buffer
+  try {
+    // 025 FR-16: the draft's own stamp decides the screenshot.
+    // 030 FR-04: an export re-renders the same HTML and leaves renderedText alone.
+    buffer = (await renderDraftHtml(draftId, draft.htmlContent, draftCompositionStamp(draft), width, height, null)).png
+  } catch (err) {
+    if (err instanceof CompositePlacementError) {
+      return NextResponse.json({ error: err.message, code: 'composite-not-placed' }, { status: 422 })
+    }
+    throw err
+  }
   const key = exportKey('export', draftId)
   await uploadObject(buffer, BUCKET_EXPORTS, key, 'image/png')
 

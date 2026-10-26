@@ -56,6 +56,18 @@ RUN npx esbuild src/scheduler/worker.ts \
     --outfile=dist/scheduler/worker.js \
     --external:@prisma/client
 
+# Bundle the boot-time env preflight (change 022 FR-04) the same way, with the
+# same flags. docker-entrypoint.sh runs it before `prisma migrate deploy`, so an
+# env value the app would reject (e.g. an unknown CLAUDE_CLI_MODEL) stops the
+# boot before any schema change. It loads src/lib/env.ts, which imports nothing
+# from @prisma/client; the external flag is kept only to mirror the worker.
+RUN npx esbuild src/scripts/env-preflight.ts \
+    --bundle \
+    --platform=node \
+    --format=cjs \
+    --outfile=dist/scripts/env-preflight.js \
+    --external:@prisma/client
+
 # ─── Stage 3: runner ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -65,13 +77,25 @@ WORKDIR /app
 # ships only Latin-capable fonts, so without this Sinhala copy rasterizes as tofu
 # boxes. Installed OS-wide so Chromium's fontconfig fallback picks it up for any
 # Sinhala codepoint automatically — no CSS/@import required in the generated HTML.
-RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala
+# font-noto-symbols: monochrome symbol glyphs (Noto Sans Symbols + Symbols 2 —
+# ★ ✓ ✦ → • and the rest of the arrows/dingbats/misc-symbols blocks). Without it
+# symbols the design agent uses rasterize as tofu boxes. Symbols only, no Latin,
+# so it never displaces the default text font; deliberately NOT a colour emoji
+# set. Picked up by the same fontconfig fallback as Sinhala, no CSS needed.
+# scripts/glyph-check/check-glyphs.mjs proves the coverage inside the built image.
+RUN apk add --no-cache libc6-compat chromium openssl font-noto-sinhala font-noto-symbols
 
 # Claude Code CLI — CLI-mode generation (DESIGN_PROVIDER=cli) spawns `claude -p`
-# per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN env (the shared server
-# token, or a user's personal token injected per-call by claudeCli.ts). Installed
-# as root so `claude` lands on PATH at /usr/local/bin.
-RUN npm install -g @anthropic-ai/claude-code
+# per call, authenticated by CLAUDE_CODE_OAUTH_TOKEN in the child's env: the
+# acting user's personal token, else the team's token, injected per call by
+# claudeCli.ts (there is no shared server token). Installed as root so `claude`
+# lands on PATH at /usr/local/bin.
+# PINNED (005 FR-11): CLI vision parses the stream-json event schema and relies
+# on --tools "", --no-session-persistence, --safe-mode and --setting-sources —
+# all of which can drift between CLI releases. Bump only after re-running
+# scripts/cli-sandbox-check.mjs (AC-16) in the rebuilt image. claudeCli.ts also
+# sets DISABLE_AUTOUPDATER=1 so the pinned CLI never replaces itself.
+RUN npm install -g @anthropic-ai/claude-code@2.1.287
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -105,14 +129,19 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # scope copied above carries the linux-musl engines this image needs.
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
-# Copy the bundled scheduler worker (see the esbuild step in the builder stage).
+# Copy the bundled scheduler worker and the env preflight (see the esbuild steps
+# in the builder stage).
 COPY --from=builder /app/dist ./dist
 
-# Applies pending migrations, then execs CMD. chmod here rather than relying on
+# Runs the env preflight, applies pending migrations, then execs CMD. chmod here rather than relying on
 # the committed file mode — this repo is developed on Windows, where git does not
 # track the executable bit.
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
+
+# The operator-run AC-16 check (005): CLI vision + injection inside this image
+# with the pinned CLI. Inert unless someone runs it with a token — see its header.
+COPY scripts/cli-sandbox-check.mjs ./scripts/cli-sandbox-check.mjs
 
 USER nextjs
 
@@ -121,8 +150,8 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Commit SHA the image was built from (FR-P0-3) — passed as a build-arg by CI
-# (build-args: GIT_SHA=${{ github.sha }} in docker-publish.yml), not a secret.
+# Commit SHA the image was built from (FR-P0-3) — whoever builds the image
+# passes --build-arg GIT_SHA=<sha> (e.g. a future deploy workflow); not a secret.
 # Declared here, after every COPY/RUN layer above (still after `npm run build`
 # in the builder stage, so the force-dynamic reasoning in /api/health still
 # holds — this only changes which layer a new commit invalidates) so a new

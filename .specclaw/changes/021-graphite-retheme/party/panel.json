@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "sig": "205176347 5286",
+  "tier": "standard",
+  "tier_source": "classifier",
+  "rationale": "Restyles about 80 files across every screen and primitive, but every edit is a token, class or shape change with no behaviour, API, schema or copy change, and the open questions (wordmark font, change order, carry-over notes) are cosmetic or scheduling choices that do not alter what is built.",
+  "domains": [],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" }
+  ],
+  "dropped": []
+}

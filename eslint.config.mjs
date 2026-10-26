@@ -14,6 +14,10 @@ export default defineConfig([
       "playwright-report/**",
       "coverage/**",
       "next-env.d.ts",
+      // Planning artifacts (proposals, operator scripts), not application code.
+      // A .cjs here crashed the run: the rules below apply to it, but the
+      // react-hooks plugin is only registered for the next configs' file types.
+      ".specclaw/**",
     ],
   },
   {

@@ -4,6 +4,8 @@ import { withTeamAuth } from "@/lib/api/handler"
 import { draftVisibilityWhere } from "@/lib/authz/visibility"
 import { resolveExportUrl } from "@/lib/storage/minio"
 import { Prisma, PostStatus } from "@prisma/client"
+import { headlineState } from "@/lib/renderedText/state"
+import { parseRenderedText } from "@/lib/renderedText/stamp"
 
 export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   const { searchParams } = new URL(req.url)
@@ -72,6 +74,9 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
         status: true,
         exportUrl: true,
         createdAt: true,
+        // 030 FR-12: read only to derive the state; neither is returned.
+        headline: true,
+        renderedText: true,
         brief: {
           select: {
             topic: true,
@@ -108,7 +113,11 @@ export const GET = withTeamAuth(async (req: NextRequest, _ctx, user) => {
   // exportUrl is stored as an EXPORTS object key — sign each for the browser
   // (thumbnails). Signing is local (no network round-trip), so mapping is cheap.
   const signedDrafts = await Promise.all(
-    drafts.map(async (d) => ({ ...d, exportUrl: await resolveExportUrl(d.exportUrl) }))
+    drafts.map(async ({ headline, renderedText, ...d }) => ({
+      ...d,
+      exportUrl: await resolveExportUrl(d.exportUrl),
+      headlineState: headlineState(parseRenderedText(renderedText), headline),
+    }))
   )
 
   return NextResponse.json({ drafts: signedDrafts, total, page, pageSize })

@@ -1,5 +1,8 @@
 import type { AspectRatio } from '@prisma/client'
 import { runVisionModel } from '@/lib/agent/vision'
+import { resolveAssistantModel } from '@/lib/campaign/briefingAssistant'
+import { pipelineMode } from '@/lib/agent/config'
+import { modelCallFor, recordModelCall } from '@/lib/models/modelCalls'
 import { getImageDimensions } from '@/lib/renderer/puppeteer'
 import { dimensionsFor, nearestAspectRatio } from '@/lib/aspectRatio'
 import { extractHtmlDocument } from '@/lib/agent/htmlDocument'
@@ -24,7 +27,10 @@ export async function generateTemplateFromImage(input: {
   imageUrl: string
   aspectRatioOverride?: AspectRatio
   teamId: string
+  userId: string | null
 }): Promise<TemplateFromImageResult> {
+  // 008 FR-02: image → template runs the team's ASSISTANT_BRANDKIT model.
+  const model = await resolveAssistantModel('ASSISTANT_BRANDKIT', input.teamId, input.userId)
   let aspectRatio = input.aspectRatioOverride
   if (!aspectRatio) {
     const { width, height } = await getImageDimensions(input.imageDataUrl)
@@ -32,7 +38,11 @@ export async function generateTemplateFromImage(input: {
   }
   const { width, height } = dimensionsFor(aspectRatio)
 
-  if (MOCK_AI) return { html: buildMockTemplateHtml(width, height), aspectRatio }
+  if (MOCK_AI) {
+    // 008 FR-16: the short-circuited call is recorded first.
+    recordModelCall(modelCallFor(model, pipelineMode(), 'image-template'))
+    return { html: buildMockTemplateHtml(width, height), aspectRatio }
+  }
 
   const system = [
     'You convert a reference image into a REUSABLE HTML/CSS template for bistec-studio (a "Path A" brand template).',
@@ -49,6 +59,7 @@ export async function generateTemplateFromImage(input: {
     maxTokens: 4096,
     label: 'image-template',
     teamId: input.teamId,
+    model,
   })
   // Same cut as the design path (htmlDocument.ts): a preamble saved into a
   // template would be painted onto every post generated from it, not just once.

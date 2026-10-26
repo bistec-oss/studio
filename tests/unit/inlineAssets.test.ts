@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractInlineAssets, restoreInlineAssets, missingTokens } from '@/lib/agent/inlineAssets'
+import { extractInlineAssets, restoreInlineAssets, missingTokens, reconcileInlineAssets } from '@/lib/agent/inlineAssets'
 
 // A few fake base64 payloads, long enough that extraction visibly shrinks the HTML.
 const PNG_A = `data:image/png;base64,${'A'.repeat(5000)}`
@@ -73,5 +73,64 @@ describe('missingTokens', () => {
   it('returns empty when all tokens survive', () => {
     const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
     expect(missingTokens(html, assets)).toEqual([])
+  })
+})
+
+describe('reconcileInlineAssets', () => {
+  // AC-05: same N tokens back → clean
+  it('reconciles clean when the reply returns the same tokens (AC-05)', () => {
+    const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
+    const tokens = Object.keys(assets)
+    expect(reconcileInlineAssets(tokens, html)).toEqual({ kind: 'clean' })
+  })
+
+  // zero tokens sent & zero back → clean
+  it('reconciles clean when nothing was sent and nothing comes back', () => {
+    expect(reconcileInlineAssets([], '<div>no placeholders here</div>')).toEqual({ kind: 'clean' })
+  })
+
+  // AC-06: a placeholder absent restores it
+  it('restores a cleanly absent token (AC-06)', () => {
+    const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
+    const tokens = Object.keys(assets)
+    const replyHtml = html.split(tokens[0]).join('') // model dropped the first token
+    const result = reconcileInlineAssets(tokens, replyHtml)
+    expect(result).toEqual({ kind: 'restored', missing: [tokens[0]] })
+  })
+
+  // AC-07: renamed — an unrecognized token appears where a sent one is missing
+  it('treats a renamed token as a mismatch (AC-07)', () => {
+    const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
+    const tokens = Object.keys(assets)
+    const replyHtml = html.split(tokens[0]).join('__INLINE_ASSET_RENAMED__')
+    const result = reconcileInlineAssets(tokens, replyHtml)
+    expect(result.kind).toBe('mismatch')
+  })
+
+  // AC-07: duplicated — a sent token appears twice in the reply
+  it('treats a duplicated token as a mismatch (AC-07)', () => {
+    const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
+    const tokens = Object.keys(assets)
+    const replyHtml = `${html}<div style="background:url(${tokens[0]})"></div>`
+    const result = reconcileInlineAssets(tokens, replyHtml)
+    expect(result.kind).toBe('mismatch')
+  })
+
+  // AC-07: reindexed — a token in the sent shape but an index that was never sent
+  it('treats a reindexed token as a mismatch (AC-07)', () => {
+    const { html, assets } = extractInlineAssets(HTML_WITH_ASSETS)
+    const tokens = Object.keys(assets)
+    const replyHtml = html.split(tokens[0]).join('__INLINE_ASSET_99__')
+    const result = reconcileInlineAssets(tokens, replyHtml)
+    expect(result.kind).toBe('mismatch')
+  })
+
+  // A token-like string inside an attribute is still counted (the regex decides)
+  it('counts a token found inside an unrelated attribute, not only in src/url() position', () => {
+    const { assets } = extractInlineAssets(`<img src="${PNG_A}">`)
+    const token = Object.keys(assets)[0]
+    const replyHtml = `<img src="${token}" alt="${token}">` // same token twice: src + alt
+    const result = reconcileInlineAssets([token], replyHtml)
+    expect(result.kind).toBe('mismatch') // counted twice → duplicated, not clean
   })
 })

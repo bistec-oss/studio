@@ -1,0 +1,23 @@
+[
+  {
+    "tag": "sq-product__product-showcase",
+    "brief": "sq-product",
+    "kind": "product",
+    "aspectRatio": "SQUARE",
+    "style": "product-showcase",
+    "draftId": "cmvl73gvy00038wzpfut7btz5",
+    "secs": 203,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "high"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-product__product-showcase.png"
+  }
+]

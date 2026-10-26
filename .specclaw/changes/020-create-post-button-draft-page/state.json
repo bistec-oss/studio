@@ -1,0 +1,13 @@
+{
+  "change": "020-create-post-button-draft-page",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "bounded",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-13T15:44:24Z" },
+    "spec": { "status": "done", "at": "2026-10-20T17:01:59Z" },
+    "tasks": { "status": "done", "at": "2026-10-20T17:02:00Z" },
+    "build": { "status": "in-progress", "at": "2026-10-20T17:08:50Z" },
+    "verify": { "status": "passed", "at": "2026-10-20T18:15:23Z", "verdict": "PASS" }
+  }
+}

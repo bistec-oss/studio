@@ -1,0 +1,18 @@
+{
+  "change": "012-per-channel-captions",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "architectural",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-09T04:41:49Z" },
+    "spec": { "status": "done", "at": "2026-10-10T18:19:36Z" },
+    "design": { "status": "done", "at": "2026-10-10T18:19:37Z" },
+    "tasks": { "status": "done", "at": "2026-10-10T18:19:37Z" },
+    "build": {
+      "status": "done",
+      "at": "2026-10-12T01:38:17Z",
+      "tasks": { "done": 16, "total": 16, "failed": 0 }
+    },
+    "verify": { "status": "passed", "at": "2026-10-12T01:56:49Z", "verdict": "PASS" }
+  }
+}

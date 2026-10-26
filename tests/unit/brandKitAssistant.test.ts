@@ -2,31 +2,63 @@
 // on, the deterministic MOCK_AI seam the E2E asserts on, and the chat grounding
 // union (BrandKitDocument source docs + feedToAI artifacts). Prisma, MinIO, and
 // the model runners are mocked; buildDocsContext is real.
+// 008 T8: the chat, image → template and the voice draft resolve
+// ASSISTANT_BRANDKIT — the resolver (policy.ts → decideModel) runs for real on a
+// faked TeamModelPolicy row, in a mode the test sets.
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 
 const h = vi.hoisted(() => ({
   artifactFindMany: vi.fn(),
   documentFindMany: vi.fn(),
   runVisionModel: vi.fn(),
   runBriefingModel: vi.fn(),
+  cli: false,
+  mockAi: false,
+  policy: null as null | Record<string, unknown>,
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     brandKitArtifact: { findMany: h.artifactFindMany },
     brandKitDocument: { findMany: h.documentFindMany },
+    teamModelPolicy: { findUnique: async () => h.policy },
+    userClaudeToken: { findFirst: async () => null },
   },
 }))
 vi.mock('@/lib/agent/vision', () => ({ runVisionModel: h.runVisionModel }))
-vi.mock('@/lib/campaign/briefingAssistant', () => ({ runBriefingModel: h.runBriefingModel }))
+// The real resolveAssistantModel / AssistantModelError; only the call is faked.
+vi.mock('@/lib/campaign/briefingAssistant', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/campaign/briefingAssistant')>()),
+  runBriefingModel: h.runBriefingModel,
+}))
+// The mode, deterministically (the local .env may set CLI mode; CI has none).
+vi.mock('@/lib/agent/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/agent/config')>()),
+  isCliMode: () => h.cli,
+  pipelineMode: () => (h.cli ? 'cli' : 'api'),
+}))
+vi.mock('@/lib/testHooks', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/testHooks')>()),
+  get MOCK_AI() {
+    return h.mockAi
+  },
+}))
+vi.mock('@/lib/renderer/puppeteer', () => ({
+  sampleImageColors: async () => [],
+  getImageDimensions: async () => ({ width: 1080, height: 1350 }),
+}))
 vi.mock('@/lib/storage/minio', () => ({
   BUCKET_DOCS: 'docs',
   getPresignedUrl: vi.fn(async (_bucket: string, key: string) => `https://minio.invalid/docs/${key}`),
 }))
 
 import { collectBrandKitGrounding, extractBrandKitBlock, runBrandKitChat } from '@/lib/brandkit/assistant'
+import { generateTemplateFromImage } from '@/lib/brandkit/templateFromImage'
+import { draftBrandVoice } from '@/lib/brandkit/voiceDraft'
+import { AssistantModelError } from '@/lib/campaign/briefingAssistant'
 import { buildMockBrandKitReply } from '@/lib/testHooks'
+import { setModelCallSink, type ModelCallRecord } from '@/lib/models/modelCalls'
 
 // The grounding queries are dispatched off the where clause: artifact images
 // use type:{in:[…]}, artifact docs use type:'REFERENCE_DOC'; kit-document
@@ -50,7 +82,13 @@ function stubGrounding(opts: {
   )
 }
 
+let calls: ModelCallRecord[] = []
 beforeEach(() => {
+  h.cli = false
+  h.mockAi = false
+  h.policy = null
+  calls = []
+  setModelCallSink({ record: (r) => calls.push(r), read: () => calls, clear: () => (calls = []) })
   h.artifactFindMany.mockReset()
   h.documentFindMany.mockReset()
   h.runVisionModel.mockReset().mockResolvedValue('vision reply — no block')
@@ -109,7 +147,7 @@ describe('runBrandKitChat grounding', () => {
 
   it('returns the canned reply ONLY when there are no artifacts AND no documents', async () => {
     stubGrounding({})
-    const result = await runBrandKitChat('k1', messages, 'team-1')
+    const result = await runBrandKitChat('k1', messages, 'team-1', 'u1')
     expect(result.reply).toContain('Add at least one reference')
     expect(result.suggestion).toBeNull()
     expect(h.runVisionModel).not.toHaveBeenCalled()
@@ -120,7 +158,7 @@ describe('runBrandKitChat grounding', () => {
     stubGrounding({
       docTexts: [{ name: 'guidelines.pdf', parsedText: 'DOCUMENT BODY', truncated: false }],
     })
-    const result = await runBrandKitChat('k1', messages, 'team-1')
+    const result = await runBrandKitChat('k1', messages, 'team-1', 'u1')
     expect(result.reply).toBe('text reply — no block')
     expect(h.runVisionModel).not.toHaveBeenCalled()
     expect(h.runBriefingModel).toHaveBeenCalledTimes(1)
@@ -130,7 +168,7 @@ describe('runBrandKitChat grounding', () => {
 
   it('a document IMAGE alone lifts the guard and routes to the vision model', async () => {
     stubGrounding({ docImageKeys: ['brandkits/k1/ref.png'] })
-    const result = await runBrandKitChat('k1', messages, 'team-1')
+    const result = await runBrandKitChat('k1', messages, 'team-1', 'u1')
     expect(result.reply).toBe('vision reply — no block')
     expect(h.runBriefingModel).not.toHaveBeenCalled()
     expect(h.runVisionModel).toHaveBeenCalledTimes(1)
@@ -149,12 +187,12 @@ describe('extractBrandKitBlock', () => {
     ].join('\n')
     const block = extractBrandKitBlock(text)
     expect(block).toMatchObject({ voice: 'Warm and expert.', tone: 'friendly', style: 'airy' })
-    expect(block!.fonts).toEqual(['Inter'])
+    expect(block!.fonts).toEqual({ heading: 'Inter' })
   })
 
   it('applies defaults for omitted optional fields', () => {
     const block = extractBrandKitBlock('```brandkit\n{"voice":"Just a voice."}\n```')
-    expect(block).toMatchObject({ voice: 'Just a voice.', tone: '', style: '', fonts: [], colors: [] })
+    expect(block).toMatchObject({ voice: 'Just a voice.', tone: '', style: '', fonts: {}, colors: [] })
   })
 
   it('parses document-declared hex colors and rejects non-hex values', () => {
@@ -185,6 +223,115 @@ describe('MOCK_AI brand-kit seam', () => {
     const block = extractBrandKitBlock(reply)
     expect(block).not.toBeNull()
     expect(block!.voice).toContain('extract style')
-    expect(block!.fonts.length).toBeGreaterThan(0)
+    expect(Object.keys(block!.fonts).length).toBeGreaterThan(0)
   })
 })
+
+// ── 008 T8: the brand-kit surfaces on the resolver ───────────────────────────
+
+const SONNET = 'claude-sonnet-5-5'
+const HAIKU = 'claude-haiku-4-5'
+const haikuDefault = () => ({
+  allowedModels: ['HAIKU', 'SONNET', 'OPUS'],
+  requirePersonalTokenForGated: false,
+  defaults: [{ surface: 'ASSISTANT_BRANDKIT', model: 'HAIKU' }],
+})
+const noModel = () => ({ allowedModels: [], requirePersonalTokenForGated: false, defaults: [] })
+const TEMPLATE_HTML = '<!doctype html><html><body>template</body></html>'
+const fromImage = () =>
+  generateTemplateFromImage({
+    imageDataUrl: 'data:image/png;base64,AAAA',
+    imageUrl: 'https://cdn/ref.png',
+    teamId: 'team-1',
+    userId: 'u1',
+  })
+const voice = () => draftBrandVoice('team-1', 'u1', 'Write a voice prompt.', { mockDraft: 'MOCK VOICE' })
+
+describe('008 T8: ASSISTANT_BRANDKIT', () => {
+  const messages = [{ role: 'user' as const, content: 'extract the style' }]
+  // The palette sampler fetches the references: answer at once, never the network.
+  beforeEach(() => vi.stubGlobal('fetch', async () => new Response('', { status: 404 })))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('the chat hands the resolved model to the vision call (no team default → Sonnet, system)', async () => {
+    stubGrounding({ artifactImageUrls: ['https://cdn/art-1.png'] })
+    await runBrandKitChat('k1', messages, 'team-1', 'u1')
+    expect(h.runVisionModel.mock.calls[0][0].model).toMatchObject({
+      surface: 'ASSISTANT_BRANDKIT',
+      key: 'SONNET',
+      arg: SONNET,
+      source: 'system',
+    })
+  })
+
+  it('the documents-only chat hands it to the text call, labelled brandkit (team default → Haiku)', async () => {
+    h.policy = haikuDefault()
+    stubGrounding({ docTexts: [{ name: 'g.pdf', parsedText: 'BODY', truncated: false }] })
+    await runBrandKitChat('k1', messages, 'team-1', 'u1')
+    const [, , teamId, model, opts] = h.runBriefingModel.mock.calls[0]
+    expect(teamId).toBe('team-1')
+    expect(model).toMatchObject({ surface: 'ASSISTANT_BRANDKIT', key: 'HAIKU', arg: HAIKU, source: 'team' })
+    expect(opts).toEqual({ label: 'brandkit' })
+  })
+
+  it('image → template hands the resolved model to the vision call', async () => {
+    h.policy = haikuDefault()
+    h.runVisionModel.mockResolvedValue(TEMPLATE_HTML)
+    const result = await fromImage()
+    expect(result.aspectRatio).toBe('PORTRAIT')
+    expect(h.runVisionModel.mock.calls[0][0]).toMatchObject({
+      label: 'image-template',
+      maxTokens: 4096,
+      model: { surface: 'ASSISTANT_BRANDKIT', key: 'HAIKU', source: 'team' },
+    })
+  })
+
+  it('the voice draft runs through runBriefingModel: no system, one user message, max_tokens 1024 (D8)', async () => {
+    h.runBriefingModel.mockResolvedValue('A brand voice.')
+    await expect(voice()).resolves.toBe('A brand voice.')
+    expect(h.runBriefingModel).toHaveBeenCalledWith(
+      undefined,
+      [{ role: 'user', content: 'Write a voice prompt.' }],
+      'team-1',
+      expect.objectContaining({ surface: 'ASSISTANT_BRANDKIT', key: 'SONNET', arg: SONNET }),
+      { maxTokens: 1024, label: 'brand-voice' },
+    )
+  })
+
+  it('every MOCK_AI branch records ASSISTANT_BRANDKIT before its mock, in the mode it runs', async () => {
+    h.mockAi = true
+    h.policy = haikuDefault()
+    stubGrounding({ artifactImageUrls: ['https://cdn/art-1.png'] })
+    await runBrandKitChat('k1', messages, 'team-1', 'u1')
+    expect(await fromImage()).toMatchObject({ aspectRatio: 'PORTRAIT' })
+    await expect(voice()).resolves.toBe('MOCK VOICE')
+    h.cli = true
+    await voice()
+    expect(h.runVisionModel).not.toHaveBeenCalled()
+    expect(h.runBriefingModel).not.toHaveBeenCalled()
+    expect(calls.map((c) => [c.surface, c.key, c.source, c.mode, c.label])).toEqual([
+      ['ASSISTANT_BRANDKIT', 'HAIKU', 'team', 'api', 'brandkit'],
+      ['ASSISTANT_BRANDKIT', 'HAIKU', 'team', 'api', 'image-template'],
+      ['ASSISTANT_BRANDKIT', 'HAIKU', 'team', 'api', 'brand-voice'],
+      ['ASSISTANT_BRANDKIT', 'HAIKU', 'team', 'cli', 'brand-voice'],
+    ])
+  })
+
+  it('no model the team can run → AssistantModelError from each entry point; nothing runs or records', async () => {
+    h.policy = noModel()
+    stubGrounding({ artifactImageUrls: ['https://cdn/art-1.png'] })
+    for (const mockAi of [false, true]) {
+      h.mockAi = mockAi
+      for (const call of [() => runBrandKitChat('k1', messages, 'team-1', 'u1'), fromImage, voice]) {
+        const err = await call().catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(AssistantModelError)
+        expect(err).toMatchObject({ code: 'NO_ALLOWED_MODEL' })
+      }
+    }
+    expect(h.runVisionModel).not.toHaveBeenCalled()
+    expect(h.runBriefingModel).not.toHaveBeenCalled()
+    expect(calls).toEqual([])
+  })
+})
+
+afterAll(() => setModelCallSink(null))

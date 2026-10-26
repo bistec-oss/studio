@@ -1,0 +1,382 @@
+[
+  {
+    "tag": "sq-announce__product-showcase",
+    "brief": "sq-announce",
+    "kind": "announcement",
+    "aspectRatio": "SQUARE",
+    "style": "product-showcase",
+    "draftId": "cmvl6k9ov000n9iu3tkr06vbk",
+    "secs": 107,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-announce__product-showcase.png"
+  },
+  {
+    "tag": "sq-announce__editorial-split",
+    "brief": "sq-announce",
+    "kind": "announcement",
+    "aspectRatio": "SQUARE",
+    "style": "editorial-split",
+    "draftId": "cmvl6k9ot000i9iu36n05rwh5",
+    "secs": 117,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-announce__editorial-split.png"
+  },
+  {
+    "tag": "sq-announce__classic",
+    "brief": "sq-announce",
+    "kind": "announcement",
+    "aspectRatio": "SQUARE",
+    "style": "classic",
+    "draftId": "cmvl6k9ot000d9iu3sxxhayj0",
+    "secs": 117,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-announce__classic.png"
+  },
+  {
+    "tag": "sq-event__editorial-split",
+    "brief": "sq-event",
+    "kind": "event",
+    "aspectRatio": "SQUARE",
+    "style": "editorial-split",
+    "draftId": "cmvl6mnw8001c9iu36cbjxxmm",
+    "secs": 91,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-event__editorial-split.png"
+  },
+  {
+    "tag": "sq-event__classic",
+    "brief": "sq-event",
+    "kind": "event",
+    "aspectRatio": "SQUARE",
+    "style": "classic",
+    "draftId": "cmvl6mg44000x9iu30g0l55lb",
+    "secs": 121,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-event__classic.png"
+  },
+  {
+    "tag": "sq-event__product-showcase",
+    "brief": "sq-event",
+    "kind": "event",
+    "aspectRatio": "SQUARE",
+    "style": "product-showcase",
+    "draftId": "cmvl6mnw8001h9iu32e9e1oro",
+    "secs": 121,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-event__product-showcase.png"
+  },
+  {
+    "tag": "sq-product__classic",
+    "brief": "sq-product",
+    "kind": "product",
+    "aspectRatio": "SQUARE",
+    "style": "classic",
+    "draftId": "cmvl6olr7001r9iu31c48xqzt",
+    "secs": 115,
+    "status": "FAILED",
+    "failureReason": "Transaction API error: Unable to start a transaction in the given time.",
+    "composition": null,
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": null
+  },
+  {
+    "tag": "sq-product__editorial-split",
+    "brief": "sq-product",
+    "kind": "product",
+    "aspectRatio": "SQUARE",
+    "style": "editorial-split",
+    "draftId": "cmvl6p90j002b9iu3fy99m9z0",
+    "secs": 93,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-product__editorial-split.png"
+  },
+  {
+    "tag": "sq-product__product-showcase",
+    "brief": "sq-product",
+    "kind": "product",
+    "aspectRatio": "SQUARE",
+    "style": "product-showcase",
+    "draftId": "cmvl6p19300219iu3bwvsxl80",
+    "secs": 125,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-product__product-showcase.png"
+  },
+  {
+    "tag": "pt-announce__classic",
+    "brief": "pt-announce",
+    "kind": "announcement",
+    "aspectRatio": "PORTRAIT",
+    "style": "classic",
+    "draftId": "cmvl6r2bf002j9iu31v5yjvv1",
+    "secs": 100,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-announce__classic.png"
+  },
+  {
+    "tag": "pt-announce__product-showcase",
+    "brief": "pt-announce",
+    "kind": "announcement",
+    "aspectRatio": "PORTRAIT",
+    "style": "product-showcase",
+    "draftId": "cmvl6r8id002t9iu3s7u03mfa",
+    "secs": 121,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-announce__product-showcase.png"
+  },
+  {
+    "tag": "pt-announce__editorial-split",
+    "brief": "pt-announce",
+    "kind": "announcement",
+    "aspectRatio": "PORTRAIT",
+    "style": "editorial-split",
+    "draftId": "cmvl6rpk400339iu3yth2ab7g",
+    "secs": 111,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "observations": ["layout-violation"],
+      "imageQuality": "default"
+    },
+    "compositionNotice": {
+      "reason": "layout-violation",
+      "message": "Some text or the logo sits outside the area Editorial split reserves for it. The post is unchanged; check it before publishing."
+    },
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-announce__editorial-split.png"
+  },
+  {
+    "tag": "pt-event__product-showcase",
+    "brief": "pt-event",
+    "kind": "event",
+    "aspectRatio": "PORTRAIT",
+    "style": "product-showcase",
+    "draftId": "cmvl6ttmh003n9iu3z9lajjyk",
+    "secs": 111,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-event__product-showcase.png"
+  },
+  {
+    "tag": "pt-event__editorial-split",
+    "brief": "pt-event",
+    "kind": "event",
+    "aspectRatio": "PORTRAIT",
+    "style": "editorial-split",
+    "draftId": "cmvl6u2uc003x9iu32xhls99r",
+    "secs": 121,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-event__editorial-split.png"
+  },
+  {
+    "tag": "pt-event__classic",
+    "brief": "pt-event",
+    "kind": "event",
+    "aspectRatio": "PORTRAIT",
+    "style": "classic",
+    "draftId": "cmvl6t7v2003d9iu3w12mtmgw",
+    "secs": 181,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-event__classic.png"
+  },
+  {
+    "tag": "pt-product__product-showcase",
+    "brief": "pt-product",
+    "kind": "product",
+    "aspectRatio": "PORTRAIT",
+    "style": "product-showcase",
+    "draftId": "cmvl6wnwe004h9iu316rvkwf5",
+    "secs": 115,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "product-showcase",
+      "appliedArchetype": "product-showcase",
+      "contractVersion": 1,
+      "observations": ["layout-violation"],
+      "imageQuality": "default"
+    },
+    "compositionNotice": {
+      "reason": "layout-violation",
+      "message": "Some text or the logo sits outside the area Product showcase reserves for it. The post is unchanged; check it before publishing."
+    },
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-product__product-showcase.png"
+  },
+  {
+    "tag": "pt-product__classic",
+    "brief": "pt-product",
+    "kind": "product",
+    "aspectRatio": "PORTRAIT",
+    "style": "classic",
+    "draftId": "cmvl6w6z400479iu3mi5nylwc",
+    "secs": 143,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-product__classic.png"
+  },
+  {
+    "tag": "pt-product__editorial-split",
+    "brief": "pt-product",
+    "kind": "product",
+    "aspectRatio": "PORTRAIT",
+    "style": "editorial-split",
+    "draftId": "cmvl6x3ed004r9iu3c2xjse6h",
+    "secs": 125,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "editorial-split",
+      "appliedArchetype": "editorial-split",
+      "contractVersion": 1,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "pt-product__editorial-split.png"
+  }
+]

@@ -9,6 +9,11 @@
 //
 // An explicitly provided key OVERRIDES and is existence-checked by the route.
 // API mode still requires a key (there is no OAuth fallback outside CLI mode).
+//
+// 024 FR-05: once the team has CHOSEN a caption route, the route decides the
+// credential and the brief's key is ignored: the stored key is the 'cli' marker
+// ("use the team route"), with no existence check, in either mode. A team that
+// has never chosen keeps the rules above exactly.
 
 export type BriefCopyKeyDecision =
   | { key: string; validateExists: boolean }
@@ -16,8 +21,10 @@ export type BriefCopyKeyDecision =
 
 export function resolveBriefCopyKey(
   provided: string | undefined,
-  cliMode: boolean
+  cliMode: boolean,
+  routeChosen: boolean = false
 ): BriefCopyKeyDecision {
+  if (routeChosen) return { key: 'cli', validateExists: false }
   const trimmed = provided?.trim()
   if (trimmed) return { key: trimmed, validateExists: true }
   if (cliMode) return { key: 'cli', validateExists: false }
@@ -33,7 +40,8 @@ export function resolveBriefCopyKey(
 // impossible: if the route would accept the submission, the button is live.
 export function canSubmitBrief(
   copyProviderKey: string | undefined,
-  cliMode: boolean
+  cliMode: boolean,
+  routeChosen: boolean = false
 ): boolean {
-  return !('error' in resolveBriefCopyKey(copyProviderKey, cliMode))
+  return !('error' in resolveBriefCopyKey(copyProviderKey, cliMode, routeChosen))
 }

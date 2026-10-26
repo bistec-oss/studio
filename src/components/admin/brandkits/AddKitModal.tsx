@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/Button'
-import { GlassInput } from '@/components/ui/GlassInput'
+import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { apiFetch } from '@/lib/apiFetch'
 
@@ -34,16 +34,16 @@ export function AddKitModal({ onClose, onCreated }: AddKitModalProps) {
   }
 
   return (
-    <Modal open onClose={onClose} title="New Brand Kit" size="sm">
+    <Modal open onClose={onClose} title="New brand kit" size="sm">
       <form onSubmit={submit} className="space-y-4">
-        <GlassInput
+        <Input
           label="Name"
           value={name}
           onChange={e => setName(e.target.value)}
           placeholder="e.g. Bistec 2026"
           autoFocus
         />
-        <div className="flex gap-2 justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" type="button" onClick={onClose}>Cancel</Button>
           <Button type="submit" disabled={saving || !name.trim()}>{saving ? 'Creating…' : 'Create'}</Button>
         </div>

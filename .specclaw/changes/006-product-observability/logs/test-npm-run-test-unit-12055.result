@@ -1,0 +1,7 @@
+exit=0
+duration_s=7
+log=.specclaw/changes/006-product-observability/logs/test-npm-run-test-unit-12055.log
+head=851f224097b7f6d8d6a1a387726bd35bebe686e8
+dirty=true
+cmd=npm run test:unit
+interrupted=false

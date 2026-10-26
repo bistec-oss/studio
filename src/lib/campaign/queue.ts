@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
-import { Channel, AspectRatio, DesignMode, PostGenerationAction } from '@prisma/client'
+import { AspectRatio, DesignMode, PostGenerationAction, type Channel } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { PUBLISHABLE_CHANNELS } from '@/lib/channels'
 import { resolveBrandKit } from '@/lib/brandkit/resolve'
+import { resolvePostStyle } from '@/lib/postStyles'
 
 // Body schema for creating/replacing a scheduled-generation queue entry.
 // PATCH sends the full entry too (the edit modal carries every field), so
@@ -12,9 +14,15 @@ export const queueEntrySchema = z
   .object({
     topic: z.string().trim().min(1, 'topic is required'),
     description: z.string().trim().optional(),
-    goal: z.string().trim().min(1, 'goal is required'),
-    tone: z.string().trim().min(1, 'tone is required'),
-    channels: z.array(z.nativeEnum(Channel)).min(1, 'at least one channel is required'),
+    // 027 FR-06: the server is the only writer of the stored goal. A body goal is
+    // read only as a legacy hint (it picks a style when no postStyle is sent).
+    goal: z.string().trim().optional(),
+    tone: z.string().trim().optional(),
+    postStyle: z.string().trim().max(40).optional().nullable(),
+    // Publishable channels only (010, WhatsApp posting, was dropped on 2026-10-23).
+    channels: z
+      .array(z.enum(PUBLISHABLE_CHANNELS as [Channel, ...Channel[]]))
+      .min(1, 'at least one channel is required'),
     aspectRatio: z.nativeEnum(AspectRatio).default('SQUARE'),
     designMode: z.nativeEnum(DesignMode),
     templateId: z.string().optional().nullable(),
@@ -66,6 +74,7 @@ export function toEntryCreateData(
   createdById: string,
   entry: QueueEntryInput,
   teamId: string,
+  style: ResolvedEntryStyle,
 ) {
   return {
     teamId,
@@ -73,8 +82,9 @@ export function toEntryCreateData(
     createdById,
     topic: entry.topic,
     description: entry.description || null,
-    goal: entry.goal,
-    tone: entry.tone,
+    postStyle: style.postStyle,
+    goal: style.goal,
+    tone: style.tone,
     channels: entry.channels,
     aspectRatio: entry.aspectRatio,
     designMode: entry.designMode,
@@ -83,6 +93,52 @@ export function toEntryCreateData(
     postAction: entry.postAction,
     publishAt: entry.postAction === 'SCHEDULE_PUBLISH' ? entry.publishAt : null,
   }
+}
+
+// 027 FR-06: what an entry stores once its style is resolved. The key is the
+// resolved key (never null for a new or edited entry); goal and tone are
+// snapshots for display (the scheduler resolves again at run time, FR-12).
+export interface ResolvedEntryStyle {
+  postStyle: string
+  goal: string
+  tone: string
+}
+
+export interface CampaignStyleDefaults {
+  defaultPostStyle: string | null
+  defaultTone: string | null
+}
+
+export async function loadCampaignStyleDefaults(campaignId: string): Promise<CampaignStyleDefaults | null> {
+  return prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { defaultPostStyle: true, defaultTone: true },
+  })
+}
+
+// One resolution shared by the queue routes (create, edit, batch): explicit key,
+// else the legacy goal, else the campaign default, else General. An unknown key
+// is a 400 UNKNOWN_POST_STYLE and never degrades to "no style". `index` (1-based)
+// names the failing entry in the batch route.
+export function resolveEntryStyle(
+  defaults: CampaignStyleDefaults | null,
+  entry: Pick<QueueEntryInput, 'goal' | 'tone' | 'postStyle' | 'designMode' | 'aspectRatio'>,
+  index?: number,
+): { ok: true; style: ResolvedEntryStyle } | { ok: false; response: NextResponse } {
+  const r = resolvePostStyle({
+    style: entry.postStyle,
+    legacyGoal: entry.goal,
+    campaign: defaults,
+    explicit: { tone: entry.tone },
+    path: entry.designMode === 'TEMPLATE' ? 'A' : 'B',
+    aspectRatio: entry.aspectRatio,
+    surface: 'queue',
+  })
+  if (!r.ok) {
+    const error = index === undefined ? r.message : `Entry ${index}: ${r.message}`
+    return { ok: false, response: NextResponse.json({ error, code: r.code }, { status: 400 }) }
+  }
+  return { ok: true, style: { postStyle: r.key, goal: r.goal, tone: r.tone } }
 }
 
 // Auto-publish actions are a deferred publish, so they inherit the admin-only

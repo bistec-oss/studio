@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAs, waitForDraft, waitForAction, type ApiClient } from '../helpers/api'
 import { prisma, dbAvailable } from '../helpers/db'
+import { pageLogin } from '../helpers/ui'
 
 // §Q — Async draft actions (regenerate design / regenerate copy / refine).
 //
@@ -96,8 +97,14 @@ test.describe('§Q — async draft actions', () => {
     const done = await waitForAction(api, draft.id as string)
     expect(done.pendingAction).toBeNull()
     expect(done.pendingActionError).toBeNull()
-    // The mock copy provider embeds the topic — the copy was (re)generated.
-    expect(done.copyText).toContain(topic)
+    // The mock caption reply embeds the topic in every caption: {} is
+    // "Regenerate all" (012 FR-11), so both were (re)generated (026: two captions).
+    const captions = done.captions as { text: string; status: string }[]
+    expect(captions).toHaveLength(2)
+    for (const c of captions) {
+      expect(c.status).toBe('READY')
+      expect(c.text).toContain(topic)
+    }
     // Copy and design regenerate independently: no new revision, same design,
     // and status is NOT flipped (the old EXPORTED→IN_PROGRESS behavior is gone).
     expect(done.status).toBe('EXPORTED')
@@ -226,7 +233,8 @@ test.describe('§Q — async draft actions', () => {
     // The sweep never touches content or status.
     expect(swept.status).toBe('EXPORTED')
     expect(swept.htmlContent).toBe(draft.htmlContent)
-    expect(swept.copyText).toBe(draft.copyText)
+    // A stale REFINE settles no caption row (012 FR-11: only REGENERATE_COPY).
+    expect(swept.captions).toEqual(draft.captions)
     expect(swept.currentRevisionNumber).toBe(1)
 
     // The sweep persisted (not just an in-response fixup).
@@ -346,51 +354,70 @@ test.describe('§Q — async draft actions', () => {
     expect(failedDraft.status).toBe('FAILED')
     const notReady = await api.post(`/api/drafts/${failedDraftId}/regenerate-copy`, {})
     expect(notReady.status()).toBe(409)
-    expect((await notReady.json()).error).toBe('Draft is not ready for copy regeneration')
+    expect((await notReady.json()).error).toBe('Draft is not ready for caption regeneration')
   })
 
-  // TC-ASYNC-10 — a manual copy edit (including clearing the copy entirely) must
-  // not disturb Draft.status. PATCH used to flip EXPORTED → IN_PROGRESS, which
-  // dropped the draft out of the library, hid Refine design / Edit inline, made
-  // Regenerate copy answer 'Draft is not ready for copy regeneration', and after
+  // TC-ASYNC-10 — a manual caption edit (including clearing a caption entirely)
+  // must not disturb Draft.status. PATCH used to flip EXPORTED → IN_PROGRESS,
+  // which dropped the draft out of the library, hid Refine design / Edit inline,
+  // made Regenerate answer 'Draft is not ready for copy regeneration', and after
   // 15 min let the sweep mark the draft FAILED — with nothing regenerating, so
-  // the only way out was to regenerate the whole post.
-  test('editing or clearing the copy leaves the draft EXPORTED and every action available', async () => {
+  // the only way out was to regenerate the whole post. Rewritten to the 012
+  // caption contract (AC-19): PATCH { channel, text }; an empty caption that is
+  // not PENDING is an editable field, never a skeleton.
+  test('editing or clearing a caption leaves the draft EXPORTED and every action available', async ({ page }) => {
     if (!MOCKED()) { test.skip(); return }
     const topic = `Async Copy Edit ${Date.now()}`
     const draft = await createExportedDraft(api, topic)
     const beforeExportPath = urlPath(draft.exportUrl)
+    const instagram = (d: Record<string, unknown>) =>
+      (d.captions as { channel: string; text: string; status: string }[]).find((c) => c.channel === 'INSTAGRAM')!
 
-    // 1. An ordinary copy edit. The PATCH response itself must already say EXPORTED.
-    const edited = await api.patch(`/api/drafts/${draft.id}`, { copyText: 'Hand-written caption.' })
+    // 1. An ordinary caption edit. The PATCH response itself must already say EXPORTED.
+    const edited = await api.patch(`/api/drafts/${draft.id}`, { channel: 'INSTAGRAM', text: 'Hand-written caption.' })
     expect(edited.status()).toBe(200)
     const editedBody = await edited.json()
-    expect(editedBody.copyText).toBe('Hand-written caption.')
+    expect(instagram(editedBody).text).toBe('Hand-written caption.')
     expect(editedBody.status).toBe('EXPORTED')
-    // The design is untouched — copy and design are independent artifacts.
+    // The design is untouched — captions and design are independent artifacts.
     expect(editedBody.htmlContent).toBe(draft.htmlContent)
     expect(urlPath(editedBody.exportUrl)).toBe(beforeExportPath)
     expect(editedBody.currentRevisionNumber).toBe(1)
 
-    // 2. Clearing the copy COMPLETELY — the reported trigger — is just an empty
-    // string, not a draft mid-generation.
-    const cleared = await api.patch(`/api/drafts/${draft.id}`, { copyText: '' })
+    // 2. Clearing the caption COMPLETELY — the reported trigger — is just an
+    // empty string, not a draft mid-generation.
+    const cleared = await api.patch(`/api/drafts/${draft.id}`, { channel: 'INSTAGRAM', text: '' })
     expect(cleared.status()).toBe(200)
     const clearedBody = await cleared.json()
-    expect(clearedBody.copyText).toBe('')
+    expect(instagram(clearedBody).text).toBe('')
+    expect(instagram(clearedBody).status).toBe('READY')
     expect(clearedBody.status).toBe('EXPORTED')
+    expect(clearedBody.htmlContent).toBe(draft.htmlContent)
+    expect(urlPath(clearedBody.exportUrl)).toBe(beforeExportPath)
+    expect(clearedBody.currentRevisionNumber).toBe(1)
+
+    // UI: the emptied Instagram caption is an editable field, not a skeleton.
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await pageLogin(page)
+    await page.goto(`/drafts/${draft.id}`)
+    await expect(page.getByRole('button', { name: 'View full screen', exact: true })).toBeVisible({ timeout: 20_000 })
+    const igField = page.getByRole('textbox', { name: 'Instagram', exact: true })
+    await expect(igField).toBeVisible()
+    await expect(igField).toBeEditable()
+    await expect(igField).toHaveValue('')
+    await expect(page.getByRole('status', { name: 'Generating the Instagram caption' })).toHaveCount(0)
 
     // 3. Still in the library (it lists EXPORTED drafts — a flipped status hid it).
     const library = await (await api.get('/api/library?status=READY&pageSize=50')).json()
     expect(library.drafts.some((d: { id: string }) => d.id === draft.id)).toBe(true)
 
-    // 4. Regenerate copy is accepted (this was the 409 'not ready') and refills
-    //    the emptied copy without a full regeneration.
-    const regen = await api.post(`/api/drafts/${draft.id}/regenerate-copy`, {})
+    // 4. Regenerate is accepted (this was the 409 'not ready') and refills the
+    //    emptied caption without a full regeneration.
+    const regen = await api.post(`/api/drafts/${draft.id}/regenerate-copy`, { channel: 'INSTAGRAM' })
     expect(regen.status()).toBe(202)
     const regenerated = await waitForAction(api, draft.id as string)
     expect(regenerated.pendingActionError).toBeNull()
-    expect(regenerated.copyText).toContain(topic)
+    expect(instagram(regenerated).text).toContain(topic)
     expect(regenerated.status).toBe('EXPORTED')
 
     // 5. Refine design is available too (it gates on EXPORTED and had vanished).

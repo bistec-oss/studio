@@ -1,0 +1,29 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-26T02:01:22Z","ts":1792980082}
+{"ev":"stop","span":"propose","at":"2026-10-26T02:33:08Z","ts":1792981988,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-26T05:29:39Z","ts":1792992579}
+{"ev":"stop","span":"plan","at":"2026-10-26T05:37:57Z","ts":1792993077,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-26T05:38:42Z","ts":1792993122}
+{"ev":"start","span":"T1","kind":"task","label":"pure module","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-26T05:38:42Z","ts":1792993122}
+{"ev":"stop","span":"T1","at":"2026-10-26T05:45:45Z","ts":1792993545,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-26T05:45:45Z","ts":1792993545,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-26T05:45:58Z","ts":1792993558}
+{"ev":"start","span":"T2","kind":"task","label":"renderer check","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-26T05:45:58Z","ts":1792993558}
+{"ev":"stop","span":"T2","at":"2026-10-26T06:01:41Z","ts":1792994501,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-26T06:01:42Z","ts":1792994502,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-26T06:01:43Z","ts":1792994503}
+{"ev":"start","span":"T3","kind":"task","label":"stamp on every writer","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-26T06:01:44Z","ts":1792994504}
+{"ev":"stop","span":"T3","at":"2026-10-26T06:30:07Z","ts":1792996207,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-26T06:30:08Z","ts":1792996208,"status":"ok"}
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-10-26T06:30:24Z","ts":1792996224}
+{"ev":"start","span":"T4","kind":"task","label":"read side and events","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-26T06:30:25Z","ts":1792996224}
+{"ev":"stop","span":"T4","at":"2026-10-26T06:59:59Z","ts":1792997999,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-10-26T07:00:00Z","ts":1792998000,"status":"ok"}
+{"ev":"start","span":"W5","kind":"wave","label":"wave 5","at":"2026-10-26T07:00:16Z","ts":1792998016}
+{"ev":"start","span":"T5","kind":"task","label":"UI and E2E","parent":"W5","model":"sonnet","attempt":"1","at":"2026-10-26T07:00:17Z","ts":1792998016}
+{"ev":"stop","span":"T5","at":"2026-10-26T07:18:00Z","ts":1792999080,"status":"ok"}
+{"ev":"stop","span":"W5","at":"2026-10-26T07:18:01Z","ts":1792999081,"status":"ok"}
+{"ev":"start","span":"W6","kind":"wave","label":"wave 6","at":"2026-10-26T07:18:11Z","ts":1792999090}
+{"ev":"start","span":"T6","kind":"task","label":"docs and full gate","parent":"W6","model":"haiku","attempt":"1","at":"2026-10-26T07:18:12Z","ts":1792999091}
+{"ev":"stop","span":"T6","at":"2026-10-26T08:12:43Z","ts":1793002363,"status":"ok"}
+{"ev":"stop","span":"W6","at":"2026-10-26T08:12:43Z","ts":1793002363,"status":"ok"}
+{"ev":"start","span":"verify-1793004109","kind":"phase","label":"verify","at":"2026-10-26T08:41:50Z","ts":1793004110}

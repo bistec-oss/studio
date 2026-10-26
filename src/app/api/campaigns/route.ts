@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { getStyle } from '@/lib/postStyles'
 
 export const GET = withTeamAuth(async (_req, _ctx, user) => {
   const campaigns = await prisma.campaign.findMany({
@@ -25,6 +26,8 @@ const createSchema = z.object({
   name: z.string().trim().min(1, 'name is required'),
   brandKitId: z.string().nullish(),
   defaultTone: z.string().nullish(),
+  // 027 FR-06: a dataset key; a blank value means none. Checked below.
+  defaultPostStyle: z.string().trim().max(40).nullish(),
   projectId: z.string().nullish(),
 })
 
@@ -32,6 +35,14 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
   const body = await parseBody(req, createSchema)
   if (body.response) return body.response
   const { name, brandKitId, defaultTone, projectId } = body.data
+  // A new campaign may only default to an active style (a retired one is kept only where it already is).
+  const defaultPostStyle = body.data.defaultPostStyle?.trim() || null
+  if (defaultPostStyle && getStyle(defaultPostStyle)?.status !== 'active') {
+    return NextResponse.json(
+      { error: `Unknown post style '${defaultPostStyle}'`, code: 'UNKNOWN_POST_STYLE' },
+      { status: 400 },
+    )
+  }
 
   // Verify referenced records so a bogus id is a 400, not a P2003 500. Both
   // are team-scoped (I3, final review) — an unscoped findFirst let a team
@@ -54,6 +65,7 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
       name,
       brandKitId: brandKitId ?? null,
       defaultTone: defaultTone ?? null,
+      defaultPostStyle,
       ...(projectId && {
         projects: { create: { projectId } },
       }),

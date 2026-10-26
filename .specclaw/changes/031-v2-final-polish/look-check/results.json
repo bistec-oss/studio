@@ -1,0 +1,28 @@
+[
+  {
+    "slot": "spotlight@2:SQUARE",
+    "attempt": 1,
+    "runId": "b8a15675-c171-44d4-b37a-bf2d6f0e4d06",
+    "styleKept": true,
+    "fallbackReason": null,
+    "threshold": 0.04,
+    "promptHash": "494506a2cd61b39fe5cb054beb3bb2bd9aa6c37e14b510475c0c33c2bc627b7a",
+    "rect": null,
+    "render": "spotlight_v2_SQUARE_1.png",
+    "error": null,
+    "accepted": true
+  },
+  {
+    "slot": "spotlight@2:SQUARE",
+    "attempt": 2,
+    "runId": "3d80bb85-7f13-4be5-8118-58274916b711",
+    "styleKept": true,
+    "fallbackReason": null,
+    "threshold": 0.04,
+    "promptHash": "296d865c6dd08d512202feeac26731ea66fabf0793ae79a91e840cbba4fcce15",
+    "rect": null,
+    "render": "spotlight_v2_SQUARE_2.png",
+    "error": null,
+    "accepted": true
+  }
+]

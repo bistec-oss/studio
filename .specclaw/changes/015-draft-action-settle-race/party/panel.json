@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "sig": "3312517585 5961",
+  "tier": "thin",
+  "tier_source": "classifier",
+  "rationale": "Edits two client-side settle conditions in the draft page to fire on state rather than edge, with a deterministic E2E test; no schema, no migrations, no reversibility barrier.",
+  "domains": [],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" }
+  ],
+  "dropped": []
+}

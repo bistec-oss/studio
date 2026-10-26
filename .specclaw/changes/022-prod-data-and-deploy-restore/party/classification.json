@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["data", "ops"],
+  "rationale": "Converts persisted prod captions from Draft.copyText into DraftCaption rows through a migration or restored backfill that must not lose text, restores the deleted deploy workflow (GHCR push, Coolify redeploy, health commit check), and changes the boot sequence, while the conversion mechanism and the prod data copy are still unresolved.",
+  "signals": {
+    "blast_radius": "Migration chain (new migration ordered before 20261013120000), docker-entrypoint.sh boot path, restored .github/workflows/docker-publish.yml, Dockerfile/health/env comment edits, CLAUDE.md and handoff docs, and possibly MCP/ACP copyText callers",
+    "unresolved": "Open Q1 chooses between a SQL migration and a restored TypeScript backfill, and the answer changes the boot sequence and files touched; Open Q2 (whether a prod pg_dump exists for the dry run) and Open Q3 (the CLAUDE_CLI_MODEL value on prod) decide whether the deploy can boot at all",
+    "irreversibility": "A wrong caption conversion loses prod text and a wrong migration fails the prod deploy; the migration is hard to undo once applied on prod, though the workflow and docs are plain git reverts"
+  }
+}

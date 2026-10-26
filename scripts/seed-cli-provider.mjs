@@ -17,10 +17,9 @@ const PLACEHOLDER = "cli"
 
 // Team tenancy: AvailableProvider.teamId is required and the unique
 // constraint is now (teamId, slot, providerKey). This baseline provider
-// belongs in the "Bistec" team — created unconditionally by the
-// team_tenancy_b migration's backfill (id 'team_bistec_default'), so it
-// always exists by the time this script runs. Falls back to creating it
-// here too, defensively, if run standalone.
+// belongs in the "Bistec" team. A fresh database has no team (016 FR-08
+// deletes the migration-made one while it is empty), so this finds "Bistec"
+// by name and creates it when it is missing.
 async function ensureBistecTeamId() {
   const existing = await prisma.team.findFirst({ where: { name: "Bistec" } })
   if (existing) return existing.id

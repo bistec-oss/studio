@@ -1,14 +1,14 @@
 import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
-import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
+import { MOCK_SOCIAL, mockPlatformId, shouldMockPublishFail } from "@/lib/testHooks"
 
 // Team-scoped lookup — no env-var fallback. A team with no connected
 // LinkedIn channel simply can't publish; there is no shared/global credential.
 async function resolveCredentials(teamId: string): Promise<{ accessToken: string; organizationId: string }> {
   const row = await prisma.channelToken.findFirst({ where: { teamId, channel: "LINKEDIN" } })
   if (!row) {
-    throw new Error("No LinkedIn credentials configured for this team")
+    throw new Error("No LinkedIn credentials configured for this team. Add them under Team settings > Social channels.")
   }
   return { accessToken: decrypt(row.encryptedToken), organizationId: decrypt(row.encryptedMetadata) }
 }
@@ -27,15 +27,15 @@ interface RegisterUploadResponse {
 
 export async function publish(
   exportUrl: string,
-  copyText: string,
+  caption: string,
   teamId: string,
 ): Promise<{ platformId: string }> {
   // Test seam: skip the LinkedIn UGC flow. The failure path (MOCK_SOCIAL_FAIL
   // global, or a __FAIL_ALWAYS__/__FAIL_ONCE__ sentinel in the caption) drives
   // FAILED/retry coverage deterministically.
   if (MOCK_SOCIAL) {
-    if (shouldMockPublishFail(copyText)) throw new PublishError("LINKEDIN", "Mock LinkedIn publish failure")
-    return { platformId: `mock-linkedin-${Date.now()}` }
+    if (shouldMockPublishFail(caption)) throw new PublishError("LINKEDIN", "Mock LinkedIn publish failure")
+    return { platformId: mockPlatformId("LINKEDIN", caption) }
   }
 
   const { accessToken, organizationId } = await resolveCredentials(teamId)
@@ -97,7 +97,7 @@ export async function publish(
   if (!imageResponse.ok) {
     throw new PublishError(
       "LINKEDIN",
-      `Failed to fetch image from exportUrl: HTTP ${imageResponse.status}`,
+      `Failed to fetch the exported image: HTTP ${imageResponse.status}`,
     )
   }
 
@@ -126,7 +126,7 @@ export async function publish(
     lifecycleState: "PUBLISHED",
     specificContent: {
       "com.linkedin.ugc.ShareContent": {
-        shareCommentary: { text: copyText },
+        shareCommentary: { text: caption },
         shareMediaCategory: "IMAGE",
         media: [
           {
@@ -161,14 +161,14 @@ export async function publish(
     } catch {
       reason = `HTTP ${postResponse.status}`
     }
-    throw new PublishError("LINKEDIN", `Failed to create UGC post: ${reason}`)
+    throw new PublishError("LINKEDIN", `Failed to create the LinkedIn post: ${reason}`)
   }
 
   const platformId = postResponse.headers.get("x-restli-id")
   if (!platformId) {
     throw new PublishError(
       "LINKEDIN",
-      "UGC post response did not include x-restli-id header",
+      "LinkedIn did not return a post id",
     )
   }
 

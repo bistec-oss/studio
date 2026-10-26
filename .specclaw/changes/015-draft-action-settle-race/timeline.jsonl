@@ -1,0 +1,15 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-12T02:05:20Z","ts":1791770720}
+{"ev":"stop","span":"propose","at":"2026-10-12T02:06:51Z","ts":1791770811,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-12T02:07:14Z","ts":1791770834}
+{"ev":"stop","span":"plan","at":"2026-10-12T02:08:52Z","ts":1791770932,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-12T02:09:19Z","ts":1791770959}
+{"ev":"start","span":"T1","kind":"task","label":"forced-race E2E","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T02:09:19Z","ts":1791770959}
+{"ev":"stop","span":"T1","at":"2026-10-12T02:11:03Z","ts":1791771063,"status":"ok"}
+{"ev":"start","span":"T2","kind":"task","label":"settle on state","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T02:11:03Z","ts":1791771063}
+{"ev":"stop","span":"T2","at":"2026-10-12T02:16:31Z","ts":1791771391,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-12T02:16:31Z","ts":1791771391,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-12T02:16:55Z","ts":1791771415}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-12T02:19:57Z","ts":1791771597}
+{"ev":"stop","span":"T3","at":"2026-10-12T02:29:28Z","ts":1791772168,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-12T02:29:28Z","ts":1791772168,"status":"ok"}
+{"ev":"start","span":"verify-1791772245","kind":"phase","label":"verify","at":"2026-10-12T02:30:45Z","ts":1791772245}

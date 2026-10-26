@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
 import { encrypt } from '@/lib/crypto'
+import { isPublishableChannel, PUBLISHABLE_CHANNELS } from '@/lib/channels'
 
 export const GET = withTeamAdmin(async (_req, _ctx, user) => {
   const tokens = await prisma.channelToken.findMany({ where: { teamId: user.teamId } })
@@ -18,8 +19,8 @@ export const GET = withTeamAdmin(async (_req, _ctx, user) => {
 })
 
 const createSchema = z.object({
-  channel: z.enum(['INSTAGRAM', 'LINKEDIN'], {
-    errorMap: () => ({ message: 'channel must be INSTAGRAM or LINKEDIN' }),
+  channel: z.unknown().refine(isPublishableChannel, {
+    message: `channel must be ${PUBLISHABLE_CHANNELS.join(' or ')}`,
   }),
   // Tokens are encrypted verbatim — validate presence without altering the value.
   token: z.string().refine((v) => v.trim().length > 0, 'token is required'),

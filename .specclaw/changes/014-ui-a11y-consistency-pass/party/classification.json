@@ -1,0 +1,10 @@
+{
+  "tier": "standard",
+  "domains": [],
+  "rationale": "Consolidates eight duplicate page-head/section patterns into one shared primitive while adding accessible names and ARIA attributes across 45 files and updating DESIGN_SYSTEM.md; all changes are visual/accessibility consistency with no data or API impact and are fully revertible.",
+  "signals": {
+    "blast_radius": "Eight local page-head/section/notice copies consolidated into one shared primitive across dashboard, library, brief, drafts, campaigns, kits, and team pages; ARIA attributes added to inputs, tablists, stepper steps, and toggles; E2E selector names updated in multiple test files.",
+    "unresolved": "Label text default (current placeholder as visible label, with proposed default: yes) and shared primitive component names (proposed: PageHead, Section, Notice) — both have confident proposed defaults and neither changes the file list.",
+    "irreversibility": "Fully revertible via git; no data migration, no released behavior change, no persisted schema — E2E selector updates are code changes handled per task, captured before and after."
+  }
+}

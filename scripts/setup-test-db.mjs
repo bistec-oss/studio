@@ -62,7 +62,8 @@ run('npx prisma migrate deploy', { DATABASE_URL: TEST_DB_URL })
 //    memberships, per-team campaign/kit/brief/draft) — must run after
 //    seed-admin/seed-editor (it looks both users up by email) and before the
 //    baseline brandkit/hearts-talk/cli-provider seeds, which now stamp their
-//    rows onto the "Bistec" team (idempotently created here too if absent).
+//    rows onto the "Bistec" team. The migrations leave a fresh DB with no
+//    team (016 FR-08), so seed-teams is what creates "Bistec".
 //    SEED_FIXED_CREDENTIALS=true keeps seed-admin's fixed test password (the
 //    E2E helpers log in with it) instead of generating a random one.
 for (const script of [

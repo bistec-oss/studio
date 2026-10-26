@@ -1,0 +1,7 @@
+exit=0
+duration_s=10
+log=.specclaw/changes/016-fresh-start-cleanup/logs/lint-npm-run-lint-9794.log
+head=26e4990cf6e0e6c8165f762346f8e444b218aadf
+dirty=true
+cmd=npm run lint
+interrupted=false

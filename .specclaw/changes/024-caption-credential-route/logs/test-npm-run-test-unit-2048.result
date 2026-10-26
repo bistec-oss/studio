@@ -1,0 +1,7 @@
+exit=0
+duration_s=7
+log=.specclaw/changes/024-caption-credential-route/logs/test-npm-run-test-unit-2048.log
+head=cd9d411ac465d10bafecee35c1fc11ef84d476f1
+dirty=true
+cmd=npm run test:unit
+interrupted=false

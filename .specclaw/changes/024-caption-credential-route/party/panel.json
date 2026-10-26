@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "sig": "1752731703 12890",
+  "tier": "deep",
+  "tier_source": "classifier",
+  "rationale": "It makes a team's caption credential route (OAuth chain or a registered Anthropic API key) an explicit setting that decides which account bills and which credential is used, and two open questions (where the route is stored, and which model arg a team on API_KEY sends in CLI mode) would change the design and file list if answered differently.",
+  "domains": ["security"],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" },
+    { "role": "party-ba", "model": "sonnet" },
+    { "role": "party-security", "model": "opus" },
+    { "role": "party-visionary", "model": "opus" }
+  ],
+  "dropped": []
+}

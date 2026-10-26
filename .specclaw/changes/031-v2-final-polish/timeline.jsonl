@@ -1,0 +1,58 @@
+{"ev":"stop","span":"propose","at":"2026-10-26T10:35:59Z","ts":1793010959,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-26T11:05:57Z","ts":1793012757}
+{"ev":"stop","span":"plan","at":"2026-10-26T11:20:31Z","ts":1793013631,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-26T12:18:31Z","ts":1793017111}
+{"ev":"start","span":"T1","kind":"task","label":"Temp-dir cleanup, lost-claim cleanup, AC-17","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-26T12:18:32Z","ts":1793017112}
+{"ev":"stop","span":"T1","at":"2026-10-26T12:26:30Z","ts":1793017590,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-26T12:26:39Z","ts":1793017599,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-26T12:26:40Z","ts":1793017600}
+{"ev":"start","span":"T2","kind":"task","label":"MEDIUM wording items and stale docs","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-26T12:26:40Z","ts":1793017600}
+{"ev":"stop","span":"T2","at":"2026-10-26T12:44:03Z","ts":1793018643,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"Glossary, LOW sweep, wording guard, full E2E","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-26T12:44:16Z","ts":1793018656}
+{"ev":"stop","span":"T3","at":"2026-10-26T13:11:15Z","ts":1793020275,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-26T13:11:15Z","ts":1793020275,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-26T13:11:35Z","ts":1793020295}
+{"ev":"start","span":"T4","kind":"task","label":"Image key backend","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-26T13:11:35Z","ts":1793020295}
+{"ev":"stop","span":"T4","at":"2026-10-26T13:25:45Z","ts":1793021145,"status":"ok"}
+{"ev":"start","span":"T5","kind":"task","label":"Image key card, team page, notice, AI","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-26T13:25:48Z","ts":1793021148}
+{"ev":"stop","span":"T5","at":"2026-10-26T13:38:37Z","ts":1793021917,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-26T13:38:37Z","ts":1793021917,"status":"ok"}
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-10-26T13:38:41Z","ts":1793021921}
+{"ev":"start","span":"T6","kind":"task","label":"Font catalogue, URL, validation","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-26T13:38:41Z","ts":1793021921}
+{"ev":"stop","span":"T6","at":"2026-10-26T13:46:04Z","ts":1793022364,"status":"ok"}
+{"ev":"start","span":"T7","kind":"task","label":"Script fonts, injection, render note","parent":"W4","model":"opus","attempt":"1","at":"2026-10-26T13:46:07Z","ts":1793022367}
+{"ev":"stop","span":"T7","at":"2026-10-26T14:28:23Z","ts":1793024904,"status":"ok"}
+{"ev":"start","span":"T8","kind":"task","label":"Font picker, Sinhala picker, AJ","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-26T14:28:27Z","ts":1793024906}
+{"ev":"stop","span":"T8","at":"2026-10-26T14:50:42Z","ts":1793026242,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-10-26T14:50:42Z","ts":1793026242,"status":"ok"}
+{"ev":"start","span":"W5","kind":"wave","label":"wave 5","at":"2026-10-26T14:51:06Z","ts":1793026266}
+{"ev":"start","span":"T9","kind":"task","label":"Typography entries and kit rules","parent":"W5","model":"sonnet","attempt":"1","at":"2026-10-26T14:51:06Z","ts":1793026266}
+{"ev":"stop","span":"T9","at":"2026-10-26T14:57:28Z","ts":1793026648,"status":"ok"}
+{"ev":"start","span":"T10","kind":"task","label":"Rule upgrade runner, briefing host, AK","parent":"W5","model":"sonnet","attempt":"1","at":"2026-10-26T14:57:31Z","ts":1793026651}
+{"ev":"stop","span":"T10","at":"2026-10-26T15:07:00Z","ts":1793027220,"status":"ok"}
+{"ev":"stop","span":"W5","at":"2026-10-26T15:07:00Z","ts":1793027220,"status":"ok"}
+{"ev":"start","span":"W6","kind":"wave","label":"wave 6","at":"2026-10-26T15:07:05Z","ts":1793027225}
+{"ev":"start","span":"T11","kind":"task","label":"Briefing assistant schedule with post styles","parent":"W6","model":"sonnet","attempt":"1","at":"2026-10-26T15:07:05Z","ts":1793027225}
+{"ev":"stop","span":"T11","at":"2026-10-26T15:15:13Z","ts":1793027713,"status":"ok"}
+{"ev":"start","span":"T12","kind":"task","label":"Brand-kit assistant fonts and apply route","parent":"W6","model":"sonnet","attempt":"1","at":"2026-10-26T15:15:13Z","ts":1793027713}
+{"ev":"stop","span":"T12","at":"2026-10-26T15:30:26Z","ts":1793028626,"status":"ok"}
+{"ev":"stop","span":"W6","at":"2026-10-26T15:30:26Z","ts":1793028626,"status":"ok"}
+{"ev":"start","span":"W7","kind":"wave","label":"wave 7","at":"2026-10-26T15:30:37Z","ts":1793028637}
+{"ev":"start","span":"T13","kind":"task","label":"Apply pure module and re-measure gate","parent":"W7","model":"sonnet","attempt":"1","at":"2026-10-26T15:30:38Z","ts":1793028637}
+{"ev":"stop","span":"T13","at":"2026-10-26T15:36:28Z","ts":1793028988,"status":"ok"}
+{"ev":"start","span":"T14","kind":"task","label":"In-render Apply check, acceptRender","parent":"W7","model":"sonnet","attempt":"1","at":"2026-10-26T15:36:29Z","ts":1793028989}
+{"ev":"stop","span":"T14","at":"2026-10-26T15:48:04Z","ts":1793029684,"status":"ok"}
+{"ev":"start","span":"T15","kind":"task","label":"apply-text action, migration, UI, AM, full E2E","parent":"W7","model":"sonnet","attempt":"1","at":"2026-10-26T15:48:13Z","ts":1793029693}
+{"ev":"stop","span":"T15","at":"2026-10-26T16:25:41Z","ts":1793031941,"status":"ok"}
+{"ev":"stop","span":"W7","at":"2026-10-26T16:25:41Z","ts":1793031941,"status":"ok"}
+{"ev":"start","span":"W8","kind":"wave","label":"wave 8","at":"2026-10-26T16:25:53Z","ts":1793031953}
+{"ev":"start","span":"T16","kind":"task","label":"Spotlight evidence, v2 contract, runner","parent":"W8","model":"sonnet","attempt":"1","at":"2026-10-26T16:25:53Z","ts":1793031953}
+{"ev":"stop","span":"T16","at":"2026-10-26T16:41:31Z","ts":1793032891,"status":"ok"}
+{"ev":"start","span":"T18","kind":"task","label":"Apply the OP-031 pass","parent":"W8","model":"sonnet","attempt":"1","at":"2026-10-26T17:17:19Z","ts":1793035039}
+{"ev":"stop","span":"T18","at":"2026-10-26T17:38:32Z","ts":1793036312,"status":"ok"}
+{"ev":"stop","span":"W8","at":"2026-10-26T17:38:33Z","ts":1793036313,"status":"ok"}
+{"ev":"start","span":"W9","kind":"wave","label":"wave 9","at":"2026-10-26T17:38:36Z","ts":1793036316}
+{"ev":"start","span":"T19","kind":"task","label":"Docs, screenshots, full gate, CI","parent":"W9","model":"haiku","attempt":"1","at":"2026-10-26T17:38:37Z","ts":1793036317}
+{"ev":"stop","span":"T19","at":"2026-10-26T18:00:47Z","ts":1793037647,"status":"ok"}
+{"ev":"stop","span":"W9","at":"2026-10-26T18:00:47Z","ts":1793037647,"status":"ok"}
+{"ev":"start","span":"verify-1793041959","kind":"phase","label":"verify","at":"2026-10-26T19:12:39Z","ts":1793041959}

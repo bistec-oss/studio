@@ -3,8 +3,11 @@
 import React from 'react'
 
 // ─── Review row ──────────────────────────────────────────────────────────────
+// One ruled row of the Review step's <dl> (DESIGN_SYSTEM.md §8.15): a
+// sentence-case muted term beside its value, as the study draws its table
+// headers (021 FR-07).
 
-interface ReviewRowProps {
+export interface ReviewRowProps {
   label: string
   value: string
   capitalize?: boolean
@@ -12,11 +15,9 @@ interface ReviewRowProps {
 
 export function ReviewRow({ label, value, capitalize = false }: ReviewRowProps) {
   return (
-    <div className="flex items-start gap-4 py-2.5 border-b border-white/15 dark:border-white/8">
-      <span className="text-xs font-bold tracking-wider uppercase text-light-text-muted dark:text-dark-text-muted w-24 flex-shrink-0 pt-0.5">
-        {label}
-      </span>
-      <span className={`text-sm text-light-text dark:text-dark-text${capitalize ? ' capitalize' : ''}`}>{value}</span>
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] sm:grid-cols-[8rem_minmax(0,1fr)] gap-4 py-2.5 border-b border-line-subtle">
+      <dt className="text-ui-xs font-semibold text-fg-muted pt-0.5">{label}</dt>
+      <dd className={`text-ui-sm text-fg leading-relaxed break-words${capitalize ? ' capitalize' : ''}`}>{value}</dd>
     </div>
   )
 }

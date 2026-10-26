@@ -3,15 +3,27 @@ import { prisma } from "../prisma"
 import { generateDraftForBrief } from "../agent/generateDraft"
 import { findLivePost } from "../publish/publishDraft"
 import { withClaudeAuth } from "../agent/userToken"
+import { isClaudeUsageLimit } from "../agent/claudeCli"
+import { track } from "../analytics/track"
+import { isStyleKey, resolvePostStyle } from "../postStyles"
+import { parseFactsCheck } from "../factsCheck/types"
+import { checkHoldsPublish, heldReasonFor } from "./heldReason"
 
 // Generation is expensive (a design run is minutes of model time), so fewer
 // retries than the publish scheduler's 5.
 const MAX_RETRIES = 3
 // Heavy jobs, processed sequentially — bound a tick to a couple of them.
 const CLAIM_BATCH = 2
-// Lease for a claimed (RUNNING) entry. A full generation is copy (≤120s) +
-// background (≤90s) + design (≤300s); 15 min is ~2× that worst case.
-const GENERATION_LEASE_MS = 15 * 60_000
+// Lease for a claimed (RUNNING) entry. It is renewed at each entry's start and
+// again before its design (renewGenerationLease), so it bounds each of those
+// two segments, not the whole run; src/lib/models/budget.ts models them with
+// every eligible model's timeout, and tests/unit/actionBudget.test.ts fails if
+// either can outlive the lease (008 FR-12).
+export const GENERATION_LEASE_MS = 15 * 60_000
+
+// The prefix on errorReason when a scheduled run hit the team credential's
+// usage limit (008 FR-11), so the queue table says why rather than only what.
+const USAGE_LIMIT_REASON_PREFIX = "Claude usage limit reached on the team's credential — "
 
 // Backoff: 20, 40 min, capped at 60. Exported for unit tests.
 export function generationBackoffMs(retryCount: number): number {
@@ -42,6 +54,18 @@ async function claimDueGenerations(leaseUntil: Date): Promise<{ id: string }[]> 
   `
 }
 
+// Push a RUNNING entry's lease out to now + GENERATION_LEASE_MS (008 FR-12).
+// The claim computes one lease per tick for every entry it claims, and the
+// entries run one after another, so without this the second entry would start
+// on a lease the first had already spent. Guarded on RUNNING: it never revives
+// an entry that has since settled or been reclaimed as lapsed.
+async function renewGenerationLease(id: string): Promise<void> {
+  await prisma.scheduledGeneration.updateMany({
+    where: { id, status: "RUNNING" },
+    data: { nextRetryAt: new Date(Date.now() + GENERATION_LEASE_MS) },
+  })
+}
+
 // Ensure the entry has its Brief. Created once on the first attempt and reused
 // across retries (persisted immediately), so a retried entry never spawns
 // duplicate briefs and the eventual draft always hangs off one record.
@@ -50,6 +74,36 @@ async function ensureBrief(entry: ScheduledGeneration) {
     const existing = await prisma.brief.findUnique({ where: { id: entry.briefId } })
     if (existing) return existing
   }
+  // 027 FR-12: a stored key is resolved again now, at the latest version, and a
+  // key that no longer resolves fails the entry with a named reason (never "no
+  // style", never a post action). A null key is a pre-027 entry: its own goal
+  // and tone stand and it gets no checklist (FR-16).
+  let style: { postStyle: string | null; goal: string; tone: string; imageStyle: string } = {
+    postStyle: null,
+    goal: entry.goal,
+    tone: entry.tone,
+    imageStyle: "classic",
+  }
+  if (entry.postStyle != null) {
+    // The campaign's tone default matters only when the entry stored no tone.
+    const campaign =
+      entry.campaignId && !entry.tone?.trim()
+        ? await prisma.campaign.findUnique({
+            where: { id: entry.campaignId },
+            select: { defaultPostStyle: true, defaultTone: true },
+          })
+        : null
+    const resolved = resolvePostStyle({
+      style: entry.postStyle,
+      campaign,
+      explicit: { tone: entry.tone },
+      path: entry.designMode === "TEMPLATE" ? "A" : "B",
+      aspectRatio: entry.aspectRatio,
+      surface: "queue",
+    })
+    if (!resolved.ok) throw new Error(`Post style "${entry.postStyle}" is not available`)
+    style = { postStyle: resolved.key, goal: resolved.goal, tone: resolved.tone, imageStyle: resolved.imageStyle }
+  }
   const brief = await prisma.brief.create({
     data: {
       teamId: entry.teamId,
@@ -57,8 +111,10 @@ async function ensureBrief(entry: ScheduledGeneration) {
       campaignId: entry.campaignId,
       topic: entry.topic,
       description: entry.description,
-      goal: entry.goal,
-      tone: entry.tone,
+      postStyle: style.postStyle,
+      goal: style.goal,
+      tone: style.tone,
+      imageStyle: style.imageStyle,
       channels: entry.channels,
       aspectRatio: entry.aspectRatio,
       designMode: entry.designMode,
@@ -127,7 +183,18 @@ export async function runGenerationJobs(): Promise<void> {
   })
 
   for (const entry of entries) {
+    const startedAt = Date.now()
+    // The settled outcome, emitted once after the try/catch (006 FR-04), so an
+    // analytics problem can never re-enter the retry branch below.
+    let settled: {
+      outcome: "completed" | "retry" | "failed"
+      draftId: string | null
+      retryCount?: number
+      errorReason?: string
+      held?: boolean
+    } | null = null
     try {
+      await renewGenerationLease(entry.id)
       const brief = await ensureBrief(entry)
 
       // entry.teamId is NOT NULL as of Task 15 (Migration B).
@@ -145,12 +212,20 @@ export async function runGenerationJobs(): Promise<void> {
       const { draft } = await withClaudeAuth(null, teamId, () =>
         generateDraftForBrief(
           brief,
-          { userId: null, teamId },
-          { templateId: entry.templateId }
+          { userId: null, teamId, source: "scheduler" },
+          { templateId: entry.templateId, onBeforeDesign: () => renewGenerationLease(entry.id) }
         )
       )
 
-      await executePostAction(entry, draft)
+      // 027 FR-12: an unattended post action runs only on a clear facts check.
+      // A flagged or errored check (or a missing one: fail closed) holds the
+      // post for a person; the entry still completes, since the generation worked.
+      let heldReason: string | null = null
+      if (entry.postAction !== "HOLD") {
+        const check = parseFactsCheck((draft as { factsCheck?: unknown }).factsCheck)
+        if (checkHoldsPublish(check)) heldReason = heldReasonFor(check)
+      }
+      if (heldReason === null) await executePostAction(entry, draft)
 
       await prisma.scheduledGeneration.update({
         where: { id: entry.id },
@@ -159,11 +234,15 @@ export async function runGenerationJobs(): Promise<void> {
           draftId: draft.id,
           errorReason: null,
           nextRetryAt: null,
+          heldReason,
         },
       })
       console.log(`[generation] entry ${entry.id} → COMPLETED (draft ${draft.id})`)
+      settled = { outcome: "completed", draftId: draft.id, retryCount: entry.retryCount, held: heldReason !== null }
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? err.message : String(err)
+      // Retry and backoff are the same either way; only the reason says more.
+      const reason = isClaudeUsageLimit(err) ? USAGE_LIMIT_REASON_PREFIX + message : message
       const nextRetry = entry.retryCount + 1
 
       if (nextRetry <= MAX_RETRIES) {
@@ -180,6 +259,7 @@ export async function runGenerationJobs(): Promise<void> {
         console.log(
           `[generation] entry ${entry.id} → retry ${nextRetry}/${MAX_RETRIES} at ${when.toISOString()}: ${reason}`
         )
+        settled = { outcome: "retry", draftId: null, retryCount: nextRetry, errorReason: reason }
       } else {
         await prisma.scheduledGeneration.update({
           where: { id: entry.id },
@@ -192,7 +272,26 @@ export async function runGenerationJobs(): Promise<void> {
         console.log(
           `[generation] entry ${entry.id} → FAILED after ${MAX_RETRIES} retries: ${reason}`
         )
+        settled = { outcome: "failed", draftId: null, retryCount: entry.retryCount, errorReason: reason }
       }
+    }
+    if (settled) {
+      const s = settled as NonNullable<typeof settled>
+      await track("scheduled_generation.settled", {
+        source: "scheduler",
+        teamId: entry.teamId,
+        userId: null,
+        draftId: s.draftId,
+        durationMs: Date.now() - startedAt,
+        outcome: s.outcome,
+        payload: {
+          ...(s.retryCount !== undefined ? { retryCount: s.retryCount } : {}),
+          ...(s.errorReason !== undefined ? { errorReason: s.errorReason } : {}),
+          // 027 FR-14: the style key and whether the post action was held.
+          postStyle: isStyleKey(entry.postStyle) ? entry.postStyle : null,
+          held: s.held === true,
+        },
+      })
     }
   }
 }

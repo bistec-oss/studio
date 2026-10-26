@@ -1,0 +1,18 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-20T20:11:26Z","ts":1792527086}
+{"ev":"stop","span":"propose","at":"2026-10-20T20:17:30Z","ts":1792527450,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-20T20:18:07Z","ts":1792527487}
+{"ev":"stop","span":"plan","at":"2026-10-20T20:22:10Z","ts":1792527730,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-20T20:22:49Z","ts":1792527769}
+{"ev":"start","span":"T1","kind":"task","label":"heartbeat migration","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-20T20:22:49Z","ts":1792527769}
+{"ev":"stop","span":"T1","at":"2026-10-20T20:25:39Z","ts":1792527939,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-20T20:25:39Z","ts":1792527939,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-20T20:25:51Z","ts":1792527951}
+{"ev":"start","span":"T2","kind":"task","label":"worker, helper, route, UI, tests","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-20T20:25:51Z","ts":1792527951}
+{"ev":"stop","span":"T2","at":"2026-10-20T20:33:37Z","ts":1792528417,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-20T20:33:37Z","ts":1792528417,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-20T20:33:46Z","ts":1792528426}
+{"ev":"start","span":"T3","kind":"task","label":"docs, roadmap, gate","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-20T20:33:47Z","ts":1792528426}
+{"ev":"stop","span":"T3","at":"2026-10-21T01:31:34Z","ts":1792546294,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-21T01:31:35Z","ts":1792546295,"status":"ok"}
+{"ev":"start","span":"verify-1792546331","kind":"phase","label":"verify","at":"2026-10-21T01:32:11Z","ts":1792546331}
+{"ev":"stop","span":"verify-1792546331","at":"2026-10-21T01:35:50Z","ts":1792546550,"status":"ok"}

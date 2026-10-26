@@ -1,0 +1,12 @@
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-18T16:46:39Z","ts":1792341999}
+{"ev":"start","span":"T1","kind":"task","label":"T1 resume","parent":"W1","model":"opus","attempt":"2","at":"2026-10-18T16:46:40Z","ts":1792342000}
+{"ev":"stop","span":"T1","at":"2026-10-18T16:55:01Z","ts":1792342501,"status":"ok"}
+{"ev":"start","span":"T2","kind":"task","label":"T2","parent":"W1","model":"opus","attempt":"1","at":"2026-10-18T16:55:18Z","ts":1792342517}
+{"ev":"stop","span":"T2","at":"2026-10-18T17:08:04Z","ts":1792343284,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"T3","parent":"W1","model":"opus","attempt":"1","at":"2026-10-18T17:08:16Z","ts":1792343296}
+{"ev":"stop","span":"T3","at":"2026-10-18T17:19:40Z","ts":1792343980,"status":"ok"}
+{"ev":"start","span":"T4","kind":"task","label":"T4","model":"opus","attempt":"1","at":"2026-10-18T17:19:43Z","ts":1792343983}
+{"ev":"stop","span":"T4","at":"2026-10-18T17:31:54Z","ts":1792344714,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-18T17:31:54Z","ts":1792344714,"status":"ok"}
+{"ev":"start","span":"verify-1792344730","kind":"phase","label":"verify","at":"2026-10-18T17:32:10Z","ts":1792344730}
+{"ev":"stop","span":"verify-1792344730","at":"2026-10-18T17:49:32Z","ts":1792345772,"status":"ok"}

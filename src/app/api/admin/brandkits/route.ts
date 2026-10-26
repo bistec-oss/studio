@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { findFamily } from '@/lib/fonts/catalogue'
+import { validateKitFonts } from '@/lib/fonts/validateKitFonts'
 
 export const GET = withTeamAdmin(async (_req, _ctx, user) => {
   const kits = await prisma.brandKit.findMany({
@@ -31,6 +33,14 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
 
   const teamId = user.teamId
 
+  // 031 FR-20: every font is a catalogue family (its url is computed), at most 6.
+  let kitFonts: Array<{ name: string; url: string }> = []
+  if (fonts) {
+    const checked = validateKitFonts(fonts, [], findFamily)
+    if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 })
+    kitFonts = checked.fonts
+  }
+
   // Only one kit can be the system default — clear + create atomically.
   const kit = await prisma.$transaction(async (tx) => {
     if (isDefault) {
@@ -41,7 +51,7 @@ export const POST = withTeamAdmin(async (req: NextRequest, _ctx, user) => {
         teamId,
         name,
         colors: colors ?? [],
-        fonts: fonts ?? [],
+        fonts: kitFonts,
         logoUrl: logoUrl ?? null,
         isDefault: isDefault ?? false,
       },

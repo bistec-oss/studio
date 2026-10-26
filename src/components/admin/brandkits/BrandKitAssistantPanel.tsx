@@ -1,26 +1,58 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Check, FileText, Loader2, Paperclip, Send, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Modal'
-import { apiFetch } from '@/lib/apiFetch'
+import { ModelPicker } from '@/components/ui/ModelPicker'
+import { ApiError, apiFetch } from '@/lib/apiFetch'
+import type { ModelKey } from '@/lib/models/catalogue'
 import { ColorEditor } from './ColorEditor'
+import { COMPACT_TEXTAREA, EYEBROW, FOCUS, ICON, ICON_BUTTON, ICON_SM, SCROLL_FOCUS } from '@/components/ui/atoms'
+import type { FontFamily } from '@/lib/fonts/types'
+import { FieldLabel } from '@/components/ui/FieldLabel'
 
 // F5 — conversational brand-kit extraction from reference images. Mirrors the
 // campaign BriefingAssistantPanel: chat grounded on the kit's feedToAI reference
 // images, the assistant proposes a brand suggestion, the admin reviews + edits it,
 // then applies. Apply writes the VOICE (new active prompt) and the COLOR palette
-// (sampled, editable). Font guesses + style are surfaced as read-only suggestions
-// — vision font guesses are never auto-committed (they lack real font files).
+// (sampled, editable) and, since 031, the fonts: each proposed name is looked up in
+// the font list (exact match only) and shown as current versus proposed. A name that
+// is not in the list is never applied. One Apply calls /assistant/apply (all or nothing).
 
 interface BrandKitSuggestion {
   voice: string
   tone: string
   style: string
-  fonts: string[]
+  fonts: { heading?: string; body?: string }
+  scriptFonts?: Record<string, string>
   colors: string[]
+}
+
+// One reviewable font change in the accept view.
+interface FontRow {
+  key: 'heading' | 'body' | 'sinhala'
+  label: string
+  current: string
+  proposed: string
+  // Why the row cannot be applied; null when the proposed name is a usable catalogue family.
+  problem: 'not-listed' | 'no-sinhala' | null
+  checked: boolean
+}
+
+interface KitFontsView {
+  fonts: Array<{ name: string }>
+  scriptFonts: Record<string, string> | null
+}
+
+async function lookupFamily(name: string): Promise<FontFamily | null> {
+  try {
+    const res = await apiFetch<{ families: FontFamily[] }>(`/api/fonts?q=${encodeURIComponent(name)}`)
+    return res.families.find(f => f.family === name) ?? null
+  } catch {
+    return null
+  }
 }
 
 interface ChatMessage {
@@ -58,6 +90,8 @@ interface BrandKitAssistantPanelProps {
 
 export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: BrandKitAssistantPanelProps) {
   const endRef = useRef<HTMLDivElement>(null)
+  const voiceId = React.useId()
+  const messageId = React.useId()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -67,10 +101,22 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
   // The suggestion under review (editable), and which fields to apply.
   const [voice, setVoice] = useState('')
   const [colors, setColors] = useState<string[]>([])
-  const [fonts, setFonts] = useState<string[]>([])
+  const [fontRows, setFontRows] = useState<FontRow[]>([])
+  // The font lookups run after a suggestion arrives; Apply waits for them so a fast click cannot skip the fonts.
+  const [fontsLoading, setFontsLoading] = useState(false)
   const [style, setStyle] = useState('')
   const [hasSuggestion, setHasSuggestion] = useState(false)
   const [applying, setApplying] = useState(false)
+  // 008 FR-21: the header model pick. It is client state for this open chat
+  // only (no remembered choice; a reload resets it). Undefined means the team
+  // or system default (A5), so an untouched picker sends today's body. A
+  // refused pick's 400 message shows on the picker.
+  const [model, setModel] = useState<ModelKey | undefined>(undefined)
+  const [modelError, setModelError] = useState<string | undefined>(undefined)
+  const pickModel = useCallback((next: ModelKey | undefined) => {
+    setModel(next)
+    setModelError(undefined)
+  }, [])
 
   // Load the kit's source documents when the drawer opens.
   useEffect(() => {
@@ -120,10 +166,43 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
     }
   }
 
+  // FR-33: look each proposed name up (exact match only) and set it beside the kit's current font.
+  async function buildFontRows(s: BrandKitSuggestion): Promise<FontRow[]> {
+    const proposals: Array<{ key: FontRow['key']; label: string; name: string }> = []
+    if (s.fonts?.heading) proposals.push({ key: 'heading', label: 'Heading font', name: s.fonts.heading })
+    if (s.fonts?.body) proposals.push({ key: 'body', label: 'Body font', name: s.fonts.body })
+    if (s.scriptFonts?.sinhala) proposals.push({ key: 'sinhala', label: 'Sinhala font', name: s.scriptFonts.sinhala })
+    if (proposals.length === 0) return []
+    let kit: KitFontsView | null = null
+    try {
+      kit = await apiFetch<KitFontsView>(`/api/admin/brandkits/${kitId}`)
+    } catch {
+      /* "Current" shows as none; Apply still validates on the server */
+    }
+    const storedFonts = Array.isArray(kit?.fonts) ? kit!.fonts : []
+    return Promise.all(
+      proposals.map(async p => {
+        const found = await lookupFamily(p.name)
+        const problem: FontRow['problem'] = !found
+          ? 'not-listed'
+          : p.key === 'sinhala' && !found.scripts.includes('sinhala')
+            ? 'no-sinhala'
+            : null
+        const current =
+          p.key === 'heading' ? storedFonts[0]?.name : p.key === 'body' ? storedFonts[1]?.name : kit?.scriptFonts?.sinhala
+        return { key: p.key, label: p.label, current: current ?? 'none', proposed: p.name, problem, checked: problem === null }
+      }),
+    )
+  }
+
   function loadSuggestion(s: BrandKitSuggestion) {
     setVoice(s.voice)
     setColors(s.colors)
-    setFonts(s.fonts)
+    setFontRows([])
+    setFontsLoading(true)
+    void buildFontRows(s)
+      .then(setFontRows)
+      .finally(() => setFontsLoading(false))
     setStyle([s.tone, s.style].filter(Boolean).join(' — '))
     setHasSuggestion(true)
   }
@@ -136,6 +215,7 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
     setMessages(next)
     setInput('')
     setPending(true)
+    setModelError(undefined)
     setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
     try {
       const result = await apiFetch<{ reply: string; suggestion: BrandKitSuggestion | null }>(
@@ -143,14 +223,18 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })) }),
+          // model is dropped by JSON.stringify while undefined (A5).
+          body: JSON.stringify({ messages: next.map(m => ({ role: m.role, content: m.content })), model }),
         },
       )
       setMessages([...next, { role: 'assistant', content: result.reply, suggestion: result.suggestion }])
       if (result.suggestion) loadSuggestion(result.suggestion)
       setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 0)
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'The assistant failed to reply')
+      // A refused model pick (400, nothing ran) shows on the picker; any other
+      // failure toasts. Either way the turn rolls back so it can be resent.
+      if (err instanceof ApiError && err.code === 'MODEL_NOT_ALLOWED') setModelError(err.message)
+      else toast.error(err instanceof Error ? err.message : 'The assistant failed to reply')
       setMessages(messages)
       setInput(content)
     } finally {
@@ -158,25 +242,28 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
     }
   }
 
+  const chosenFonts = fontRows.filter(r => r.checked && r.problem === null)
+  const canApply = voice.trim() !== '' || colors.length > 0 || chosenFonts.length > 0
+
   async function apply() {
-    if (!voice.trim() && colors.length === 0) return
+    if (!canApply) return
     setApplying(true)
     try {
-      if (voice.trim()) {
-        await apiFetch(`/api/admin/brandkits/${kitId}/prompts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: voice.trim() }),
-        })
-      }
-      if (colors.length > 0) {
-        await apiFetch(`/api/admin/brandkits/${kitId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ colors }),
-        })
-      }
-      toast.success('Applied brand voice and colors to the kit.')
+      const fonts: { heading?: string; body?: string } = {}
+      for (const r of chosenFonts) if (r.key !== 'sinhala') fonts[r.key] = r.proposed
+      const sinhala = chosenFonts.find(r => r.key === 'sinhala')
+      // One call, all or nothing (FR-34): voice, colors, fonts and script fonts together.
+      await apiFetch(`/api/admin/brandkits/${kitId}/assistant/apply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(voice.trim() && { voice: voice.trim() }),
+          ...(colors.length > 0 && { colors }),
+          ...(Object.keys(fonts).length > 0 && { fonts }),
+          ...(sinhala && { scriptFonts: { sinhala: sinhala.proposed } }),
+        }),
+      })
+      toast.success('Applied the suggestion to the kit.')
       setHasSuggestion(false)
       onApplied()
     } catch (e: unknown) {
@@ -188,11 +275,24 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
 
   return (
     <Drawer open={open} onClose={onClose} title="Extract brand from references">
-      <div className="flex flex-col h-full">
+      <div className="flex h-full flex-col">
+        {/* The chat header's model picker (008 FR-21), pre-selected to the team
+            or system default. Its team-token notice is the picker's own
+            (FR-22). It renders nothing until /api/models loads. */}
+        <ModelPicker
+          id="brandkit-assistant-model"
+          surface="ASSISTANT_BRANDKIT"
+          value={model}
+          onChange={pickModel}
+          label="Brand kit assistant model"
+          disabled={pending}
+          error={modelError}
+          className="flex-shrink-0 border-b border-line-subtle px-5 py-4"
+        />
         {/* Documents */}
-        <div className="px-5 py-4 border-b border-light-border dark:border-dark-border space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+        <div className="space-y-2 border-b border-line-subtle px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p className={EYEBROW}>
               Source documents &amp; images ({docs.length}/5)
             </p>
             <Button
@@ -201,7 +301,7 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
               disabled={uploading || docs.length >= 5}
               onClick={() => fileInputRef.current?.click()}
             >
-              {uploading ? <Loader2 size={13} className="animate-spin" /> : <Paperclip size={13} />}
+              {uploading ? <Loader2 {...ICON} className="animate-spin" /> : <Paperclip {...ICON} />}
               {uploading ? 'Uploading…' : 'Add document'}
             </Button>
             <input
@@ -216,26 +316,27 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
             />
           </div>
           {docs.length === 0 ? (
-            <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
+            <p className="text-ui-xs text-fg-muted">
               Hand in brand guidelines, past posts, or your logo (PDF, DOCX, TXT, MD, PNG, JPG —
               max 10MB each). They ground this chat only — never the post generator.
             </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="divide-y divide-line-subtle">
               {docs.map(doc => (
-                <li key={doc.id} className="flex items-center gap-2 text-sm text-light-text dark:text-dark-text">
-                  <FileText size={14} className="text-light-text-muted dark:text-dark-text-muted flex-shrink-0" />
-                  <span className="truncate flex-1" title={doc.name}>{doc.name}</span>
-                  <span className="text-xs text-light-text-muted dark:text-dark-text-muted whitespace-nowrap">
+                <li key={doc.id} className="flex items-center gap-2 py-1 text-ui-sm text-fg">
+                  <FileText {...ICON} aria-hidden className="flex-shrink-0 text-fg-muted" />
+                  <span className="min-w-0 flex-1 truncate" title={doc.name}>{doc.name}</span>
+                  <span className="whitespace-nowrap text-ui-xs text-fg-muted">
                     {formatSize(doc.sizeBytes)}
                     {doc.truncated && ' · truncated'}
                   </span>
                   <button
+                    type="button"
                     aria-label={`Delete ${doc.name}`}
                     onClick={() => deleteDoc(doc)}
-                    className="p-1 rounded text-light-text-muted dark:text-dark-text-muted hover:text-red-500 transition-colors"
+                    className={`${ICON_BUTTON} hover:text-status-failed ${FOCUS}`}
                   >
-                    <Trash2 size={13} />
+                    <Trash2 {...ICON} />
                   </button>
                 </li>
               ))}
@@ -243,92 +344,143 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
           )}
         </div>
 
-        {/* Chat */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        {/* The conversation (§8.14's log vocabulary, the study's .thread):
+            rows ruled apart on --line-subtle, newest last.
+            It scrolls inside its own box, so the box is always a focusable,
+            labelled region, even before the first turn (WCAG 2.1.1; the static
+            rule, 014 FR-17). */}
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Conversation"
+          className={`flex-1 overflow-y-auto px-5 py-4 ${SCROLL_FOCUS}`}
+        >
           {messages.length === 0 && (
-            <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
+            <p className="text-ui-sm text-fg-muted">
               Add references above (brand guidelines, past posts, your logo) — or upload
-              images in the Artifacts section marked <span className="font-medium">feed to AI</span> —
+              images in the Artifacts section marked <span className="font-medium text-fg">feed to AI</span> —
               then ask me to extract the brand voice and style. I&apos;ll propose a voice,
               palette, and font guesses you can review and apply.
             </p>
           )}
-          {messages.map((m, i) => (
-            <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
-              <div
-                className={
-                  m.role === 'user'
-                    ? 'max-w-[85%] rounded-xl px-3 py-2 text-sm bg-primary/10 dark:bg-primary-light/10 text-light-text dark:text-dark-text whitespace-pre-wrap'
-                    : 'max-w-[85%] rounded-xl px-3 py-2 text-sm glass-input text-light-text dark:text-dark-text whitespace-pre-wrap'
-                }
-              >
-                {m.content}
-              </div>
-            </div>
-          ))}
+          {messages.length > 0 && (
+            <ol className="divide-y divide-line-subtle">
+              {messages.map((m, i) => (
+                <li key={i} className="py-3 first:pt-0">
+                  <p className={`${EYEBROW} mb-1`}>
+                    {m.role === 'user' ? 'You' : 'Assistant'}
+                  </p>
+                  <p
+                    className={
+                      m.role === 'user'
+                        ? 'whitespace-pre-wrap break-words text-ui-sm font-medium leading-snug text-fg'
+                        : 'whitespace-pre-wrap break-words text-ui-sm leading-relaxed text-fg'
+                    }
+                  >
+                    {m.content}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
           {pending && (
-            <div className="flex items-center gap-2 text-sm text-light-text-muted dark:text-dark-text-muted">
-              <Loader2 size={14} className="animate-spin" />
+            <div className="mt-3 flex items-center gap-2 text-ui-sm text-fg-muted">
+              <Loader2 {...ICON} className="animate-spin" aria-hidden />
               Studying the references — this can take up to a minute…
             </div>
           )}
           <div ref={endRef} />
         </div>
 
-        {/* Suggestion review + apply */}
+        {/* Suggestion review + apply. It scrolls inside its own box, so it is
+            a focusable, labelled region (the T7 rule). The proposed palette is
+            kit data: its swatches show the sampled colours as they are. */}
         {hasSuggestion && (
-          <div className="px-5 py-4 border-t border-light-border dark:border-dark-border bg-primary/[0.03] dark:bg-primary-light/[0.03] max-h-[22rem] overflow-y-auto space-y-3">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Proposed brand"
+            className={`max-h-[22rem] flex-shrink-0 space-y-3 overflow-y-auto border-t border-line-subtle bg-surface px-5 py-4 ${SCROLL_FOCUS}`}
+          >
             <div className="flex items-center gap-2">
-              <Sparkles size={15} className="text-primary dark:text-primary-light" />
-              <p className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+              <Sparkles {...ICON} aria-hidden className="flex-shrink-0 text-accent" />
+              <p className={EYEBROW}>
                 Proposed brand — review &amp; edit, then apply
               </p>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-light-text-muted dark:text-dark-text-muted">Brand voice</label>
+              {/* A field label: sentence case, the shared FieldLabel (021 FR-07). */}
+              <FieldLabel htmlFor={voiceId}>Brand voice</FieldLabel>
               <textarea
+                id={voiceId}
                 value={voice}
                 onChange={e => setVoice(e.target.value)}
                 rows={4}
-                className="mt-1 glass-input rounded-xl px-3 py-2 text-sm w-full text-light-text dark:text-dark-text resize-y"
+                className={`${COMPACT_TEXTAREA} mt-1.5 w-full resize-y leading-relaxed`}
               />
             </div>
 
             <div>
-              <label className="text-xs font-medium text-light-text-muted dark:text-dark-text-muted">
+              <p className={EYEBROW}>
                 Color palette (sampled — replaces the current palette)
-              </label>
-              <div className="mt-1">
+              </p>
+              <div className="mt-1.5">
                 <ColorEditor colors={colors} onChange={setColors} />
               </div>
             </div>
 
-            {fonts.length > 0 && (
+            {fontRows.length > 0 && (
               <div>
-                <label className="text-xs font-medium text-light-text-muted dark:text-dark-text-muted">
-                  Font guesses (not applied — add manually with a font file if correct)
-                </label>
-                <div className="mt-1 flex flex-wrap gap-1.5">
-                  {fonts.map(f => (
-                    <span key={f} className="px-2 py-1 rounded-lg text-xs bg-primary/5 dark:bg-primary-light/5 text-light-text dark:text-dark-text">
-                      {f}
-                    </span>
-                  ))}
-                </div>
+                <p className={EYEBROW}>Fonts (checked ones are applied)</p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {fontRows.map(r => {
+                    const id = `${voiceId}-font-${r.key}`
+                    return (
+                      <li key={r.key} className="flex items-start gap-2">
+                        <input
+                          id={id}
+                          type="checkbox"
+                          checked={r.checked && r.problem === null}
+                          disabled={r.problem !== null}
+                          onChange={e =>
+                            setFontRows(rows => rows.map(x => (x.key === r.key ? { ...x, checked: e.target.checked } : x)))
+                          }
+                          className={`mt-0.5 h-4 w-4 accent-accent disabled:cursor-not-allowed ${FOCUS}`}
+                        />
+                        <label htmlFor={id} className="min-w-0 break-words text-ui-sm text-fg">
+                          <span className="font-medium">{r.label}: </span>
+                          {r.problem === 'not-listed' ? (
+                            <span className="text-fg-muted">
+                              {`${r.proposed} is not in the font list and won't be applied`}
+                            </span>
+                          ) : r.problem === 'no-sinhala' ? (
+                            <span className="text-fg-muted">
+                              {`${r.proposed} does not support Sinhala and won't be applied`}
+                            </span>
+                          ) : (
+                            <span>
+                              Current: {r.current} → Proposed: {r.proposed}
+                            </span>
+                          )}
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
               </div>
             )}
 
             {style && (
-              <p className="text-xs text-light-text-muted dark:text-dark-text-muted">
-                <span className="font-medium">Style:</span> {style}
+              <p className="break-words text-ui-xs text-fg-muted">
+                <span className="font-semibold text-fg">Style:</span> {style}
               </p>
             )}
 
-            <div className="flex gap-2">
-              <Button size="sm" onClick={apply} disabled={applying || (!voice.trim() && colors.length === 0)}>
-                {applying ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                Apply voice + colors
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={apply} disabled={applying || fontsLoading || !canApply}>
+                {applying ? <Loader2 {...ICON} className="animate-spin" /> : <Check {...ICON} />}
+                Apply to brand kit
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setHasSuggestion(false)} disabled={applying}>
                 Dismiss
@@ -337,17 +489,29 @@ export function BrandKitAssistantPanel({ kitId, open, onClose, onApplied }: Bran
           </div>
         )}
 
-        {/* Input */}
-        <form onSubmit={send} className="px-5 py-4 border-t border-light-border dark:border-dark-border flex gap-2">
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            placeholder="e.g. Extract the brand voice and style from these references"
-            className="glass-input rounded-xl px-3 py-2 text-sm flex-1 text-light-text dark:text-dark-text focus:outline-none"
-          />
-          <Button type="submit" size="sm" disabled={!input.trim() || pending} aria-label="Send">
-            <Send size={14} />
-          </Button>
+        {/* The prompt (§8.3, §8.14, the study's .ask): a pill field with the
+            round ink Send inside it (the study's .send); the wrapper shows the
+            focus outline. Send is named by its aria-label. */}
+        <form onSubmit={send} className="flex-shrink-0 border-t border-line-subtle px-5 py-4">
+          <FieldLabel htmlFor={messageId} className="mb-1.5">Message</FieldLabel>
+          <div className="flex items-center gap-2 rounded-ui-pill border border-line bg-surface-raised py-[5px] pl-4 pr-[5px] focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus">
+            <input
+              id={messageId}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="e.g. Extract the brand voice and style from these references"
+              className="min-w-0 flex-1 bg-transparent text-ui-sm text-fg placeholder:text-fg-muted focus:outline-none"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || pending}
+              aria-label="Send"
+              title="Send"
+              className={`inline-flex size-[34px] flex-shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg transition-transform duration-fast ease-standard enabled:active:scale-[0.98] motion-reduce:enabled:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS}`}
+            >
+              {pending ? <Loader2 {...ICON_SM} className="animate-spin" aria-hidden /> : <Send {...ICON_SM} aria-hidden />}
+            </button>
+          </div>
         </form>
       </div>
     </Drawer>

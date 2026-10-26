@@ -1,0 +1,10 @@
+{
+  "tier": "standard",
+  "domains": ["ops"],
+  "rationale": "Deletes the company deploy workflow and adds v2 to the CI triggers, spanning workflows, Dockerfile comments, and docs with all edits independently revertible; the only unknown is operational (GitHub runner timeout), not design-affecting.",
+  "signals": {
+    "blast_radius": "Two workflow files, Dockerfile comment, env.ts comment, CLAUDE.md and docs/handoff.md; no new subsystems or interfaces added",
+    "unresolved": "Whether the 315-case E2E suite will timeout on GitHub-hosted runners (acknowledged and explicitly out-of-scope for this change)",
+    "irreversibility": "Git revert restores the deleted file and trigger changes; Actions re-enable is manual; no persisted data or capability removed"
+  }
+}

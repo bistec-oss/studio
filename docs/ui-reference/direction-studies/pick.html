@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Comparison page published for the 011 direction pick on 2026-10-06:
+     https://claude.ai/artifact/XijAC8pAQRkmGErC5QYmB5 (private to its owner).
+     This local copy links to the sibling study files and the shots/ folder. -->
+<title>Studio Direction Pick</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a decision sheet — one header, three equal study columns, the reply line last. */
+:root {
+  --bg: #f3f2ef;
+  --panel: #ffffff;
+  --fg: #1b1a18;
+  --muted: #5f5d58;
+  --rule: #dcdad4;
+  --edge: #8c8980;
+  --pick: #1b1a18;
+  --pick-fg: #fbfaf8;
+  --font-body: "Hanken Grotesk", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --panel: #1b1b19; --fg: #edece8; --muted: #a3a09a;
+    --rule: #2f2e2b; --edge: #74716b; --pick: #edece8; --pick-fg: #121211;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --panel: #1b1b19; --fg: #edece8; --muted: #a3a09a;
+  --rule: #2f2e2b; --edge: #74716b; --pick: #edece8; --pick-fg: #121211;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.55 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 24px; padding-block: 40px 56px; display: flex; flex-direction: column; gap: 32px; }
+a { color: inherit; text-underline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.mono { font-family: var(--font-mono); }
+
+header.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 8px 0 8px; font-size: clamp(28px, 4vw, 40px); line-height: 1.08; letter-spacing: -0.025em; font-weight: 700; text-wrap: balance; }
+.lede { margin: 0; max-width: 64ch; color: var(--muted); }
+
+.seg { display: inline-flex; padding: 3px; border: 1px solid var(--edge); border-radius: 10px; background: var(--panel); }
+.seg button { border: 0; background: none; color: var(--muted); font: 600 13px/1 var(--font-body); padding: 9px 14px; border-radius: 7px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--pick); color: var(--pick-fg); }
+.seg-label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+
+.studies { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.study { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; }
+.study-hd { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.study-hd h2 { margin: 0; font-size: 20px; letter-spacing: -0.015em; }
+.study-hd h2 .letter { font-family: var(--font-mono); font-weight: 500; font-size: 13px; color: var(--muted); margin-right: 8px; }
+.thesis { margin: 0; font-weight: 600; }
+.shot { position: relative; display: block; width: 100%; max-width: 100%; aspect-ratio: 1440 / 1000; overflow: hidden; border-radius: 8px; border: 1px solid var(--rule); background: var(--bg); }
+.shot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center bottom; }
+.desc { margin: 0; color: var(--muted); font-size: 14px; }
+.traits { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 13.5px; }
+.traits dt { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.traits dd { margin: 0; min-width: 0; }
+.tradeoffs { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 14px; }
+.tradeoffs li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; }
+.tradeoffs .sign { font-family: var(--font-mono); font-weight: 500; color: var(--muted); }
+.open { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 14px; font-weight: 600; }
+
+.reply { display: flex; flex-direction: column; gap: 8px; padding: 20px 22px; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; }
+.reply h2 { margin: 0; font-size: 18px; }
+.reply p { margin: 0; max-width: 72ch; }
+.reply code { font-family: var(--font-mono); font-size: 13.5px; padding: 1px 6px; border: 1px solid var(--rule); border-radius: 5px; }
+.common { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 90ch; }
+
+@media (max-width: 1000px) { .studies { grid-template-columns: minmax(0, 1fr); } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Change 011 · app visual redesign · task T2</div>
+      <h1>Pick a direction for Studio</h1>
+      <p class="lede">Three directions for the app, each drawn on the draft review page. All three are neutral, so a team's brand kit stays the only brand colour on screen. Each one carries the colour and spacing tokens the build copies straight into the app.</p>
+    </div>
+    <div>
+      <span class="seg-label" id="shot-theme-label">Show the studies in</span>
+      <div class="seg" role="group" aria-labelledby="shot-theme-label">
+        <button type="button" id="show-light" data-shot="light">Light</button>
+        <button type="button" id="show-dark" data-shot="dark">Dark</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="studies">
+    <article class="study" aria-labelledby="a-name">
+      <div class="study-hd"><h2 id="a-name"><span class="letter">A</span>Graphite</h2></div>
+      <p class="thesis">Today's layout, made solid and calm.</p>
+      <a class="shot" href="study-a-graphite.html" target="_blank" rel="noopener" aria-label="Open the Graphite study">
+        <img data-light="shots/a-light.png" data-dark="shots/a-dark.png" src="shots/a-light.png" alt="Graphite study of the draft review page: floating sidebar and header, preview on the left, caption and refine on the right">
+      </a>
+      <p class="desc">Warm grey surfaces float as opaque panels with soft shadows. The main button is black ink, so the only colour comes from status chips and the post itself.</p>
+      <dl class="traits">
+        <dt>Type</dt><dd>Plus Jakarta Sans, JetBrains Mono</dd>
+        <dt>Density</dt><dd>Comfortable, 14 px body</dd>
+        <dt>Shape</dt><dd>Pill buttons, rounded cards</dd>
+        <dt>Layout</dt><dd>Two columns, as today</dd>
+      </dl>
+      <ul class="tradeoffs">
+        <li><span class="sign">+</span>Closest to today, so the restyle carries the least risk.</li>
+        <li><span class="sign">+</span>A colourless accent can never clash with a team's brand kit.</li>
+        <li><span class="sign">−</span>A black main button stands out less than a coloured one.</li>
+        <li><span class="sign">−</span>Rounded trays cost space on dense admin tables.</li>
+      </ul>
+      <a class="open" href="study-a-graphite.html" target="_blank" rel="noopener">Open the full Graphite study ↗</a>
+    </article>
+
+    <article class="study" aria-labelledby="b-name">
+      <div class="study-hd"><h2 id="b-name"><span class="letter">B</span>Folio</h2></div>
+      <p class="thesis">An editorial desk for a marketing team.</p>
+      <a class="shot" href="study-b-folio.html" target="_blank" rel="noopener" aria-label="Open the Folio study">
+        <img data-light="shots/b-light.png" data-dark="shots/b-dark.png" src="shots/b-light.png" alt="Folio study of the draft review page: the post on a proof plate with crop marks, a serif title, ruled caption and refine sections">
+      </a>
+      <p class="desc">Paper and ink with a burnt-sienna accent. Serif headings, thin rules instead of boxes, and the post shown as a print proof with crop marks.</p>
+      <dl class="traits">
+        <dt>Type</dt><dd>Fraunces, Instrument Sans</dd>
+        <dt>Density</dt><dd>Reading-first, 15 px body</dd>
+        <dt>Shape</dt><dd>Nearly square, flat</dd>
+        <dt>Layout</dt><dd>Two columns, proof and copy desk</dd>
+      </dl>
+      <ul class="tradeoffs">
+        <li><span class="sign">+</span>The most distinctive, and the easiest to read for long captions.</li>
+        <li><span class="sign">+</span>Flat surfaces are the simplest to keep opaque and fast.</li>
+        <li><span class="sign">−</span>The cream ground slightly shifts how post colours look beside it.</li>
+        <li><span class="sign">−</span>The sienna accent sits close to warm or orange brand kits.</li>
+      </ul>
+      <a class="open" href="study-b-folio.html" target="_blank" rel="noopener">Open the full Folio study ↗</a>
+    </article>
+
+    <article class="study" aria-labelledby="c-name">
+      <div class="study-hd"><h2 id="c-name"><span class="letter">C</span>Instrument</h2></div>
+      <p class="thesis">A dense workbench for people who live in it.</p>
+      <a class="shot" href="study-c-instrument.html" target="_blank" rel="noopener" aria-label="Open the Instrument study">
+        <img data-light="shots/c-light.png" data-dark="shots/c-dark.png" src="shots/c-light.png" alt="Instrument study of the draft review page: a toolbar, the post on a dotted stage with a version filmstrip, and a caption and refine inspector on the right">
+      </a>
+      <p class="desc">True-neutral greys with one violet accent. The post sits on a dotted stage, versions run along a filmstrip, and caption and refine live in a right-hand inspector.</p>
+      <dl class="traits">
+        <dt>Type</dt><dd>Geist, Geist Mono</dd>
+        <dt>Density</dt><dd>Compact, 13 px body</dd>
+        <dt>Shape</dt><dd>Small radii, hairlines</dd>
+        <dt>Layout</dt><dd>Three panes</dd>
+      </dl>
+      <ul class="tradeoffs">
+        <li><span class="sign">+</span>Neutral greys show brand colours most accurately.</li>
+        <li><span class="sign">+</span>The inspector fits later per-channel captions and model pickers.</li>
+        <li><span class="sign">−</span>The biggest layout change, so the draft page restyle is the riskiest.</li>
+        <li><span class="sign">−</span>13 px text is small for occasional users, and violet is a common look.</li>
+      </ul>
+      <a class="open" href="study-c-instrument.html" target="_blank" rel="noopener">Open the full Instrument study ↗</a>
+    </article>
+  </main>
+
+  <section class="reply" aria-labelledby="reply-h">
+    <h2 id="reply-h">How to choose</h2>
+    <p>Reply in the Claude Code session with <code>A</code>, <code>B</code> or <code>C</code>. You can add changes, for example "B, but with icons in the sidebar". The pick becomes the new design system, and the screen-by-screen restyle starts from it.</p>
+  </section>
+
+  <p class="common">All three keep every floating surface fully opaque, show a visible focus ring, reduce motion to short fades when the system asks for it, and pass WCAG AA contrast in both themes. Each full study lists its exact contrast ratios. The post previews are neutral placeholders, not real posts.</p>
+</div>
+
+<script>
+(function () {
+  var imgs = [].slice.call(document.querySelectorAll('img[data-light]'));
+  var btns = [].slice.call(document.querySelectorAll('[data-shot]'));
+  function show(mode) {
+    imgs.forEach(function (img) { img.src = img.getAttribute('data-' + mode); });
+    btns.forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-shot') === mode)); });
+  }
+  btns.forEach(function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-shot')); }); });
+  var explicit = document.documentElement.getAttribute('data-theme');
+  var dark = explicit ? explicit === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  show(dark ? 'dark' : 'light');
+})();
+</script>
+
+</body>
+</html>

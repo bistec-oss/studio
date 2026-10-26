@@ -1,3 +1,7 @@
+import type { AnalyticsSource } from '@prisma/client'
+import type { HeadlineCheck } from "@/lib/renderedText/vocab"
+import type { CompositeRender } from '@/lib/composite/render'
+
 // The identity ON WHOSE BEHALF a generation/refine call runs — NOT necessarily
 // the brief's owner. Teammate B refining/regenerating teammate A's shared
 // brief must resolve B's personal OpenAI key (or the team default), never
@@ -8,6 +12,15 @@
 export interface GenerationActor {
   userId: string | null
   teamId: string
+}
+
+// A GenerationActor that also says WHERE the generation was started (006
+// FR-04). Required by the two generation lifecycles (generateDraftForBrief,
+// runGenerationForDraft), so every caller states its source and an analytics
+// event can never default it; the design pipeline below them only needs the
+// identity, so it keeps taking GenerationActor.
+export interface GenerationRunActor extends GenerationActor {
+  source: AnalyticsSource
 }
 
 export interface BrandKitContext {
@@ -22,11 +35,10 @@ export interface DesignAgentOptions {
   systemPrompt: string
   userMessage: string
   briefId: string
-  model?: string
+  // The model and the loop's wall-clock budget are not options here (008
+  // FR-07, FR-12): each runner takes a required ResolvedModel, and the budget
+  // is that model's surface timeout.
   maxToolCalls?: number
-  // Wall-clock budget for the whole tool-use loop (default 300s, matching the
-  // CLI runner's timeout). Checked before each model turn.
-  deadlineMs?: number
   // Output canvas size. The real (API) path relies on the prompt to instruct the
   // model to call renderHtml with these dimensions; the mock path renders at them
   // directly. Default 1080×1080 keeps existing square behaviour.
@@ -41,12 +53,26 @@ export interface DesignAgentOptions {
   // generateImage tool (see tools.ts's toolGenerateImage). Optional only for
   // callers that predate this threading; pathA.ts/pathB.ts always supply it.
   actor?: GenerationActor
+  // 025 FR-15: for a kept composite look, code puts the screenshot into the
+  // model's HTML after extract and restore, before every render.
+  // `postProcess` is that insertion (a pure HTML to HTML function) and
+  // `composites` the render argument that resolves the token and checks the
+  // element. Absent: today's behaviour, byte for byte.
+  postProcess?: (html: string) => string
+  composites?: CompositeRender | null
+  // 030 FR-05: the on-image headline the real render is checked against. Required,
+  // so a design writer must choose what it checks.
+  headline: string
 }
 
 export interface DesignAgentResult {
   htmlContent: string
   exportUrl: string
   toolCallCount: number
+  // 030: the check of the final render (null when the run rendered nothing).
+  headlineCheck: HeadlineCheck | null
+  // 031 FR-24: the post-font families the final render could not load ([] = none, or no render).
+  fontsMissing: string[]
 }
 
 export class AgentToolLimitError extends Error {

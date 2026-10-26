@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["data"],
+  "rationale": "Adds persisted brief archetype and kit allow-list fields and rewrites the art-director, image and design prompts that every Path B post depends on, across roughly 20-30 files including schema, renderer sampling and the brief wizard, even though the default stays classic-background.",
+  "signals": {
+    "blast_radius": "About 20-30 files across prompt builders, background.ts, the ImageProvider/OpenAI impl, renderer sampling, brand-kit admin UI, brief wizard, schema and tests; the new archetype layer changes design prompts for every Path B generation once enabled",
+    "unresolved": "Open questions are mostly Phase 2/3 or tuning (transparent output, quality cost, Haiku vs Sonnet for art direction, regenerate-once); the safe-area fallback is already decided, so no open question alters the Phase 1 file list",
+    "irreversibility": "Code is revertible, but the new brief archetype and kit allow-list columns are persisted data shape that stays after a revert, and enabling archetypes changes the look of posts already in the library"
+  }
+}

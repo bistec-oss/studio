@@ -5,7 +5,7 @@
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
 import { buildBrandKitSystemContext } from '@/lib/brandkit/systemContext'
 import type { PipelineMode } from '@/lib/agent/config'
-import { outputProtocol, placeholderNote, SCRIPT_SUPPORT_NOTE } from './shared'
+import { onImageHeadline, outputProtocol, placeholderNote, SCRIPT_SUPPORT_NOTE } from './shared'
 
 export interface PathAPromptOptions {
   kit: ResolvedBrandKit | null
@@ -14,8 +14,8 @@ export interface PathAPromptOptions {
   height: number
   hasInlineAssets: boolean
   additionalImageUrl?: string | null
-  // Active campaign briefing — Path A gets no other brief context (copy already
-  // encodes it), so the briefing's design-relevant direction lands here.
+  // Active campaign briefing — Path A's user message carries only the headline,
+  // topic and description, so the briefing's design-relevant direction lands here.
   campaignBriefing?: string | null
 }
 
@@ -35,7 +35,7 @@ export function buildPathASystemPrompt(opts: PathAPromptOptions): string {
 ${kit ? buildBrandKitSystemContext(kit) : ''}${briefingSection}
 
 Instructions:
-- Fill the template with the provided copy text. Replace placeholder text with the actual content.
+- Fill the template with the provided on-image headline and brief. Replace placeholder text with the actual content.
 - Keep the template's structure, layout, and CSS intact — only swap in the content. The template is already sized for a ${width}×${height} px canvas; do not change its dimensions.
 - Apply brand colors as CSS custom properties where appropriate.${imageInstruction}${placeholderNote(hasInlineAssets)}
 ${SCRIPT_SUPPORT_NOTE}
@@ -44,15 +44,22 @@ ${outputProtocol(mode, width, height)}`
 
 export interface PathAUserMessageOptions {
   slimTemplate: string
-  copyText: string
+  // The on-image headline (012 FR-09) — never a caption.
+  headline: string
+  // The only source for the template's other text slots.
+  topic: string
+  description?: string | null
   mode: PipelineMode
   width: number
   height: number
   additionalImageUrl?: string | null
+  // 027 FR-09: the image-scope rules of the brief's post style, already
+  // rendered. Absent: the message is exactly what it was before 027.
+  imageRules?: string
 }
 
 export function buildPathAUserMessage(opts: PathAUserMessageOptions): string {
-  const { slimTemplate, copyText, mode, width, height, additionalImageUrl } = opts
+  const { slimTemplate, headline, topic, description, mode, width, height, additionalImageUrl, imageRules } = opts
 
   const imageNote = additionalImageUrl
     ? `\nUser-provided image URL (embed this into the main photo/subject slot): ${additionalImageUrl}`
@@ -67,7 +74,13 @@ export function buildPathAUserMessage(opts: PathAUserMessageOptions): string {
 ${slimTemplate}
 </template>
 
-Copy text: ${copyText}${imageNote}
+${onImageHeadline(headline)}
 
-Fill the template with this content. Replace all placeholder text with the copy. ${finalStep}`
+Put the headline in the template's main headline slot. Fill any other text slots only from the brief topic and description below, and invent no facts, numbers or dates.
+Topic: ${topic}
+Description: ${description || 'none'}${imageNote}${imageRules ? `
+
+${imageRules}` : ''}
+
+Replace all placeholder text. ${finalStep}`
 }

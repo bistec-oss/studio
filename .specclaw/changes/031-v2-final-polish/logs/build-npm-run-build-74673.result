@@ -1,0 +1,7 @@
+exit=0
+duration_s=25
+log=.specclaw/changes/031-v2-final-polish/logs/build-npm-run-build-74673.log
+head=21dcda2dbeba91d19315499c8c9e7ba34e3f0c10
+dirty=true
+cmd=npm run build
+interrupted=false

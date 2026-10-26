@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "sig": "3266396409 4040",
+  "tier": "thin",
+  "tier_source": "classifier",
+  "rationale": "The change reworks one regex and one error-message builder in src/lib/agent/claudeCli.ts, with no open question that alters the file list, no persisted data shape or release machinery touched, and a plain git revert to undo it.",
+  "domains": [],
+  "seats": [
+    { "role": "party-po", "model": "sonnet" },
+    { "role": "party-architect", "model": "opus" }
+  ],
+  "dropped": []
+}

@@ -1,0 +1,7 @@
+exit=0
+duration_s=80
+log=.specclaw/changes/027-post-styles/logs/build-npm-run-build-2048.log
+head=c199270f6dc546e427accc7ecd80516d705ad885
+dirty=true
+cmd=npm run build
+interrupted=false

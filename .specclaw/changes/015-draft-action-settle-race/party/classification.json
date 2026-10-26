@@ -1,0 +1,10 @@
+{
+  "tier": "thin",
+  "domains": [],
+  "rationale": "Edits two client-side settle conditions in the draft page to fire on state rather than edge, with a deterministic E2E test; no schema, no migrations, no reversibility barrier.",
+  "signals": {
+    "blast_radius": "RefinementPanel and draft page settle logic, possibly HeadlinePanel and CaptionPanels if the same edge pattern exists — about 3–5 files, all in the client component tree",
+    "unresolved": "The audit of other settles for the same bug is recommended but follows a deterministic fix pattern; no open questions blocking the build",
+    "irreversibility": "Pure git revert; no migrations, no data changes, no persisted state affected"
+  }
+}

@@ -1,0 +1,7 @@
+exit=0
+duration_s=20
+log=.specclaw/changes/020-create-post-button-draft-page/logs/build-npm-run-build-2622.log
+head=96044024b58508c13602c361a00de328539bb605
+dirty=true
+cmd=npm run build
+interrupted=false

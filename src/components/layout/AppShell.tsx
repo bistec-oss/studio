@@ -4,19 +4,37 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
-import { LayoutDashboard, BookOpen, FolderOpen, Megaphone, Settings, UserCog, Users, Building2, Menu, X, LogOut } from 'lucide-react'
+import {
+  BookOpen,
+  Building2,
+  FolderOpen,
+  LineChart,
+  LayoutDashboard,
+  LogOut,
+  Megaphone,
+  Menu,
+  Palette,
+  UserCog,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import { Logo } from '@/components/Logo'
 import { ConfirmProvider } from '@/components/ui/ConfirmDialog'
 import { ClaudeTokenPrompt } from '@/components/settings/ClaudeTokenPrompt'
 import { TeamSwitcher } from '@/components/layout/TeamSwitcher'
+import { CreatePostButton } from '@/components/layout/CreatePostButton'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
 import { authClient } from '@/lib/auth-client'
+import { EYEBROW, FOCUS, ICON } from '@/components/ui/atoms'
 
+// The nav draws an icon before each label (021 A9, the study's .nav). The
+// icons are decorative (aria-hidden): each link's name is its label.
 interface NavItem {
   label: string
   href: string
-  icon: React.ReactNode
+  icon: LucideIcon
   adminOnly?: boolean
   superAdminOnly?: boolean
 }
@@ -30,30 +48,51 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Create',
     items: [
-      { label: 'Dashboard', href: '/',         icon: <LayoutDashboard size={18} /> },
-      { label: 'Library',   href: '/library',  icon: <BookOpen size={18} /> },
+      { label: 'Dashboard', href: '/',         icon: LayoutDashboard },
+      { label: 'Library',   href: '/library',  icon: BookOpen },
     ],
   },
   {
     label: 'Organize',
     items: [
-      { label: 'Projects',  href: '/projects',  icon: <FolderOpen size={18} /> },
-      { label: 'Campaigns', href: '/campaigns', icon: <Megaphone size={18} /> },
+      { label: 'Projects',  href: '/projects',  icon: FolderOpen },
+      { label: 'Campaigns', href: '/campaigns', icon: Megaphone },
     ],
   },
   {
     label: 'Admin',
     items: [
-      { label: 'Brandkits',     href: '/admin/brandkits', icon: <Settings size={18} />, adminOnly: true },
-      { label: 'Team Settings', href: '/team',            icon: <Building2 size={18} />, adminOnly: true },
-      { label: 'Users',         href: '/admin/users',     icon: <Users size={18} />, superAdminOnly: true },
-      { label: 'Teams',         href: '/admin/teams',     icon: <Building2 size={18} />, superAdminOnly: true },
+      { label: 'Brand kits',    href: '/admin/brandkits', icon: Palette,   adminOnly: true },
+      { label: 'Team settings', href: '/team',            icon: Building2, adminOnly: true },
+      { label: 'Users',         href: '/admin/users',     icon: Users,     superAdminOnly: true },
+      { label: 'Teams',         href: '/admin/teams',     icon: Building2, superAdminOnly: true },
+      { label: 'Insights',      href: '/admin/insights',  icon: LineChart, superAdminOnly: true },
     ],
   },
 ]
 
 // Pinned to the sidebar's bottom area, above Sign out.
-const SETTINGS_ITEM: NavItem = { label: 'Settings', href: '/settings', icon: <UserCog size={18} /> }
+const SETTINGS_ITEM: NavItem = { label: 'Settings', href: '/settings', icon: UserCog }
+
+// A nav item (021 design.md §5, the study's .nav a): an icon and the label at
+// 13 px / 500 in --fg-muted, the canvas on hover. Shared by the links and the
+// Sign out button.
+const NAV_ITEM =
+  'flex items-center gap-[11px] px-2.5 py-2 rounded-ui-sm text-left text-ui-sm font-medium ' +
+  'transition-colors duration-fast ease-standard ' +
+  FOCUS
+
+// The current page (the study's .nav a[aria-current]): --surface-2 with the
+// panel shadow and a --line-subtle hairline ring.
+const NAV_CURRENT = 'bg-surface-raised text-fg shadow-panel ring-1 ring-inset ring-line-subtle'
+const NAV_IDLE = 'text-fg-muted hover:bg-canvas hover:text-fg'
+
+// The header's menu button and the mobile sidebar's close button: a round
+// --control-md target, so not the --control-sm ui ICON_BUTTON.
+const SHELL_ICON_BUTTON =
+  'inline-flex items-center justify-center h-control-md w-control-md rounded-ui-pill text-fg-muted ' +
+  'hover:bg-canvas hover:text-fg transition-colors duration-fast ease-standard ' +
+  FOCUS
 
 function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
   const pathname = usePathname()
@@ -63,15 +102,10 @@ function NavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
     <Link
       href={item.href}
       onClick={onClick}
-      className={`
-        flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150
-        ${isActive
-          ? 'bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light border border-primary/20 dark:border-primary-light/20'
-          : 'text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-light-text dark:hover:text-dark-text border border-transparent'
-        }
-      `}
+      aria-current={isActive ? 'page' : undefined}
+      className={`${NAV_ITEM} ${isActive ? NAV_CURRENT : NAV_IDLE}`}
     >
-      {item.icon}
+      <item.icon {...ICON} aria-hidden="true" />
       {item.label}
     </Link>
   )
@@ -104,26 +138,26 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
     }
   }
 
+  // The sidebar island (021 design.md §5, the study's .side): opaque
+  // --surface-1 at radius-lg with the panel shadow (011 FR-08: no alpha, no
+  // backdrop-filter). It fills its slot: the desktop band or the mobile
+  // dialog places and sizes it.
   return (
-    <aside className="glass-panel flex flex-col h-full w-64 p-4 gap-1 rounded-none">
+    <aside className="flex flex-col gap-[18px] h-full w-full p-3 overflow-y-auto bg-surface text-fg rounded-ui-lg shadow-panel">
       {onClose && (
-        <div className="flex items-center justify-end mb-2 px-1">
-          <button
-            onClick={onClose}
-            aria-label="Close sidebar"
-            className="md:hidden p-1.5 rounded-lg text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10"
-          >
-            <X size={16} />
+        <div className="flex items-center justify-end -mb-2.5">
+          <button onClick={onClose} aria-label="Close sidebar" className={`md:hidden ${SHELL_ICON_BUTTON}`}>
+            <X {...ICON} aria-hidden="true" />
           </button>
         </div>
       )}
 
       <TeamSwitcher />
 
-      <nav className="flex flex-col gap-4">
+      <nav className="flex flex-col gap-[18px]">
         {sections.map(section => (
-          <div key={section.label} className="flex flex-col gap-1">
-            <div className="px-3 pt-1 text-[11px] font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+          <div key={section.label} className="flex flex-col gap-0.5">
+            <div className={`px-2.5 pb-1 ${EYEBROW}`}>
               {section.label}
             </div>
             {section.items.map(item => (
@@ -133,21 +167,19 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
         ))}
       </nav>
 
-      {/* Settings + Sign out — pinned to the bottom of the panel */}
-      <div className="mt-auto flex flex-col gap-1 pt-3 border-t border-light-text/10 dark:border-white/10">
+      {/* Settings + Sign out, pinned to the bottom of the island above a
+          --line-subtle rule (the study's .side-foot). */}
+      <div className="mt-auto flex flex-col gap-0.5 pt-2.5 border-t border-line-subtle">
         <NavLink item={SETTINGS_ITEM} onClick={onClose} />
         <button
           onClick={handleSignOut}
           disabled={signingOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-light-text-muted dark:text-dark-text-muted hover:bg-primary/5 dark:hover:bg-primary-light/5 hover:text-light-text dark:hover:text-dark-text border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`${NAV_ITEM} ${NAV_IDLE} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
-          <LogOut size={18} />
+          <LogOut {...ICON} aria-hidden="true" />
           {signingOut ? 'Signing out…' : 'Sign out'}
         </button>
       </div>
-
-      {/* Bottom glow blob */}
-      <div className="glow-blob w-48 h-48 -bottom-12 -left-8 opacity-60" />
     </aside>
   )
 }
@@ -157,6 +189,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { teamChoiceRequired } = useCurrentUser()
   const pathname = usePathname()
   const router = useRouter()
+  // Hidden on the wizard (/brief) and on the draft page, whose own actions sit
+  // in the bottom-right corner (020).
+  const hideCreatePost = pathname === '/brief' || pathname.startsWith('/drafts/')
 
   // Bounce to the chooser when /api/me reports no resolved active team —
   // but never from the chooser itself, or picking a team there would
@@ -169,56 +204,69 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ConfirmProvider>
-      <div
-        className="min-h-screen flex flex-col"
-        style={{ background: 'var(--background)' }}
-      >
-        {/* Top app bar */}
-        <header className="glass fixed top-0 inset-x-0 z-40 h-16 flex items-center justify-between px-4 md:px-6">
-          <div className="flex items-center gap-3">
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-xl text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10"
-              aria-label="Open sidebar"
-            >
-              <Menu size={20} />
-            </button>
-            <Logo height={40} />
-          </div>
+      <div className="min-h-screen flex flex-col bg-canvas text-fg">
+        {/* The header island (021 design.md §5, the study's .hdr): opaque
+            --surface-2, 56 px tall, inset 12 px, radius-lg, the panel shadow.
+            It sits on an 80 px --canvas band, so content scrolling beneath
+            never shows in the 12 px gutter. The band is presentational; the
+            island is the banner. */}
+        <div className="fixed top-0 inset-x-0 z-40 h-20 bg-canvas">
+          <header className="absolute inset-x-3 top-3 h-14 flex items-center justify-between pl-[18px] pr-2.5 bg-surface-raised rounded-ui-lg shadow-panel">
+            <div className="flex items-center gap-2">
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className={`md:hidden -ml-2 ${SHELL_ICON_BUTTON}`}
+                aria-label="Open sidebar"
+              >
+                <Menu {...ICON} aria-hidden="true" />
+              </button>
+              <Logo height={32} />
+            </div>
 
-          <ThemeToggle />
-        </header>
+            <ThemeToggle />
+          </header>
+        </div>
 
-        {/* Body below app bar */}
-        <div className="flex flex-1 pt-16">
-          {/* Desktop sidebar */}
-          <div className="hidden md:flex w-64 fixed left-0 top-16 bottom-0">
+        {/* Body below the header band */}
+        <div className="flex flex-1 pt-20">
+          {/* Desktop sidebar: a 244 px island on a 268 px --canvas band,
+              12 px in from the left and the bottom. */}
+          <div className="hidden md:block w-[268px] fixed left-0 top-20 bottom-0 z-30 bg-canvas px-3 pb-3">
             <Sidebar />
           </div>
 
-          {/* Mobile sidebar overlay — Radix Dialog provides the focus trap,
-              Escape-to-close, and aria-modal; the backdrop + slide-in styling
-              match the previous hand-rolled markup. */}
+          {/* Mobile sidebar overlay: Radix Dialog provides the focus trap,
+              Escape-to-close, and aria-modal. The same island floats 12 px in;
+              the scrim is the one translucent layer: --scrim at 0.3, no blur. */}
           <Dialog.Root open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm md:hidden" />
-              <Dialog.Content className="fixed left-0 top-0 bottom-0 z-50 w-64 md:hidden focus:outline-none">
+              <Dialog.Overlay className="fixed inset-0 z-50 bg-scrim/30 md:hidden" />
+              <Dialog.Content className="fixed left-3 top-3 bottom-3 z-50 w-[244px] md:hidden focus:outline-none">
                 <Dialog.Title className="sr-only">Navigation</Dialog.Title>
                 <Sidebar onClose={() => setSidebarOpen(false)} />
               </Dialog.Content>
             </Dialog.Portal>
           </Dialog.Root>
 
-          {/* Main content */}
-          <main className="flex-1 md:ml-64 overflow-y-auto">
-            <div className="max-w-canvas mx-auto px-4 md:px-8 py-6">
+          {/* Main content (021 design.md §5, the study's .main): content
+              starts 90 px down (the 80 px band plus 10 px), 20 px right of the
+              sidebar band and 28 px from the right edge on wide screens (16 px
+              at 375), with 140 px at the bottom, clear of the Create post
+              button. */}
+          <main className="flex-1 min-w-0 md:ml-[268px] overflow-y-auto">
+            <div className="max-w-canvas mx-auto px-4 md:pl-5 md:pr-7 pt-[10px] pb-[140px]">
               {/* CLI mode only: nudge users without a (valid) personal Claude token */}
               <ClaudeTokenPrompt />
               {children}
             </div>
           </main>
         </div>
+
+        {/* Floating Create post shortcut, hidden on the wizard it opens and on
+            the draft page, whose own actions (refine Send) sit in that corner.
+            usePathname() carries no query string, so /brief?resume=… matches too. */}
+        {!hideCreatePost && <CreatePostButton />}
       </div>
     </ConfirmProvider>
   )

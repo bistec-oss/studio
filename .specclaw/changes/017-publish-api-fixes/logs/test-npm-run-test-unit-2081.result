@@ -1,0 +1,7 @@
+exit=0
+duration_s=5
+log=.specclaw/changes/017-publish-api-fixes/logs/test-npm-run-test-unit-2081.log
+head=e539395db0a550f74e8d384464e0b8e269041d89
+dirty=false
+cmd=npm run test:unit
+interrupted=false

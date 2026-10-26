@@ -1,14 +1,21 @@
 import { prisma } from "@/lib/prisma"
-import { renderHtmlToPng } from "@/lib/renderer/puppeteer"
+import { renderPost } from "@/lib/renderer/puppeteer"
+import type { HeadlineCheck } from "@/lib/renderedText/vocab"
 import { uploadObject, resolveExportUrl, persistDataUrlImage, exportKey, BUCKET_EXPORTS } from "@/lib/storage/minio"
 import { resolveImageProvider } from "@/providers/registry"
+import { imageSizeFor } from "@/providers/imageCapabilities"
+import type { AspectRatio } from "@prisma/client"
 import type { BrandKitContext, GenerationActor } from "./types"
+import type { CompositeRender } from "@/lib/composite/render"
 
 export async function toolGenerateImage(
   prompt: string,
   brandKitId: string,
   briefId: string,
-  actor?: GenerationActor
+  actor?: GenerationActor,
+  // The post's aspect ratio, so the image comes back portrait for a portrait
+  // post. Omitted: the provider's square size.
+  aspectRatio?: AspectRatio
 ): Promise<{ url: string }> {
   // actor is the ACTING teammate (threaded from the route via
   // DesignAgentOptions/executeTool — see designAgent.ts) — prefer it always,
@@ -29,7 +36,7 @@ export async function toolGenerateImage(
   if (!provider) {
     throw new Error('No image provider configured for this team')
   }
-  const result = await provider.generateImage(prompt, brandKitId)
+  const result = await provider.generateImage(prompt, brandKitId, imageSizeFor(provider.providerName, aspectRatio))
 
   if (result.url.startsWith("data:")) {
     // persistDataUrlImage enforces the raster allow-list (stored-XSS guard) and
@@ -44,14 +51,18 @@ export async function toolGenerateImage(
 export async function toolRenderHtml(
   html: string,
   width: number,
-  height: number
-): Promise<{ url: string; key: string }> {
-  const buffer = await renderHtmlToPng(html, width, height)
+  height: number,
+  // 025: the composite argument (null for every render with no screenshot).
+  composites: CompositeRender | null,
+  // 030: the headline the render is checked against.
+  headline: string
+): Promise<{ url: string; key: string; headlineCheck: HeadlineCheck | null; fontsMissing: string[] }> {
+  const { png: buffer, headlineCheck, fontsMissing } = await renderPost(html, width, height, composites, { headline })
   const key = exportKey("design", "agent")
   await uploadObject(buffer, BUCKET_EXPORTS, key, "image/png")
   // The export PNG stays private. Return a signed URL for the agent's reference
   // plus the object key, which the caller persists as Draft.exportUrl.
-  return { url: (await resolveExportUrl(key))!, key }
+  return { url: (await resolveExportUrl(key))!, key, headlineCheck, fontsMissing }
 }
 
 export async function toolGetBrandKitContext(briefId: string): Promise<BrandKitContext> {

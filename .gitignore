@@ -31,3 +31,18 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# Brag video output (/brag skill) — large rendered MP4s, screenshots and a
+# scaffolded Hyperframes project with its own node_modules. All regenerable.
+brag-output*/
+
+# UI screenshot captures (scripts/capture-ui.mjs, change 011 FR-14) — review
+# artifacts, regenerable, never commit.
+ui-captures/
+
+# specclaw concurrency locks (per-run, never shared)
+.specclaw/changes/*/.lock/
+
+# specclaw machine-local state (version-check cache, eval journal)
+.specclaw/.update-check
+.specclaw/changes/eval/

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { loginAs } from '../helpers/api'
+import { execFileSync } from 'node:child_process'
 
 // §O — Personal Claude OAuth tokens (self-service /settings + /api/me/claude-token).
 //
@@ -186,5 +187,64 @@ test.describe('Personal Claude token', () => {
     const cleanup = await loginAs(request, EDITOR_EMAIL, PASSWORD)
     await cleanup.del('/api/me/claude-token')
     await cleanup.dispose()
+  })
+
+  // AC-22 — the in-app connection walkthrough.
+  test('the /settings guide shows three OS tabs with the right per-OS commands', async ({ page, request }) => {
+    const editor = await loginAs(request, EDITOR_EMAIL, PASSWORD)
+    await editor.del('/api/me/claude-token')
+    await editor.dispose()
+
+    await pageLogin(page)
+    await page.goto('/settings')
+
+    const tablist = page.getByRole('tablist', { name: 'Operating system' })
+    await expect(tablist.getByRole('tab')).toHaveText(['Windows', 'macOS', 'Linux'])
+
+    // Windows: native installer primary, winget as an alternative with the #6200 note.
+    await tablist.getByRole('tab', { name: 'Windows' }).click()
+    const panel = page.getByRole('tabpanel')
+    await expect(panel.getByText('irm https://claude.ai/install.ps1 | iex')).toBeVisible()
+    await expect(panel.getByText('winget install Anthropic.ClaudeCode')).toBeVisible()
+    await expect(panel.getByText('winget-cli#6200')).toBeVisible()
+    await expect(panel.getByText('claude setup-token', { exact: true })).toBeVisible()
+    // The installer line comes before the winget line.
+    const text = (await panel.innerText()).replace(/\s+/g, ' ')
+    expect(text.indexOf('install.ps1')).toBeLessThan(text.indexOf('winget install'))
+
+    await tablist.getByRole('tab', { name: 'macOS' }).click()
+    await expect(panel.getByText('curl -fsSL https://claude.ai/install.sh | bash')).toBeVisible()
+    await expect(panel.getByText('claude setup-token', { exact: true })).toBeVisible()
+
+    await tablist.getByRole('tab', { name: 'Linux' }).click()
+    await expect(panel.getByRole('link', { name: /code\.claude\.com\/docs\/en\/setup/ })).toBeVisible()
+    await expect(panel.getByText('claude setup-token', { exact: true })).toBeVisible()
+
+    await expect(page.getByRole('button', { name: 'Copy command' }).first()).toBeVisible()
+    // The stale shared-credential story is gone.
+    await expect(page.locator('body')).not.toContainText('shared server credential')
+  })
+
+  test('the /team team-token card renders the same guide (team variant)', async ({ page }) => {
+    await pageLogin(page, ADMIN_EMAIL)
+    await page.goto('/team')
+    await expect(page.getByRole('heading', { name: 'Team Claude account', exact: true })).toBeVisible()
+    const tablist = page.getByRole('tablist', { name: 'Operating system' })
+    await expect(tablist.getByRole('tab')).toHaveText(['Windows', 'macOS', 'Linux'])
+    await expect(page.getByText('claude setup-token', { exact: true }).first()).toBeVisible()
+    await expect(page.getByText('fallback for members without their own token')).toBeVisible()
+  })
+
+  // AC-23 — no stale "shared server credential" wording in src/ or docs/.
+  test('no stale shared-credential wording in src/ or docs/', async () => {
+    for (const phrase of ['shared server credential', 'logged-in `claude` session by default']) {
+      let out = ''
+      try {
+        out = execFileSync('git', ['grep', '-n', '-F', phrase, '--', 'src', 'docs'], { encoding: 'utf8' })
+      } catch {
+        out = '' // git grep exits 1 on no match
+      }
+      expect(out, `stale phrase "${phrase}" found`).toBe('')
+    }
   })
 })

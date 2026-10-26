@@ -1,0 +1,14 @@
+{
+  "change": "025-hero-reference-images",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "architectural",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-25T06:22:02Z" },
+    "spec": { "status": "done", "at": "2026-10-25T06:31:21Z" },
+    "design": { "status": "done", "at": "2026-10-25T06:33:08Z" },
+    "tasks": { "status": "done", "at": "2026-10-25T06:34:36Z" },
+    "build": { "status": "in-progress", "at": "2026-10-25T06:35:33Z" },
+    "verify": { "status": "passed", "at": "2026-10-26T01:48:07Z", "verdict": "PASS" }
+  }
+}

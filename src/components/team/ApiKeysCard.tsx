@@ -3,10 +3,12 @@
 import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { KeySquare, Plus, Copy, Trash2 } from 'lucide-react'
-import { GlassPanel } from '@/components/ui/GlassPanel'
-import { GlassInput } from '@/components/ui/GlassInput'
+import { Plus, Copy, Trash2 } from 'lucide-react'
+import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { SectionHead } from '@/components/ui/SectionHead'
+import { StatusChip } from '@/components/ui/StatusChip'
+import { ICON_SM, ROW } from '@/components/ui/atoms'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { QueryError } from '@/components/ui/QueryError'
@@ -54,56 +56,51 @@ export function ApiKeysCard() {
   }
 
   return (
-    <GlassPanel className="p-6 flex flex-col gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light">
-            <KeySquare size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-light-text dark:text-dark-text">API keys</h2>
-            <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-              Machine credentials for MCP/ACP integrations calling on this team&apos;s behalf.
-            </p>
-          </div>
-        </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus size={14} /> Create key
+    // A bezel card (021 design.md §8), its head the study's .card-hd; the keys
+    // are ruled rows on --line-subtle.
+    <section className="surface-bezel min-w-0 p-5">
+      <SectionHead title="API keys" className="mb-3">
+        <Button size="sm" variant="secondary" onClick={() => setCreateOpen(true)}>
+          <Plus {...ICON_SM} /> Create key
         </Button>
-      </div>
+      </SectionHead>
 
-      {isLoading ? (
-        <p className="text-sm text-light-text-muted dark:text-dark-text-muted">Loading…</p>
-      ) : isError ? (
-        <QueryError error={error} onRetry={() => refetch()} />
-      ) : keys.length === 0 ? (
-        <p className="text-sm text-light-text-muted dark:text-dark-text-muted italic">No API keys yet</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {keys.map((k) => (
-            <div key={k.id} className="glass-input rounded-xl p-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm text-light-text dark:text-dark-text truncate">{k.label}</span>
-                  {k.revokedAt && (
-                    <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-status-failed/10 dark:bg-status-failed-dark/15 text-status-failed dark:text-status-failed-dark">
-                      Revoked
-                    </span>
+      <div>
+        <p className="text-ui-sm text-fg-muted">
+          Machine credentials for MCP/ACP integrations calling on this team&apos;s behalf.
+        </p>
+
+        <div className="mt-4">
+          {isLoading ? (
+            <p className="text-ui-sm text-fg-muted">Loading…</p>
+          ) : isError ? (
+            <QueryError error={error} onRetry={() => refetch()} />
+          ) : keys.length === 0 ? (
+            <p className="text-ui-sm text-fg-muted">No API keys yet</p>
+          ) : (
+            <ul className="border-t border-line-subtle">
+              {keys.map((k) => (
+                <li key={k.id} className={`${ROW} flex items-center justify-between gap-3 last:border-b-0 last:pb-0`}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="min-w-0 break-words text-ui-base font-medium text-fg">{k.label}</span>
+                      {k.revokedAt && <StatusChip tone="failed">Revoked</StatusChip>}
+                    </div>
+                    <p className="mt-0.5 text-ui-xs text-fg-muted">
+                      <span className="font-mono">{k.keyPrefix}••••</span> · created {new Date(k.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {!k.revokedAt && (
+                    <Button variant="ghost" size="sm" onClick={() => revoke(k)}>
+                      <Trash2 {...ICON_SM} /> Revoke
+                    </Button>
                   )}
-                </div>
-                <p className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted mt-0.5">
-                  {k.keyPrefix}•••• · created {new Date(k.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-              {!k.revokedAt && (
-                <Button variant="ghost" size="sm" onClick={() => revoke(k)}>
-                  <Trash2 size={13} /> Revoke
-                </Button>
-              )}
-            </div>
-          ))}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
+      </div>
 
       <CreateKeyModal
         open={createOpen}
@@ -115,7 +112,7 @@ export function ApiKeysCard() {
         }}
       />
       <RevealKeyModal created={justCreated} onClose={() => setJustCreated(null)} />
-    </GlassPanel>
+    </section>
   )
 }
 
@@ -153,7 +150,7 @@ function CreateKeyModal({
           if (label.trim()) createMutation.mutate(label.trim())
         }}
       >
-        <GlassInput
+        <Input
           label="Label"
           placeholder="e.g. Zapier integration"
           value={label}
@@ -193,15 +190,15 @@ function RevealKeyModal({
   return (
     <Modal open={created !== null} onClose={onClose} title={`Key created — ${created?.label ?? ''}`} size="md">
       <div className="space-y-3">
-        <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
+        <p className="text-ui-sm text-fg-muted">
           This is the only time the full key is shown. Copy it now — it can&apos;t be retrieved again later.
         </p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 font-mono text-xs px-3 py-2.5 rounded-xl glass-input text-light-text dark:text-dark-text break-all">
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 break-all rounded-ui-md bg-canvas px-3 py-2.5 font-mono text-ui-xs text-fg ring-1 ring-inset ring-line-subtle">
             {created?.plaintext}
           </code>
           <Button type="button" variant="secondary" size="sm" onClick={copy}>
-            <Copy size={14} /> Copy
+            <Copy {...ICON_SM} /> Copy
           </Button>
         </div>
         <div className="flex justify-end pt-1">

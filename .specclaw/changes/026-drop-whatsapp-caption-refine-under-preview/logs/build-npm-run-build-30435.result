@@ -1,0 +1,7 @@
+exit=0
+duration_s=21
+log=.specclaw/changes/026-drop-whatsapp-caption-refine-under-preview/logs/build-npm-run-build-30435.log
+head=8bef317eb5e23227ff2b18e240612db9b3d5a1fa
+dirty=true
+cmd=npm run build
+interrupted=false

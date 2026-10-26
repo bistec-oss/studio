@@ -1,0 +1,18 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose-panel","at":"2026-10-12T02:36:29Z","ts":1791772588}
+{"ev":"stop","span":"propose","at":"2026-10-12T02:53:20Z","ts":1791773600,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-12T02:53:52Z","ts":1791773632}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-12T03:01:47Z","ts":1791774107}
+{"ev":"stop","span":"plan","at":"2026-10-12T07:17:20Z","ts":1791789440,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-12T09:11:51Z","ts":1791796311}
+{"ev":"start","span":"T1","kind":"task","label":"catalogue and pure resolver","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T09:11:52Z","ts":1791796312}
+{"ev":"stop","span":"T1","at":"2026-10-12T09:25:21Z","ts":1791797121,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"schema, migration, rollback, env","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T09:25:38Z","ts":1791797138}
+{"ev":"stop","span":"T3","at":"2026-10-12T09:34:23Z","ts":1791797663,"status":"ok"}
+{"ev":"start","span":"T4","kind":"task","label":"server resolver, policy store, APIs","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T09:34:32Z","ts":1791797672}
+{"ev":"stop","span":"T4","at":"2026-10-12T09:41:50Z","ts":1791798110,"status":"ok"}
+{"ev":"start","span":"T5","kind":"task","label":"the boundary","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T09:41:56Z","ts":1791798116}
+{"ev":"stop","span":"T5","at":"2026-10-12T09:51:10Z","ts":1791798670,"status":"ok"}
+{"ev":"start","span":"T6","kind":"task","label":"generation on the resolver + stamps","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T09:51:18Z","ts":1791798678}
+{"ev":"stop","span":"T6","at":"2026-10-12T10:15:32Z","ts":1791800132,"status":"ok"}
+{"ev":"start","span":"T7","kind":"task","label":"draft actions on the resolver","parent":"W1","model":"opus","attempt":"1","at":"2026-10-12T10:16:06Z","ts":1791800166}
+{"ev":"start","span":"verify-1791873033","kind":"phase","label":"verify","at":"2026-10-13T06:30:33Z","ts":1791873033}

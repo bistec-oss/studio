@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { modelKeySchema } from '@/lib/models/requests'
+import { compositeSourceSchema } from '@/lib/brief/compositeSource'
 
 // ─── BriefDraft payload — pure, client-safe ─────────────────────────────────
 // The wizard-shaped working state autosaved to a BriefDraft row. This module
@@ -7,6 +9,9 @@ import { z } from 'zod'
 // briefDrafts.ts. Unknown/extra keys are stripped by zod, and a payload that
 // fails to parse is treated as missing by the service (row swept) — schema
 // drift across releases never half-rehydrates a wizard.
+
+// The shape only (the client cannot know the team); the owner check is the service's.
+const SCREENSHOT_KEY_SHAPE = /^screenshots\/[^/]+\/[^/]+\/[^/]+$/
 
 export const BRIEF_DRAFT_CAP = 5
 export const BRIEF_DRAFT_TTL_MS = 7 * 24 * 60 * 60_000
@@ -24,7 +29,10 @@ export const briefDraftPayloadSchema = z.object({
   referenceTemplateId: z.string(),
   topic: z.string().max(500),
   prompt: z.string().max(20_000),
-  goal: z.string().max(100),
+  // 027 FR-07: the Goal picker is gone; the goal follows the post style. A row
+  // saved before 027 still carries one (it parses and is ignored); a new
+  // autosave leaves it out, and a resumed brief with no style opens as General.
+  goal: z.string().max(100).optional(),
   tone: z.string().max(100),
   images: z
     .array(
@@ -36,6 +44,22 @@ export const briefDraftPayloadSchema = z.object({
       }),
     )
     .max(20),
+  // 008 FR-17: the Review step's model picks, so a resumed brief restores them.
+  // Absent = untouched picker (A5): the server resolves the default.
+  captionModel: modelKeySchema.optional(),
+  designModel: modelKeySchema.optional(),
+  // 009 FR-03: the image style; absent = classic. An unknown stored value is
+  // read back as classic by the wizard (resumeImageStyle), never a parse failure.
+  imageStyle: z.string().max(40).optional(),
+  // 027 FR-07: the post style key; absent (an old row) or unknown = General.
+  postStyle: z.string().max(40).optional(),
+  // 025 FR-11: the product screenshot; absent = none. Its private object is
+  // deleted with the draft on Discard, eviction and expiry.
+  compositeSource: compositeSourceSchema
+    .refine((s) => SCREENSHOT_KEY_SHAPE.test(s.key) && !s.key.includes('..'), {
+      message: 'compositeSource key must be screenshots/<team>/<user>/<file>',
+    })
+    .optional(),
 })
 
 export type BriefDraftPayload = z.infer<typeof briefDraftPayloadSchema>

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "sig": "4257055447 6840",
+  "sig": "1137646873 10550",
   "tier": "deep",
   "tier_source": "classifier",
-  "rationale": "Unresolved analytics-view scoping (super-admin global vs team-admin scoped) changes the data-fetch and filter design; new trust boundary (session replay with unresolved masking rules) and persisted data shape (WorkerHeartbeat table, event traces); expanded release machinery (PostHog + ClickHouse infrastructure and retention policies).",
-  "domains": ["security", "data", "ops"],
+  "rationale": "Adds a new persisted event table that stores user-typed refine instruction text readable across all teams through a new super-admin API, instruments the generation, refine and publish choke points, and adds a rendered-headline column to Draft with a badge that rewrites stored HTML, so it touches a trust boundary and persisted data shape.",
+  "domains": ["security", "data"],
   "seats": [
     { "role": "party-po", "model": "sonnet" },
     { "role": "party-architect", "model": "opus" },

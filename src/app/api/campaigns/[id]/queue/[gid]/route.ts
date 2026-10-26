@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, parseBody } from '@/lib/api/handler'
 import { canAccessContent } from '@/lib/authz/visibility'
-import { queueEntrySchema, requiresAdmin, validateTemplateSelection } from '@/lib/campaign/queue'
+import {
+  queueEntrySchema,
+  requiresAdmin,
+  validateTemplateSelection,
+  loadCampaignStyleDefaults,
+  resolveEntryStyle,
+} from '@/lib/campaign/queue'
 
 type Params = { id: string; gid: string }
 
@@ -46,7 +52,7 @@ export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
     !(user.teamRole === 'ADMIN' || user.isSuperAdmin)
   ) {
     return NextResponse.json(
-      { error: 'Auto-publish actions require admin — use HOLD to generate for review.' },
+      { error: 'Auto-publish actions require a team admin — use HOLD to generate for review.' },
       { status: 403 }
     )
   }
@@ -54,13 +60,25 @@ export const PATCH = withTeamAuth<Params>(async (req, { params }, user) => {
   const templateError = await validateTemplateSelection(params.id, entry, user.teamId)
   if (templateError) return templateError
 
+  // 027 FR-06: re-resolve only when a style or a legacy goal is sent (an unknown
+  // key is a 400, never "no style"). Otherwise the stored key and goal stand (a
+  // legacy null stays null) and the tone changes only if one was sent.
+  const resendsStyle = !!(entry.postStyle?.trim() || entry.goal?.trim())
+  let styleData: { postStyle?: string; goal?: string; tone?: string } = {}
+  if (resendsStyle) {
+    const style = resolveEntryStyle(await loadCampaignStyleDefaults(params.id), entry)
+    if (!style.ok) return style.response
+    styleData = { postStyle: style.style.postStyle, goal: style.style.goal, tone: style.style.tone }
+  } else if (entry.tone?.trim()) {
+    styleData = { tone: entry.tone.trim() }
+  }
+
   const updated = await prisma.scheduledGeneration.update({
     where: { id: existing.id },
     data: {
       topic: entry.topic,
       description: entry.description || null,
-      goal: entry.goal,
-      tone: entry.tone,
+      ...styleData,
       channels: entry.channels,
       aspectRatio: entry.aspectRatio,
       designMode: entry.designMode,

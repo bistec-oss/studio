@@ -1,0 +1,7 @@
+exit=0
+duration_s=10
+log=.specclaw/changes/004-design-instruction-fidelity/logs/lint-npm-run-lint-2193.log
+head=e88b55b61a1945bd4b0551bb049097122a03f894
+dirty=true
+cmd=npm run lint
+interrupted=false

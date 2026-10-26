@@ -6,8 +6,12 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { apiFetch } from '@/lib/apiFetch'
-import { FieldLabel } from './FieldLabel'
-import { GOAL_OPTIONS, TONE_OPTIONS } from './constants'
+import { fieldClasses, fieldEdge, inputClasses } from '@/components/ui/Input'
+import { cn } from '@/lib/utils'
+import { FieldLabel } from '@/components/ui/FieldLabel'
+import { EYEBROW, ICON, SCROLL_FOCUS, SMALL_CAPS } from '@/components/ui/atoms'
+import { StepHead } from './StepHead'
+import { TONE_OPTIONS } from './constants'
 
 // ─── Step 2 — Content ────────────────────────────────────────────────────────
 
@@ -16,17 +20,22 @@ interface ContentStepProps {
   setTopic: (v: string) => void
   prompt: string
   setPrompt: (v: string) => void
+  // The goal the post style stands for; sent to the enhance call, never chosen here.
   goal: string
-  setGoal: (v: string) => void
   tone: string
   setTone: (v: string) => void
+  // 027 FR-07: true while the tone is the style's (or the campaign's), not the user's.
+  toneFromStyle?: boolean
   // Context for the AI enhance call — matches generation-time grounding.
   campaignId: string
   brandKitId: string
 }
 
-export function ContentStep({ topic, setTopic, prompt, setPrompt, goal, setGoal, tone, setTone, campaignId, brandKitId }: ContentStepProps) {
+export function ContentStep({ topic, setTopic, prompt, setPrompt, goal, tone, setTone, toneFromStyle, campaignId, brandKitId }: ContentStepProps) {
   const [enhancing, setEnhancing] = useState(false)
+  // The Topic and Brief labels name their fields (014 FR-12 rows 4, 5).
+  const topicId = React.useId()
+  const briefId = React.useId()
   // Before/after review: the AI rewrite only reaches the brief on Accept.
   const [enhanceResult, setEnhanceResult] = useState<{ original: string; draft: string } | null>(null)
 
@@ -55,43 +64,56 @@ export function ContentStep({ topic, setTopic, prompt, setPrompt, goal, setGoal,
 
   return (
     <div>
-      <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">Brief &amp; Copy Direction</h2>
-      <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-6">
-        Give the post a short topic, tell Claude what it&apos;s about, then pick a goal and tone.
-      </p>
+      <StepHead title={<>Description &amp; caption direction</>}>
+        Give the post a short topic, describe what it&apos;s about, then check the tone.
+      </StepHead>
 
-      <FieldLabel>Topic</FieldLabel>
+      <FieldLabel htmlFor={topicId} className="mb-2.5">Topic</FieldLabel>
       <input
+        id={topicId}
         type="text"
         value={topic}
         onChange={e => setTopic(e.target.value)}
         placeholder="e.g. Q3 product launch"
         maxLength={120}
         autoFocus
-        className="glass-input w-full rounded-xl px-4 py-3 text-sm text-light-text dark:text-dark-text placeholder:text-light-text-muted dark:placeholder:text-dark-text-muted focus:outline-none"
+        className={cn(inputClasses, fieldEdge())}
       />
-      <div className="mt-1.5 mb-4 text-xs text-light-text-muted dark:text-dark-text-muted">
+      <div className="mt-2 mb-6 text-ui-xs text-fg-muted">
         A short title — it names this post in the library.
       </div>
 
-      <FieldLabel>Brief</FieldLabel>
+      {/* While the AI suggestion is up there is no textarea, so nothing to point at. */}
+      <FieldLabel htmlFor={enhanceResult ? undefined : briefId} className="mb-2.5">Description</FieldLabel>
       {enhanceResult ? (
-        <div className="space-y-3 mb-5">
+        <div className="space-y-4 mb-6">
+          {/* "Before" and "AI suggestion" stay micro-labels: panel captions (021 FR-07). */}
           {enhanceResult.original.trim() && (
             <div>
-              <p className="text-xs font-medium text-light-text-muted dark:text-dark-text-muted mb-1">Before</p>
-              <div className="glass-input rounded-xl p-3 text-sm text-light-text-muted dark:text-dark-text-muted whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto">
+              <p className={`${EYEBROW} mb-1.5`}>Before</p>
+              {/* A scroll container: focusable and labelled so the keyboard can scroll it. */}
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Before"
+                className={`rounded-ui-md bg-canvas px-4 py-3 ring-1 ring-inset ring-line-subtle text-ui-sm text-fg-muted whitespace-pre-wrap leading-relaxed max-h-40 overflow-y-auto ${SCROLL_FOCUS}`}
+              >
                 {enhanceResult.original}
               </div>
             </div>
           )}
           <div>
-            <p className="text-xs font-medium text-primary dark:text-primary-light mb-1">AI suggestion</p>
-            <div className="glass-input rounded-xl p-3 text-sm text-light-text dark:text-dark-text whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">
+            <p className={`${SMALL_CAPS} text-accent mb-1.5`}>AI suggestion</p>
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="AI suggestion"
+              className={`rounded-ui-md bg-surface-raised px-4 py-3 shadow-panel ring-[1.5px] ring-inset ring-fg text-ui-sm text-fg whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto ${SCROLL_FOCUS}`}
+            >
               {enhanceResult.draft}
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={() => { setPrompt(enhanceResult.draft); setEnhanceResult(null) }}>
               Accept suggestion
             </Button>
@@ -103,36 +125,41 @@ export function ContentStep({ topic, setTopic, prompt, setPrompt, goal, setGoal,
       ) : (
         <>
           <textarea
+            id={briefId}
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
             placeholder="e.g. Announce our Q3 product launch with excitement. Highlight that it saves the marketing team hours on post creation. Include a CTA to try it."
             rows={6}
-            className="glass-input w-full rounded-xl px-4 py-3 text-sm text-light-text dark:text-dark-text placeholder:text-light-text-muted dark:placeholder:text-dark-text-muted resize-none focus:outline-none"
+            className={cn(fieldClasses, fieldEdge(), 'resize-none leading-relaxed')}
           />
-          <div className="mt-1.5 flex items-start justify-between gap-3">
+          <div className="mt-2 flex items-start justify-between gap-3">
             <Button
               variant="secondary"
               size="sm"
               onClick={enhance}
               disabled={enhancing || (!topic.trim() && !prompt.trim())}
             >
-              <Sparkles size={13} /> {enhancing ? 'Enhancing…' : 'Enhance with AI'}
+              <Sparkles {...ICON} aria-hidden /> {enhancing ? 'Enhancing…' : 'Enhance with AI'}
             </Button>
-            <div className="text-right text-xs text-light-text-muted dark:text-dark-text-muted pt-1">
+            <div className="text-right font-mono text-ui-2xs text-fg-muted pt-2">
               {prompt.length} chars{prompt.trim().length > 0 && prompt.trim().length <= 10 ? ' — add a little more detail' : ''}
             </div>
           </div>
-          <div className="mt-1.5 mb-5 text-xs text-light-text-muted dark:text-dark-text-muted">
+          <div className="mt-2 mb-6 text-ui-xs text-fg-muted">
             {enhancing
-              ? 'Rewriting with the brand voice and campaign context — this can take up to a minute.'
+              ? 'Rewriting with the brand voice and campaign documents — this can take up to a minute.'
               : 'Rewrites the brief with AI, grounded in the brand voice and campaign briefing. Works from just the topic too.'}
           </div>
         </>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Select label="Goal" options={GOAL_OPTIONS} value={goal} onChange={e => setGoal(e.target.value)} />
+      <div className="pt-5 border-t border-line-subtle sm:max-w-xs">
         <Select label="Tone" options={TONE_OPTIONS} value={tone} onChange={e => setTone(e.target.value)} />
+        {toneFromStyle && (
+          <p className="mt-2 text-ui-xs text-fg-muted" data-testid="tone-from-style">
+            From the post style. Change it if you want a different tone.
+          </p>
+        )}
       </div>
     </div>
   )

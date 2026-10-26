@@ -6,6 +6,7 @@ import { createBrandKit, setBrandKitPrompt, uploadBrandTemplate, listBrandKits, 
 import { generatePost, getDraft } from './tools/generate'
 import { publishPost } from './tools/publish'
 import { env } from '@/lib/env'
+import { activeStyles } from '@/lib/postStyles'
 
 // The credential PRESENTED by this MCP process — resolved against the
 // ApiKey table (Task 13) on every call rather than once at startup, since a
@@ -74,20 +75,34 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'generate_post',
-      description: 'Generate a social media post from a brief. Returns draftId, exportUrl, and htmlContent.',
+      description:
+        'Generate a social media post from a brief. Returns draftId, exportUrl, htmlContent, headline (the on-image headline, or null), and captions ([{channel, text, status}], one per channel in registry order), postStyle (the style key used) and factsCheck ({status, flagged}: numbers, dates and times in the headline or captions that the brief does not state; null if never checked).',
       inputSchema: {
         type: 'object',
         properties: {
           topic: { type: 'string' },
-          goal: { type: 'string' },
-          tone: { type: 'string' },
+          postStyle: {
+            type: 'string',
+            enum: activeStyles().map((s) => s.key),
+            description:
+              'The kind of post (default: general, or the campaign default). An unknown value is an error.',
+          },
+          goal: {
+            type: 'string',
+            description:
+              'Legacy. Picks a style (hiring or announcement) only when no postStyle is given; ignored otherwise.',
+          },
+          tone: { type: 'string', description: 'Optional. Defaults from the post style.' },
           channels: { type: 'array', items: { type: 'string' } },
           designMode: { type: 'string', enum: ['TEMPLATE', 'GENERATE'] },
-          copyProviderKey: { type: 'string' },
+          copyProviderKey: {
+            type: 'string',
+            description: 'Ignored once the team has chosen a caption route.',
+          },
           campaignId: { type: 'string' },
           description: { type: 'string' },
         },
-        required: ['topic', 'goal', 'tone', 'channels', 'designMode'],
+        required: ['topic', 'channels', 'designMode'],
       },
     },
     {

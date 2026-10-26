@@ -4,6 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { X, KeyRound } from 'lucide-react'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
+import { Notice } from '@/components/ui/Notice'
+import { FOCUS, ICON, ICON_BUTTON, TEXT_LINK } from '@/components/ui/atoms'
 
 // Dismissible post-login banner nudging the user to connect (or reconnect)
 // their personal Claude account. Rendered only in CLI mode — the only mode
@@ -44,41 +46,27 @@ export function ClaudeTokenPrompt() {
 
   const invalid = state === 'invalid'
 
+  // A notice (§3.2): amber for an invalid token (a warning state), a neutral
+  // hairline nudge otherwise. Opaque and in-flow.
   return (
-    <div
-      className={`glass-panel rounded-xl px-4 py-3 mb-6 flex items-center gap-3 border ${
-        invalid
-          ? 'border-status-scheduled/30 dark:border-status-scheduled-dark/30'
-          : 'border-primary/20 dark:border-primary-light/20'
-      }`}
-    >
-      <span
-        className={`p-2 rounded-xl shrink-0 ${
-          invalid
-            ? 'bg-status-scheduled/10 dark:bg-status-scheduled-dark/15 text-status-scheduled dark:text-status-scheduled-dark'
-            : 'bg-primary/10 dark:bg-primary-light/10 text-primary dark:text-primary-light'
-        }`}
-      >
-        <KeyRound size={16} />
-      </span>
-      <p className="flex-1 text-sm text-light-text dark:text-dark-text">
+    <Notice tone={invalid ? 'warning' : 'neutral'} className="mb-6 flex items-center gap-3">
+      <KeyRound {...ICON} aria-hidden className={`shrink-0 ${invalid ? '' : 'text-fg-muted'}`} />
+      <p className="flex-1 text-ui-sm text-fg">
         {invalid
-          ? 'Your Claude token has expired or was revoked — generations are using the shared credential.'
-          : 'Connect your Claude account so your posts generate on your own subscription.'}{' '}
-        <Link
-          href="/settings"
-          className="font-medium text-primary dark:text-primary-light hover:underline"
-        >
+          ? 'Your Claude token has expired or was revoked. Generations use the team’s Claude account if one is set, otherwise they can’t run.'
+          : 'Connect your Claude account so your posts generate on your own subscription. Without one, generations use the team’s Claude account if one is set, otherwise they can’t run.'}{' '}
+        <Link href="/settings" className={`rounded-ui-sm font-semibold ${TEXT_LINK} ${FOCUS}`}>
           {invalid ? 'Reconnect' : 'Connect now'}
         </Link>
       </p>
       <button
+        type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="p-1.5 rounded-lg text-light-text-muted dark:text-dark-text-muted hover:bg-primary/10 dark:hover:bg-primary-light/10"
+        className={`${ICON_BUTTON} hover:text-fg ${FOCUS}`}
       >
-        <X size={14} />
+        <X {...ICON} />
       </button>
-    </div>
+    </Notice>
   )
 }

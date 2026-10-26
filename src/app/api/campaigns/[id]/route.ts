@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { withTeamAuth, withTeamAdmin, parseBody } from '@/lib/api/handler'
+import { getStyle, isStyleKey } from '@/lib/postStyles'
 
 type Params = { id: string }
 
@@ -29,6 +30,8 @@ const patchSchema = z.object({
   name: z.string().trim().min(1, 'name is required').optional(),
   brandKitId: z.string().nullable().optional(),
   defaultTone: z.string().nullable().optional(),
+  // 027 FR-06: a dataset key, or null/blank to clear.
+  defaultPostStyle: z.string().trim().max(40).nullable().optional(),
   projectId: z.string().nullable().optional(),
 })
 
@@ -41,6 +44,21 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
   const body = await parseBody(req, patchSchema)
   if (body.response) return body.response
   const { name, brandKitId, defaultTone, projectId } = body.data
+  // undefined = leave alone; null or blank = clear; otherwise a dataset key.
+  const defaultPostStyle =
+    body.data.defaultPostStyle === undefined ? undefined : body.data.defaultPostStyle?.trim() || null
+  if (defaultPostStyle) {
+    // A retired key is accepted only when it is already the stored value (no new use of a retired style).
+    const ok =
+      isStyleKey(defaultPostStyle) &&
+      (getStyle(defaultPostStyle)?.status === 'active' || defaultPostStyle === campaign.defaultPostStyle)
+    if (!ok) {
+      return NextResponse.json(
+        { error: `Unknown post style '${defaultPostStyle}'`, code: 'UNKNOWN_POST_STYLE' },
+        { status: 400 },
+      )
+    }
+  }
 
   // Verify referenced records so a bogus id is a 400, not a P2003 500.
   // Team-scoped (I3, final review) — see the matching note in ../route.ts POST.
@@ -59,6 +77,7 @@ export const PATCH = withTeamAdmin<Params>(async (req, { params }, user) => {
       ...(name !== undefined && { name }),
       ...(brandKitId !== undefined && { brandKitId }),
       ...(defaultTone !== undefined && { defaultTone }),
+      ...(defaultPostStyle !== undefined && { defaultPostStyle }),
       ...(projectId !== undefined && {
         projects: {
           deleteMany: {},

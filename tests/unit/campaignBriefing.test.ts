@@ -1,11 +1,11 @@
 // Campaign-briefing prompt injection — the briefing must appear in every
-// generation surface (copy, Path A, Path B, background decision) when present,
+// generation surface (captions, Path A, Path B, background decision) when present,
 // and leave the prompts byte-identical when absent.
 
 import { describe, it, expect } from 'vitest'
 import type { Brief } from '@prisma/client'
 import type { ResolvedBrandKit } from '@/lib/brandkit/resolve'
-import { buildCopyPrompt } from '@/lib/agent/prompts/copy'
+import { buildCaptionPrompt } from '@/lib/agent/prompts/caption'
 import { buildPathASystemPrompt } from '@/lib/agent/prompts/pathA'
 import { buildPathBUserMessage } from '@/lib/agent/prompts/pathB'
 import { buildBackgroundDecisionPrompt } from '@/lib/agent/prompts/background'
@@ -24,7 +24,7 @@ const kit: ResolvedBrandKit = {
 
 const BRIEFING = 'Q3 launch campaign: highlight the IRP programme, always mention the July webinar.'
 
-describe('buildCopyPrompt — campaign briefing', () => {
+describe('buildCaptionPrompt — campaign briefing', () => {
   const brief = {
     topic: 'Webinar reminder',
     description: 'One week to go',
@@ -32,16 +32,17 @@ describe('buildCopyPrompt — campaign briefing', () => {
     tone: 'Friendly',
     channels: ['INSTAGRAM'],
   }
+  const TARGETS = ['HEADLINE', 'INSTAGRAM', 'LINKEDIN'] as const
 
   it('injects the briefing into the system prompt after the voice section', () => {
-    const { system } = buildCopyPrompt({ ...brief, brandVoice: 'Bold.', campaignBriefing: BRIEFING })
+    const { system } = buildCaptionPrompt({ ...brief, brandVoice: 'Bold.', campaignBriefing: BRIEFING }, TARGETS)
     expect(system).toContain('Campaign briefing (applies to every post in this campaign):')
     expect(system).toContain(BRIEFING)
     expect(system.indexOf('Bold.')).toBeLessThan(system.indexOf(BRIEFING))
   })
 
   it('omits the section entirely when absent', () => {
-    const { system } = buildCopyPrompt(brief)
+    const { system } = buildCaptionPrompt(brief, TARGETS)
     expect(system).not.toContain('Campaign briefing')
   })
 })
@@ -66,7 +67,7 @@ describe('buildPathBUserMessage — campaign briefing', () => {
     goal: 'Signups',
     tone: 'Friendly',
     channels: ['INSTAGRAM'],
-    copyText: 'Join us!',
+    headline: 'Join us!',
     mode: 'cli' as const,
     width: 1080,
     height: 1080,
@@ -92,7 +93,7 @@ describe('buildBackgroundDecisionPrompt — campaign briefing', () => {
     description: null,
     goal: 'Signups',
     tone: 'Friendly',
-    copyText: 'Join us!',
+    headline: 'Join us!',
   }
 
   it('includes the briefing in the user message only when provided', () => {

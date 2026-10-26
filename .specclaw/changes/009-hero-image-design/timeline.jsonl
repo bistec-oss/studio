@@ -1,0 +1,32 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-21T01:39:30Z","ts":1792546770}
+{"ev":"stop","span":"propose","at":"2026-10-21T01:45:35Z","ts":1792547135,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-21T11:31:46Z","ts":1792582306}
+{"ev":"stop","span":"plan","at":"2026-10-21T11:42:55Z","ts":1792582975,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-21T11:43:26Z","ts":1792583006}
+{"ev":"start","span":"T1","kind":"task","label":"migration","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-21T11:43:26Z","ts":1792583006}
+{"ev":"stop","span":"T1","at":"2026-10-21T11:47:52Z","ts":1792583273,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-21T11:47:53Z","ts":1792583273,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-21T11:48:01Z","ts":1792583281}
+{"ev":"start","span":"T2","kind":"task","label":"designData + pure logic","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-21T11:48:02Z","ts":1792583282}
+{"ev":"stop","span":"T2","at":"2026-10-21T11:56:26Z","ts":1792583786,"status":"fail"}
+{"ev":"start","span":"T2","kind":"task","label":"designData + pure logic","parent":"W2","model":"sonnet","attempt":"2","at":"2026-10-21T11:56:26Z","ts":1792583786}
+{"ev":"stop","span":"T2","at":"2026-10-21T12:00:00Z","ts":1792584000,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-21T12:00:00Z","ts":1792584000,"status":"ok"}
+{"ev":"start","span":"W3","kind":"wave","label":"wave 3","at":"2026-10-21T12:00:11Z","ts":1792584010}
+{"ev":"start","span":"T3","kind":"task","label":"sampler + layout + render fixtures","parent":"W3","model":"sonnet","attempt":"1","at":"2026-10-21T12:00:11Z","ts":1792584011}
+{"ev":"stop","span":"T3","at":"2026-10-21T12:08:43Z","ts":1792584523,"status":"ok"}
+{"ev":"stop","span":"W3","at":"2026-10-21T12:08:43Z","ts":1792584523,"status":"ok"}
+{"ev":"start","span":"W4","kind":"wave","label":"wave 4","at":"2026-10-21T12:08:47Z","ts":1792584526}
+{"ev":"start","span":"T4","kind":"task","label":"prompts, pipeline, quality, stamp","parent":"W4","model":"sonnet","attempt":"1","at":"2026-10-21T12:08:47Z","ts":1792584527}
+{"ev":"stop","span":"T4","at":"2026-10-21T12:39:22Z","ts":1792586362,"status":"ok"}
+{"ev":"stop","span":"W4","at":"2026-10-21T12:39:22Z","ts":1792586362,"status":"ok"}
+{"ev":"start","span":"W5","kind":"wave","label":"wave 5","at":"2026-10-21T12:39:32Z","ts":1792586372}
+{"ev":"start","span":"T5","kind":"task","label":"UI, co-changes, E2E","parent":"W5","model":"sonnet","attempt":"1","at":"2026-10-21T12:39:32Z","ts":1792586372}
+{"ev":"stop","span":"T5","at":"2026-10-21T13:03:40Z","ts":1792587821,"status":"ok"}
+{"ev":"stop","span":"W5","at":"2026-10-21T13:03:41Z","ts":1792587821,"status":"ok"}
+{"ev":"start","span":"W6","kind":"wave","label":"wave 6","at":"2026-10-21T13:03:44Z","ts":1792587824}
+{"ev":"start","span":"T6","kind":"task","label":"docs, full gate, CI","parent":"W6","model":"sonnet","attempt":"1","at":"2026-10-21T13:03:44Z","ts":1792587824}
+{"ev":"stop","span":"T6","at":"2026-10-21T13:24:17Z","ts":1792589057,"status":"ok"}
+{"ev":"stop","span":"W6","at":"2026-10-21T13:24:17Z","ts":1792589057,"status":"ok"}
+{"ev":"start","span":"verify-1792589098","kind":"phase","label":"verify","at":"2026-10-21T13:24:58Z","ts":1792589098}
+{"ev":"stop","span":"verify-1792589098","at":"2026-10-21T13:29:01Z","ts":1792589341,"status":"ok"}

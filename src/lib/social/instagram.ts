@@ -1,29 +1,29 @@
 import { PublishError } from "./types"
 import { prisma } from "@/lib/prisma"
 import { decrypt } from "@/lib/crypto"
-import { MOCK_SOCIAL, shouldMockPublishFail } from "@/lib/testHooks"
+import { MOCK_SOCIAL, mockPlatformId, shouldMockPublishFail } from "@/lib/testHooks"
 
 // Team-scoped lookup — no env-var fallback. A team with no connected
 // Instagram channel simply can't publish; there is no shared/global credential.
 async function resolveCredentials(teamId: string): Promise<{ accessToken: string; businessAccountId: string }> {
   const row = await prisma.channelToken.findFirst({ where: { teamId, channel: "INSTAGRAM" } })
   if (!row) {
-    throw new Error("No Instagram credentials configured for this team")
+    throw new Error("No Instagram credentials configured for this team. Add them under Team settings > Social channels.")
   }
   return { accessToken: decrypt(row.encryptedToken), businessAccountId: decrypt(row.encryptedMetadata) }
 }
 
 export async function publish(
   exportUrl: string,
-  copyText: string,
+  caption: string,
   teamId: string,
 ): Promise<{ platformId: string }> {
   // Test seam: skip the Graph API round-trip. The failure path (MOCK_SOCIAL_FAIL
   // global, or a __FAIL_ALWAYS__/__FAIL_ONCE__ sentinel in the caption) drives
   // FAILED/retry coverage deterministically.
   if (MOCK_SOCIAL) {
-    if (shouldMockPublishFail(copyText)) throw new PublishError("INSTAGRAM", "Mock Instagram publish failure")
-    return { platformId: `mock-instagram-${Date.now()}` }
+    if (shouldMockPublishFail(caption)) throw new PublishError("INSTAGRAM", "Mock Instagram publish failure")
+    return { platformId: mockPlatformId("INSTAGRAM", caption) }
   }
 
   const { accessToken, businessAccountId } = await resolveCredentials(teamId)
@@ -40,7 +40,7 @@ export async function publish(
   // Step 1: Create media container
   const createParams = new URLSearchParams({
     image_url: exportUrl,
-    caption: copyText,
+    caption,
   })
 
   const createResponse = await fetch(`${baseUrl}/media`, {
@@ -59,7 +59,7 @@ export async function publish(
     } catch {
       reason = `HTTP ${createResponse.status}`
     }
-    throw new PublishError("INSTAGRAM", `Failed to create media container: ${reason}`)
+    throw new PublishError("INSTAGRAM", `Failed to create the Instagram post: ${reason}`)
   }
 
   const createBody = (await createResponse.json()) as { id?: string }

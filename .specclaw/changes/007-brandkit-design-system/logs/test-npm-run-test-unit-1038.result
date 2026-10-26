@@ -1,0 +1,7 @@
+exit=0
+duration_s=7
+log=.specclaw/changes/007-brandkit-design-system/logs/test-npm-run-test-unit-1038.log
+head=026b5bffe86ec3ba40a1ebdfd10fd12833904c95
+dirty=true
+cmd=npm run test:unit
+interrupted=false

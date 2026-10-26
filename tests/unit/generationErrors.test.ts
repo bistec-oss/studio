@@ -34,6 +34,12 @@ describe('humanizeGenerationError', () => {
     )
   })
 
+  it('maps the new caption-provider raw text to the same message', () => {
+    expect(humanizeGenerationError(new Error('No caption provider is set up. Ask a team admin to add one.'))).toMatch(
+      /no caption provider is set up for this team/i
+    )
+  })
+
   it('maps a timeout to a try-again message', () => {
     expect(humanizeGenerationError(new Error('Claude CLI timed out after 300000ms'))).toMatch(/timed out/i)
   })

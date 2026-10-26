@@ -1,0 +1,12 @@
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-20T16:59:44Z","ts":1792515584}
+{"ev":"stop","span":"plan","at":"2026-10-20T17:02:25Z","ts":1792515745,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-20T17:08:51Z","ts":1792516131}
+{"ev":"start","span":"T1","kind":"task","label":"draft-page exclusion","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-20T17:08:51Z","ts":1792516131}
+{"ev":"stop","span":"T1","at":"2026-10-20T17:27:58Z","ts":1792517278,"status":"ok"}
+{"ev":"stop","span":"W1","at":"2026-10-20T17:27:58Z","ts":1792517278,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-20T17:28:05Z","ts":1792517285}
+{"ev":"start","span":"T2","kind":"task","label":"gate","parent":"W2","model":"haiku","attempt":"1","at":"2026-10-20T17:28:06Z","ts":1792517286}
+{"ev":"stop","span":"T2","at":"2026-10-20T18:10:59Z","ts":1792519859,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-20T18:10:59Z","ts":1792519859,"status":"ok"}
+{"ev":"start","span":"verify-1792519963","kind":"phase","label":"verify","at":"2026-10-20T18:12:43Z","ts":1792519963}
+{"ev":"stop","span":"verify-1792519963","at":"2026-10-20T18:15:49Z","ts":1792520149,"status":"ok"}

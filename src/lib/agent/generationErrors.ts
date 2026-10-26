@@ -12,18 +12,18 @@ export function humanizeGenerationError(err: unknown): string {
   if (/browser was not found|chromium not found|executablepath/i.test(raw)) {
     return (
       'Image rendering is unavailable: no Chrome/Chromium browser is configured on the server. ' +
-      'Ask an admin to install a browser or set PUPPETEER_EXECUTABLE_PATH to an existing binary.'
+      'Ask the person who runs the server to install a browser or point it at an existing one.'
     )
   }
 
   // CLI mode with no resolvable OAuth token.
   if (/no claude credential/i.test(raw)) {
-    return 'No Claude token is connected — add a personal token in Settings, or a team token in Team Settings.'
+    return 'No Claude token is connected — add a personal token in Settings, or a team token under Team settings.'
   }
 
-  // No copy provider and no fallback.
-  if (/no copy provider configured/i.test(raw)) {
-    return 'No AI copy provider is configured for this team — connect a Claude token (CLI mode) or register a provider in Team Settings.'
+  // No caption provider and no fallback.
+  if (/no (copy|caption) provider (configured|is set up)/i.test(raw)) {
+    return 'No caption provider is set up for this team — connect a Claude token (CLI mode) or add a provider under Team settings > AI providers.'
   }
 
   // Timeouts (CLI or API).
@@ -31,5 +31,9 @@ export function humanizeGenerationError(err: unknown): string {
     return 'Generation timed out — please try again. If it keeps happening, the design may be too complex.'
   }
 
+  // ModelRefusalError (008, src/lib/models/anthropicCall.ts) lands here: its
+  // message ("The model declined this request (<category>).") is already
+  // readable, so it passes through unchanged — no pattern above matches it.
+  // A refusal is never retried on another model (A13).
   return raw
 }

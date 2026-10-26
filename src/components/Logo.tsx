@@ -1,5 +1,8 @@
 /**
- * Bistec Studio logo (public/BistecStudioLogo.png).
+ * Bistec Studio logo (public/BistecStudioLogo.png), restored by change 021
+ * (A6, R11) as it was before 011 T6; the PNG is byte-identical to that
+ * version. It replaces 011's typeset "Studio" wordmark: the header uses
+ * `height={32}` (the 56 px header island) and the login page `height={48}`.
  *
  * The asset is a transparent PNG whose black wordmark occupies a sub-region of a
  * 1536×1024 canvas (content box ≈ x[0.24–0.65] y[0.38–0.58], aspect ≈ 3:1, pure

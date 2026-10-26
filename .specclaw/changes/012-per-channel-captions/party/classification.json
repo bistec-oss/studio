@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["data"],
+  "rationale": "Restructures persisted Draft caption storage from a single copyText column to a DraftCaption table, rewires publish routing to select per-channel captions, and touches multiple subsystems (schema, generation, publish, UI, MCP/ACP) across 30+ files.",
+  "signals": {
+    "blast_radius": "Schema + migration, new DraftCaption table, caption extraction logic, regenerate/caption routes, publish per-channel routing, MPC/ACP caption output, three UI panels, brief wizard wording",
+    "unresolved": "WhatsApp character limit (soft guide, not hard blocker); user has locked down storage (table), on-image text (separate headline), and revision handling (design-only)",
+    "irreversibility": "Data migration applies on deploy; reverting requires down migration and re-transformation of caption data; migrated data may not perfectly reconstruct old format"
+  }
+}

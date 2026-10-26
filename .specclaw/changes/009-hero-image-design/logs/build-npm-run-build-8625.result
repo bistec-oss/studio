@@ -1,0 +1,7 @@
+exit=0
+duration_s=19
+log=.specclaw/changes/009-hero-image-design/logs/build-npm-run-build-8625.log
+head=f8c5436c295f1a0a2eb39d2f6d2d2505197d27c2
+dirty=true
+cmd=npm run build
+interrupted=false

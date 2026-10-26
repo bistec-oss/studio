@@ -1,6 +1,10 @@
 # F5 — Conversational brand-kit creation from references
 
 > Refine this plan just before build. Depends on the CLI-vision mechanism (spike PASSED 2026-07-13).
+>
+> **Superseded mechanism (005 T5):** the temp-file + `--allowedTools Read` CLI path described
+> below was replaced. CLI vision now sends the images as base64 blocks in one stream-json user
+> message on stdin to `claude -p --tools ""`: no temp files, no tool. See `src/lib/agent/vision.ts`.
 
 ## Goal
 

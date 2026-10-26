@@ -1,0 +1,7 @@
+exit=0
+duration_s=8
+log=.specclaw/changes/011-app-visual-redesign/logs/lint-npm-run-lint-13722.log
+head=c37357a3fa0a0c21e3269bf42a6b133e15cfaa28
+dirty=true
+cmd=npm run lint
+interrupted=false

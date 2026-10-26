@@ -1,0 +1,12 @@
+{
+  "change": "029-cli-usage-limit-message",
+  "phase": "verify",
+  "branch": "",
+  "size": "bounded",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-25T05:16:23Z" },
+    "spec": { "status": "done", "at": "2026-10-25T05:19:26Z" },
+    "tasks": { "status": "done", "at": "2026-10-25T05:19:27Z" },
+    "verify": { "status": "passed", "at": "2026-10-25T05:58:13Z", "verdict": "PASS" }
+  }
+}

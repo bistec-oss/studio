@@ -9,16 +9,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   availableProviderFindFirst: vi.fn(),
+  availableProviderFindMany: vi.fn(),
   isCliMode: vi.fn(() => false),
 }))
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { availableProvider: { findFirst: h.availableProviderFindFirst } },
+  prisma: {
+    availableProvider: { findFirst: h.availableProviderFindFirst, findMany: h.availableProviderFindMany },
+    // 024: the caption route reads the team's setting (never chosen here).
+    team: { findUnique: async () => null },
+  },
 }))
 
 vi.mock('@/lib/agent/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/agent/config')>()
-  return { ...actual, isCliMode: h.isCliMode }
+  // 024: the caption loader reads pipelineMode(), so the mode is mocked there too.
+  return { ...actual, isCliMode: h.isCliMode, pipelineMode: () => (h.isCliMode() ? 'cli' : 'api') }
 })
 
 // Real (constructable) mock classes — see imageProviderResolution.test.ts note.
@@ -29,7 +35,7 @@ vi.mock('@/providers/implementations/copy/anthropic', () => ({
   AnthropicCopyProvider: class { constructor(public apiKey: string) {} },
 }))
 vi.mock('@/providers/implementations/copy/claude-cli', () => ({
-  ClaudeCliCopyProvider: class {},
+  ClaudeCliCopyProvider: class { async generateCaptions() { return { raw: '', modelId: '', route: 'CLI' } } },
 }))
 vi.mock('@/providers/implementations/image/openai', () => ({
   OpenAIImageProvider: class { constructor(public apiKey: string) {} },
@@ -61,22 +67,32 @@ function anthropicRow(overrides: Record<string, unknown> = {}) {
   }
 }
 
+// 024: the caption route loads the team's enabled COPY rows with one findMany,
+// then reads the chosen row's key by id.
+function fakeRows(rows: Array<ReturnType<typeof anthropicRow>>) {
+  h.availableProviderFindMany.mockResolvedValue(rows)
+  h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+    rows.find((r) => r.id === where.id && r.teamId === where.teamId) ?? null,
+  )
+}
+
 beforeEach(() => {
   h.availableProviderFindFirst.mockReset()
+  h.availableProviderFindMany.mockReset().mockResolvedValue([])
   h.isCliMode.mockReturnValue(false)
 })
 
 describe('resolveCopyProvider — CLI-mode default (no row required)', () => {
   it('CLI mode + no registered provider ⇒ ClaudeCliCopyProvider (no throw)', async () => {
     h.isCliMode.mockReturnValue(true)
-    h.availableProviderFindFirst.mockResolvedValue(null)
+    h.availableProviderFindMany.mockResolvedValue([])
     const provider = await resolveCopyProvider(TEAM_ID)
     expect(provider).toBeInstanceOf(ClaudeCliCopyProvider)
   })
 
   it('a registered team-default API-key provider OVERRIDES the CLI default (whenever configured)', async () => {
     h.isCliMode.mockReturnValue(true)
-    h.availableProviderFindFirst.mockResolvedValue(anthropicRow())
+    fakeRows([anthropicRow()])
     const provider = await resolveCopyProvider(TEAM_ID)
     expect(provider).toBeInstanceOf(AnthropicCopyProvider)
     expect((provider as unknown as { apiKey: string }).apiKey).toBe(TEAM_KEY)
@@ -84,10 +100,7 @@ describe('resolveCopyProvider — CLI-mode default (no row required)', () => {
 
   it('an explicit providerKey OVERRIDES the CLI default', async () => {
     h.isCliMode.mockReturnValue(true)
-    h.availableProviderFindFirst.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => {
-      if (where.providerKey === 'anthropic-123' && where.teamId === TEAM_ID) return anthropicRow({ isDefault: false })
-      return null
-    })
+    fakeRows([anthropicRow({ id: 'ap-other', providerKey: 'other-key' }), anthropicRow({ isDefault: false })])
     const provider = await resolveCopyProvider(TEAM_ID, 'anthropic-123')
     expect(provider).toBeInstanceOf(AnthropicCopyProvider)
     expect((provider as unknown as { apiKey: string }).apiKey).toBe(TEAM_KEY)
@@ -97,7 +110,49 @@ describe('resolveCopyProvider — CLI-mode default (no row required)', () => {
 describe('resolveCopyProvider — non-CLI mode unchanged', () => {
   it('NOT CLI mode + nothing configured + no ANTHROPIC_API_KEY ⇒ still throws', async () => {
     h.isCliMode.mockReturnValue(false)
-    h.availableProviderFindFirst.mockResolvedValue(null)
-    await expect(resolveCopyProvider(TEAM_ID)).rejects.toThrow(/No COPY provider configured/)
+    h.availableProviderFindMany.mockResolvedValue([])
+    await expect(resolveCopyProvider(TEAM_ID)).rejects.toThrow(/No caption provider is set up/)
+  })
+})
+
+// 012 FR-21: under MOCK_AI the registry's COPY provider returns the raw mock
+// caption reply (testHooks.buildMockCaptionReply), which the real extractor
+// then parses — no row lookup, no provider call.
+describe('resolveCopyProvider — MOCK_AI caption seam', () => {
+  it('returns buildMockCaptionReply for the brief topic and the requested targets, stamped and recorded (008 FR-16)', async () => {
+    vi.resetModules()
+    vi.stubEnv('MOCK_AI', 'true')
+    try {
+      const { resolveCopyProvider: resolveMocked } = await import('@/providers/registry')
+      const { buildMockCaptionReply } = await import('@/lib/testHooks')
+      const { decideModel } = await import('@/lib/models/resolve')
+      const { setModelCallSink } = await import('@/lib/models/modelCalls')
+      const records: unknown[] = []
+      setModelCallSink({ record: (r) => void records.push(r), read: () => [], clear() {} })
+      const r = decideModel('CAPTION', {
+        requested: 'SONNET',
+        policy: { allowed: ['HAIKU', 'SONNET', 'OPUS'], defaults: {}, gateOn: false },
+        credential: 'n/a',
+        mode: 'api',
+      })
+      if (!r.ok) throw new Error(r.message)
+
+      const provider = await resolveMocked(TEAM_ID)
+      const brief = { topic: 'Launch', description: '', goal: 'g', tone: 't', channels: [] }
+      await expect(provider.generateCaptions(brief, ['LINKEDIN'], r.resolved)).resolves.toEqual({
+        raw: buildMockCaptionReply('Launch', ['LINKEDIN']),
+        modelId: 'claude-sonnet-5-5',
+        route: null,
+      })
+      // The seam short-circuits before the boundary, so it records the model it was handed.
+      expect(records).toEqual([
+        expect.objectContaining({ surface: 'CAPTION', key: 'SONNET', arg: 'claude-sonnet-5-5', source: 'request', label: 'copy', route: null }),
+      ])
+      expect(h.availableProviderFindFirst).not.toHaveBeenCalled()
+      setModelCallSink(null)
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 })

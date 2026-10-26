@@ -2,6 +2,8 @@ import { runScheduledJobs } from "../lib/scheduler/jobRunner"
 import { runGenerationJobs } from "../lib/scheduler/generationRunner"
 import { isCliMode } from "../lib/agent/config"
 import { prisma } from "../lib/prisma"
+import { runTick } from "../lib/scheduler/heartbeat"
+import { sweepAnalytics } from "../lib/analytics/retention"
 
 const POLL_INTERVAL_MS = 60_000
 
@@ -11,7 +13,7 @@ const POLL_INTERVAL_MS = 60_000
 async function loop(name: string, run: () => Promise<void>) {
   while (true) {
     try {
-      await run()
+      await runTick(name, run)
     } catch (err) {
       console.error(`[${name}] tick error:`, err)
     }
@@ -55,6 +57,12 @@ async function main() {
   await Promise.all([
     loop("scheduler", runScheduledJobs),
     loop("generation", runGenerationJobs),
+    // 006 FR-11: analytics retention. Writes its own WorkerHeartbeat row ("retention")
+    // through runTick, but is deliberately NOT in 023's HeartbeatLoop / the status
+    // route's LOOPS, so it cannot trip the "Scheduler offline" banner.
+    loop("retention", async () => {
+      await sweepAnalytics()
+    }),
   ])
 }
 

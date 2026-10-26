@@ -1,0 +1,10 @@
+{
+  "tier": "deep",
+  "domains": ["security"],
+  "rationale": "It makes a team's caption credential route (OAuth chain or a registered Anthropic API key) an explicit setting that decides which account bills and which credential is used, and two open questions (where the route is stored, and which model arg a team on API_KEY sends in CLI mode) would change the design and file list if answered differently.",
+  "signals": {
+    "blast_radius": "About 8 to 12 files across the provider resolver (registry.ts), the model resolver (resolve.ts/policy.ts), the /team AI Providers UI and register form, the provider routes, test hooks and docs; the proposal itself counts these as estimates only.",
+    "unresolved": "Open question 1 (derive the route from the COPY row or add a Team.captionRoute column), open question 3 (ResolvedModel takes the route as input, or a guard pins apiId === cliArg, with the E2E recorder behaviour unverified) and open question 4 (whether the Opus personal-token gate applies to an API-key run) each change what gets built.",
+    "irreversibility": "A git revert undoes the code, but a team whose captions have run on a registered API key bills that key's account until the row is removed, and a stored route column would need a migration to undo."
+  }
+}

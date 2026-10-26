@@ -2,16 +2,28 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, ShieldAlert, Pencil, Trash2, Users as UsersIcon, UserPlus, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Users as UsersIcon, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiFetch } from '@/lib/apiFetch'
 import { useCurrentUser } from '@/lib/hooks/useCurrentUser'
-import { GlassPanel } from '@/components/ui/GlassPanel'
 import { Button } from '@/components/ui/Button'
-import { GlassInput } from '@/components/ui/GlassInput'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { PageHead } from '@/components/ui/PageHead'
+import { Panel } from '@/components/ui/Panel'
+import { SectionHead } from '@/components/ui/SectionHead'
+import {
+  FOCUS,
+  ICON,
+  ICON_BUTTON,
+  ICON_SM,
+  ROW,
+  SCROLL_FOCUS,
+  TABLE_HEAD_ROW,
+} from '@/components/ui/atoms'
+import { GateNotice } from '@/components/ui/GateNotice'
 import type { AdminTeamSummary, AdminTeamMember } from '@/lib/api-types'
 
 // Super-admin platform-wide team management — models admin/users/page.tsx
@@ -76,65 +88,70 @@ export default function AdminTeamsPage() {
 
   if (!isSuperAdmin) {
     return (
-      <GlassPanel className="p-12 text-center max-w-md mx-auto mt-12">
-        <ShieldAlert size={32} className="mx-auto mb-3 text-light-text-muted dark:text-dark-text-muted" />
-        <h1 className="text-lg font-semibold text-light-text dark:text-dark-text mb-1">
-          Requires super admin
-        </h1>
-        <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-          Team management is limited to super administrators.
-        </p>
-      </GlassPanel>
+      <GateNotice title="Requires super admin">
+        Team management is limited to super administrators.
+      </GateNotice>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-light-text dark:text-dark-text">Teams</h1>
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted">
-            Every team on the platform. Manage membership below a selected row.
-          </p>
-        </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus size={14} /> Add team
-        </Button>
-      </div>
+    <div className="max-w-4xl">
+      <PageHead
+        eyebrow="Admin"
+        title="Teams"
+        lead="Every team on the platform. Manage membership below a selected row."
+        className="mb-6"
+        actions={
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus {...ICON} /> Add team
+          </Button>
+        }
+      />
 
-      <GlassPanel className="p-4">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+      {/* A ruled data table (§8.15, the study's .ct) on a bezel card (021
+          design.md §8), in a focusable, labelled scroll region; `relative`
+          contains the sr-only Actions header at 375 px. */}
+      <Panel bezel className="min-w-0 p-5">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Teams"
+          className={`relative overflow-x-auto ${SCROLL_FOCUS}`}
+        >
+          <table className="w-full min-w-[600px] text-ui-sm">
             <thead>
-              <tr className="text-left text-xs text-light-text-muted dark:text-dark-text-muted">
-                <th className="py-2 pr-3 font-medium">Name</th>
-                <th className="py-2 pr-3 font-medium">Members</th>
-                <th className="py-2 pr-3 font-medium">Created</th>
-                <th className="py-2 font-medium sr-only">Actions</th>
+              <tr className={TABLE_HEAD_ROW}>
+                <th scope="col" className="py-2 pr-3 font-semibold">Name</th>
+                <th scope="col" className="py-2 pr-6 text-right font-semibold">Members</th>
+                <th scope="col" className="py-2 pr-3 font-semibold">Created</th>
+                <th scope="col" className="py-2 font-semibold sr-only">Actions</th>
               </tr>
             </thead>
             <tbody>
               {teams.map((t) => (
-                <tr key={t.id} className="border-t border-light-border/50 dark:border-dark-border/50">
-                  <td className="py-2.5 pr-3 font-medium text-light-text dark:text-dark-text">{t.name}</td>
-                  <td className="py-2.5 pr-3 font-mono text-xs text-light-text dark:text-dark-text">{t.memberCount}</td>
-                  <td className="py-2.5 pr-3 font-mono text-xs text-light-text-muted dark:text-dark-text-muted whitespace-nowrap">
+                <tr key={t.id} className="border-b border-line-subtle align-middle last:border-b-0">
+                  <td className="break-words py-2.5 pr-3 font-medium text-fg">{t.name}</td>
+                  <td className="py-2.5 pr-6 text-right tabular-nums text-fg">{t.memberCount}</td>
+                  <td className="whitespace-nowrap py-2.5 pr-3 text-ui-xs text-fg-muted">
                     {new Date(t.createdAt).toLocaleDateString()}
                   </td>
-                  <td className="py-2.5 whitespace-nowrap">
-                    <div className="flex gap-1 justify-end">
+                  <td className="whitespace-nowrap py-1.5">
+                    <div className="flex justify-end gap-1">
+                      {/* Secondary, expanded while its panel shows: the page
+                          keeps one primary (§8.2, 021 A13). */}
                       <Button
-                        variant={selectedTeamId === t.id ? 'primary' : 'ghost'}
+                        variant="secondary"
                         size="sm"
+                        aria-expanded={selectedTeamId === t.id}
                         onClick={() => setSelectedTeamId(selectedTeamId === t.id ? null : t.id)}
                       >
-                        <UsersIcon size={13} /> Members
+                        <UsersIcon {...ICON_SM} /> Members
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setRenameTarget(t)}>
-                        <Pencil size={13} /> Rename
+                        <Pencil {...ICON_SM} /> Rename
                       </Button>
                       <Button variant="danger" size="sm" onClick={() => deleteTeam(t)}>
-                        <Trash2 size={13} /> Delete
+                        <Trash2 {...ICON_SM} /> Delete
                       </Button>
                     </div>
                   </td>
@@ -142,7 +159,7 @@ export default function AdminTeamsPage() {
               ))}
               {teams.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-6 text-center text-sm text-light-text-muted dark:text-dark-text-muted italic">
+                  <td colSpan={4} className="py-6 text-center text-ui-sm text-fg-muted">
                     No teams yet
                   </td>
                 </tr>
@@ -150,7 +167,7 @@ export default function AdminTeamsPage() {
             </tbody>
           </table>
         </div>
-      </GlassPanel>
+      </Panel>
 
       {selectedTeamId && (
         <TeamMembersPanel
@@ -210,7 +227,7 @@ function AddTeamModal({
   return (
     <Modal open={open} onClose={onClose} title="Add team" size="sm">
       <form onSubmit={submit} className="space-y-3">
-        <GlassInput label="Team name" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Input label="Team name" value={name} onChange={(e) => setName(e.target.value)} required />
         <div className="flex gap-2 justify-end pt-1">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
@@ -264,7 +281,7 @@ function RenameTeamModal({
       size="sm"
     >
       <form onSubmit={submit} className="space-y-3">
-        <GlassInput
+        <Input
           label="Team name"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -376,72 +393,76 @@ function TeamMembersPanel({
   if (!team) return null
 
   return (
-    <GlassPanel className="p-5 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-light-text dark:text-dark-text">
-          Members of {team.name}
-        </h2>
+    // A bezel card (021 design.md §8), its head the study's .card-hd; the
+    // members are ruled rows on --line-subtle.
+    <section className="surface-bezel mt-5 min-w-0 p-5">
+      <SectionHead title={`Members of ${team.name}`} className="mb-3">
         <button
+          type="button"
           onClick={onClose}
           aria-label="Close member panel"
-          className="text-light-text-muted dark:text-dark-text-muted hover:text-light-text dark:hover:text-dark-text"
+          className={`${ICON_BUTTON} hover:bg-surface-raised hover:text-fg ${FOCUS}`}
         >
-          <X size={16} />
+          <X {...ICON} />
         </button>
-      </div>
+      </SectionHead>
 
-      <div className="flex flex-col gap-1.5">
+      <div>
         {members.length === 0 && (
-          <p className="text-sm text-light-text-muted dark:text-dark-text-muted italic">No members yet</p>
+          <p className="text-ui-sm text-fg-muted">No members yet</p>
         )}
-        {members.map((m) => (
-          <div
-            key={m.userId}
-            className="glass-input rounded-xl p-3 flex items-center justify-between gap-3"
-          >
-            <div className="min-w-0">
-              <p className="font-medium text-sm text-light-text dark:text-dark-text truncate">{m.name}</p>
-              <p className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted">{m.loginLabel}</p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Select
-                aria-label={`Role for ${m.name}`}
-                className="w-28 py-1"
-                options={ROLE_OPTIONS}
-                value={m.role}
-                onChange={(e) => changeRole(m, e.target.value as 'ADMIN' | 'EDITOR')}
-              />
-              <Button variant="ghost" size="sm" onClick={() => removeMember(m)}>
-                <Trash2 size={13} /> Remove
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
+        {members.length > 0 && (
+          <ul>
+            {members.map((m) => (
+              <li
+                key={m.userId}
+                className={`${ROW} flex flex-wrap items-center justify-between gap-x-3 gap-y-2`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-ui-base font-medium text-fg" title={m.name}>{m.name}</p>
+                  <p className="break-all text-ui-xs text-fg-muted">{m.loginLabel}</p>
+                </div>
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <Select
+                    aria-label={`Role for ${m.name}`}
+                    className="w-32"
+                    options={ROLE_OPTIONS}
+                    value={m.role}
+                    onChange={(e) => changeRole(m, e.target.value as 'ADMIN' | 'EDITOR')}
+                  />
+                  <Button variant="ghost" size="sm" onClick={() => removeMember(m)}>
+                    <Trash2 {...ICON_SM} /> Remove
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      <form onSubmit={addMember} className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-light-border/50 dark:border-dark-border/50">
-        <div className="flex-1">
+        <form onSubmit={addMember} className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <Select
+              aria-label="User to add"
+              options={[
+                { value: '', label: availableUsers.length ? 'Select a user…' : 'No available users' },
+                ...availableUsers.map((u) => ({ value: u.id, label: `${u.name} (${loginLabel(u)})` })),
+              ]}
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+            />
+          </div>
           <Select
-            aria-label="User to add"
-            options={[
-              { value: '', label: availableUsers.length ? 'Select a user…' : 'No available users' },
-              ...availableUsers.map((u) => ({ value: u.id, label: `${u.name} (${loginLabel(u)})` })),
-            ]}
-            value={addUserId}
-            onChange={(e) => setAddUserId(e.target.value)}
+            aria-label="Role for new member"
+            className="sm:w-32"
+            options={ROLE_OPTIONS}
+            value={addRole}
+            onChange={(e) => setAddRole(e.target.value as 'ADMIN' | 'EDITOR')}
           />
-        </div>
-        <Select
-          aria-label="Role for new member"
-          className="sm:w-28"
-          options={ROLE_OPTIONS}
-          value={addRole}
-          onChange={(e) => setAddRole(e.target.value as 'ADMIN' | 'EDITOR')}
-        />
-        <Button type="submit" disabled={!addUserId || adding}>
-          <UserPlus size={14} /> {adding ? 'Adding…' : 'Add'}
-        </Button>
-      </form>
-    </GlassPanel>
+          <Button type="submit" variant="ink" disabled={!addUserId || adding}>
+            <UserPlus {...ICON} /> {adding ? 'Adding…' : 'Add'}
+          </Button>
+        </form>
+      </div>
+    </section>
   )
 }

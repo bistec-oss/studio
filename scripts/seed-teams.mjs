@@ -14,8 +14,8 @@
  * Idempotent: every step is a find-or-create / upsert, safe to re-run.
  *
  * Produces:
- *   - Team "Bistec" (already created unconditionally by the team_tenancy_b
- *     migration's backfill — this script only adds memberships) with
+ *   - Team "Bistec" (found by name, or created here: a fresh database has
+ *     no team, since 016 FR-08 deletes the migration-made one) with
  *     adminBTG as TeamRole.ADMIN and editor as TeamRole.EDITOR.
  *   - Team "ClientX" (new) with a new user `clientx.admin` (fixed test
  *     password, platform role ADMIN, TeamRole.ADMIN in ClientX).
@@ -188,7 +188,21 @@ async function ensureTeamFixtures(teamId, teamLabel, ownerId, { kitIsDefault = f
         data: {
           teamId,
           briefId: brief.id,
-          copyText: `${topic} — seeded fixture copy.`,
+          // A native (post-012) draft: a headline and one READY caption per
+          // channel, so nothing here is legacy and the loader never migrates
+          // it. The labels mirror src/lib/channels.ts CAPTION_CHANNELS.
+          headline: topic,
+          captions: {
+            create: [
+              ["INSTAGRAM", "Instagram"],
+              ["LINKEDIN", "LinkedIn"],
+              ["WHATSAPP", "WhatsApp"],
+            ].map(([channel, label]) => ({
+              channel,
+              text: `${topic} — seeded fixture ${label} caption.`,
+              status: "READY",
+            })),
+          },
           htmlContent: `<div style="font-family:sans-serif;padding:40px">${topic}</div>`,
           status: "EXPORTED",
           exportUrl: `exports/seed-${brief.id}.png`,

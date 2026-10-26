@@ -1,0 +1,23 @@
+[
+  {
+    "tag": "sq-product__classic",
+    "brief": "sq-product",
+    "kind": "product",
+    "aspectRatio": "SQUARE",
+    "style": "classic",
+    "draftId": "cmvl6zx5i00579iu3mxdwdd6g",
+    "secs": 91,
+    "status": "EXPORTED",
+    "failureReason": null,
+    "composition": {
+      "requestedArchetype": "classic",
+      "appliedArchetype": "classic",
+      "contractVersion": null,
+      "imageQuality": "default"
+    },
+    "compositionNotice": null,
+    "backgroundSkip": null,
+    "designModel": "claude-sonnet-5-5",
+    "png": "sq-product__classic.png"
+  }
+]

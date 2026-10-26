@@ -398,8 +398,8 @@ test.describe('Chat-driven auto-scheduling (F4)', () => {
     expect(schedulePlan.length).toBe(2)
 
     // Build entries the way the panel does (defaults for channels/size/design).
-    const entries = schedulePlan.map((p: { topic: string; goal: string; tone: string; daysFromNow: number; postAction: string }) => ({
-      topic: p.topic, goal: p.goal, tone: p.tone,
+    const entries = schedulePlan.map((p: { topic: string; postStyle: string; tone: string; daysFromNow: number; postAction: string }) => ({
+      topic: p.topic, postStyle: p.postStyle, tone: p.tone,
       channels: ['INSTAGRAM', 'LINKEDIN'], aspectRatio: 'SQUARE', designMode: 'GENERATE',
       generateAt: new Date(Date.now() + p.daysFromNow * 86_400_000).toISOString(),
       postAction: p.postAction,

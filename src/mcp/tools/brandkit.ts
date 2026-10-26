@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma'
+import { findFamily } from '@/lib/fonts/catalogue'
+import { validateKitFonts } from '@/lib/fonts/validateKitFonts'
 
 export async function createBrandKit(args: {
   name: string
@@ -18,12 +20,15 @@ export async function createBrandKit(args: {
   if (args.logoUrl !== undefined && !/^https?:\/\//.test(args.logoUrl)) {
     throw new Error('logoUrl must be an http(s) URL')
   }
+  // 031 FR-20: the same font rule as the web routes (a catalogue family; the url is computed).
+  const checked = validateKitFonts(args.fonts ?? [], [], findFamily)
+  if (!checked.ok) throw new Error(checked.error)
   const kit = await prisma.brandKit.create({
     data: {
       teamId: args.teamId,
       name: args.name,
       colors: args.colors ?? [],
-      fonts: args.fonts ?? [],
+      fonts: checked.fonts,
       logoUrl: args.logoUrl ?? null,
     },
   })

@@ -1,0 +1,17 @@
+{
+  "change": "017-publish-api-fixes",
+  "phase": "verify",
+  "branch": "v2",
+  "size": "bounded",
+  "phases": {
+    "proposal": { "status": "approved", "at": "2026-10-13T15:44:22Z" },
+    "spec": { "status": "done", "at": "2026-10-13T16:41:48Z" },
+    "tasks": { "status": "done", "at": "2026-10-13T16:41:48Z" },
+    "build": {
+      "status": "done",
+      "at": "2026-10-13T17:13:28Z",
+      "tasks": { "done": 3, "total": 3, "failed": 0 }
+    },
+    "verify": { "status": "passed", "at": "2026-10-14T00:10:55Z", "verdict": "PASS" }
+  }
+}

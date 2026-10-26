@@ -18,7 +18,7 @@ enum DesignMode {
   GENERATE
 }
 
-// Output canvas shape. SQUARE = 1080×1080 (1:1), PORTRAIT = 1080×1350 (3:4).
+// Output canvas shape. SQUARE = 1080×1080 (1:1), PORTRAIT = 1080×1350 (4:5).
 // Pixel dimensions live in src/lib/aspectRatio.ts (single source of truth).
 enum AspectRatio {
   SQUARE
@@ -41,11 +41,23 @@ enum DraftAction {
   REGENERATE_COPY
   REGENERATE_DESIGN
   REFINE
+  APPLY_TEXT
 }
 
 enum Channel {
   INSTAGRAM
   LINKEDIN
+  WHATSAPP
+}
+
+// One caption row's state (012 FR-02). PENDING = a generation or regenerate is
+// writing it now; READY = validated model output or the user's own text (may
+// be empty); FAILED = the last attempt produced no usable text AND the row has
+// none — the DraftCaption_failed_has_no_text CHECK constraint enforces that.
+enum CaptionStatus {
+  PENDING
+  READY
+  FAILED
 }
 
 enum PostStatus {
@@ -96,6 +108,28 @@ enum ArtifactType {
   REFERENCE_DOC
   EXAMPLE_POST
   OTHER
+}
+
+// A catalogue key: a model family, not a version (008 A1). The values are
+// src/lib/models/catalogue.ts MODEL_KEYS (tests/unit/modelCatalogue.test.ts
+// pins the two together); the full API ID lives only in the catalogue and in
+// the stamps. A new family is `ALTER TYPE … ADD VALUE`, alone in its migration.
+enum ModelKey {
+  HAIKU
+  SONNET
+  OPUS
+}
+
+// The surfaces a team admin can set a default for (008 FR-02) — catalogue.ts
+// USER_SURFACES. Internal surfaces (background decision, verifier, token ping)
+// are fixed on Haiku and never persisted (A14).
+enum ModelSurface {
+  CAPTION
+  DESIGN_TEMPLATE
+  DESIGN_FREEFORM
+  REFINE
+  ASSISTANT_BRIEFING
+  ASSISTANT_BRANDKIT
 }
 
 // ── better-auth models ────────────────────────────────────────────────────
@@ -234,6 +268,46 @@ model Team {
   encryptedClaudeToken String?
   claudeKeyPrefix      String?
   memberships          TeamMembership[]
+  // The team's model policy (008 FR-05); absent until an admin first saves it.
+  modelPolicy          TeamModelPolicy?
+  // 024: the credential route the team chose for captions. Null = never chosen
+  // (today's behaviour, unchanged).
+  captionRoute         CaptionRoute?
+}
+
+// 024: the credential route a team can choose for captions. The stamp columns
+// (Draft.headlineRoute, DraftCaption.route) are plain TEXT because their domain
+// (CLI | API_KEY | SERVER_KEY | OTHER) is wider than this setting's.
+enum CaptionRoute {
+  CLI
+  API_KEY
+}
+
+// A team's model policy (008 FR-05), 1:1 with Team. No row = the catalogue's
+// defaultAllowed entries, no team defaults, switch off (A2). Once saved, the
+// list is authoritative: a later catalogue addition is never added silently.
+model TeamModelPolicy {
+  teamId                       String             @id
+  team                         Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // The models this team may run on user surfaces; checked at every tier at
+  // call time (a stored value no longer allowed falls to the team default).
+  allowedModels                ModelKey[]
+  // The "Opus requires a personal token" switch (A3): gates every catalogue
+  // entry flagged personalTokenGated, in CLI mode only.
+  requirePersonalTokenForGated Boolean            @default(false)
+  updatedAt                    DateTime           @default(now()) @updatedAt
+  defaults                     TeamModelDefault[]
+}
+
+// One team default per user surface (008 FR-05). A missing row means "use the
+// system default" (FR-04's table, then CLAUDE_CLI_MODEL in CLI mode).
+model TeamModelDefault {
+  teamId  String
+  policy  TeamModelPolicy @relation(fields: [teamId], references: [teamId], onDelete: Cascade)
+  surface ModelSurface
+  model   ModelKey
+
+  @@id([teamId, surface])
 }
 
 model TeamMembership {
@@ -257,6 +331,9 @@ model UserOpenAiKey {
   encryptedKey String
   keyPrefix    String
   status       String   @default("ACTIVE") // ACTIVE | INVALID
+  // 031 FR-10: which provider the key belongs to (`openai` | `gemini`), from its
+  // prefix at save time. The table keeps its name (user decision).
+  provider     String   @default("openai")
   createdAt    DateTime @default(now())
 }
 
@@ -298,6 +375,9 @@ model Campaign {
   brandKitId   String?
   brandKit     BrandKit?          @relation("CampaignBrandKit", fields: [brandKitId], references: [id])
   defaultTone  String?
+  // 027: pre-fills the wizard, the queue and (as the default) MCP/ACP. Plain TEXT,
+  // validated in code (src/lib/postStyles), so a retired key needs no migration.
+  defaultPostStyle String?
   isDeleted    Boolean            @default(false)
   deletedAt    DateTime?
   createdAt    DateTime           @default(now())
@@ -348,6 +428,8 @@ model ScheduledGeneration {
   description String?
   goal        String
   tone        String
+  // 027: the post style key (TEXT, validated in code). Null = before 027.
+  postStyle   String?
   channels    Channel[]
   aspectRatio AspectRatio          @default(SQUARE)
   designMode  DesignMode
@@ -360,6 +442,8 @@ model ScheduledGeneration {
   // Lifecycle — mirrors Post's H12 fields (nextRetryAt doubles as the RUNNING lease).
   status      GenerationStatus     @default(PENDING)
   errorReason String?
+  // 027: why a post action was not run (the facts check). Null otherwise.
+  heldReason  String?
   retryCount  Int                  @default(0)
   nextRetryAt DateTime?
   // Results: the Brief is created on the first run attempt and reused across
@@ -425,6 +509,20 @@ model Brief {
   briefImages         Json?
   referenceTemplateId String?
   referenceTemplate   BrandKitTemplate?  @relation("BriefReferenceTemplate", fields: [referenceTemplateId], references: [id])
+  // The initial generation's explicit model request (008 FR-10), read only by
+  // the generation and its retry as tier 1. designModel serves DESIGN_TEMPLATE
+  // or DESIGN_FREEFORM by designMode. Null = no explicit request; wave 1 never
+  // writes them.
+  captionModel        ModelKey?
+  designModel         ModelKey?
+  // 009 FR-01: the requested hero-image style. Plain TEXT, validated in code,
+  // so a retired key needs no migration. The default keeps every pre-009 row
+  // (and the previous image's brief.create) on the classic plan.
+  imageStyle          String             @default("classic")
+  compositeSource     Json?
+  // 027: the post style key (TEXT, validated in code, so a retired key needs
+  // no migration). Null = before 027: the user's own goal and tone stand.
+  postStyle           String?
   createdAt           DateTime           @default(now())
   drafts              Draft[]
   scheduledGenerations ScheduledGeneration[]
@@ -440,7 +538,6 @@ model Draft {
   teamId          String
   briefId         String
   brief           Brief           @relation(fields: [briefId], references: [id])
-  copyText        String
   imageUrl        String?
   htmlContent     String?         @db.Text
   templateId      String?
@@ -455,6 +552,13 @@ model Draft {
   // Prompt revision that produced the current design (prompts/shared.ts
   // PROMPT_VERSION) — lets output quality be correlated with prompt changes.
   promptVersion   String?
+  // Digest of the installed font packages at render time (src/lib/renderer/
+  // fontSet.ts getFontSetId) — the glyph environment is global (an image
+  // rebuild can change how an already-approved draft renders) so this makes
+  // that attributable after the fact. Null for drafts rendered before this
+  // existed, or off a host with no apk database (e.g. local dev) — absent,
+  // not wrong.
+  fontSet         String?
   status          DraftStatus     @default(IN_PROGRESS)
   // Why the last generation attempt FAILED (model error, timeout, interruption).
   // Shown on the preview page's inline error card; cleared on a successful retry.
@@ -462,17 +566,82 @@ model Draft {
   // In-flight draft action marker for the async action pattern (regenerate
   // copy/design, refine): set on atomic claim, cleared when the run settles.
   pendingAction   DraftAction?
-  // Error from the last action run; cleared when the next action starts.
+  // Token minted by the claim (change 019). Set with the claim, nulled by every
+  // settle and by the stale sweep; every write the run makes is guarded on it.
+  // Null alongside a non-null pendingAction means an older image took the claim.
+  pendingActionClaimId String?
+  // Error from the last action run. The claim keeps it (since 004 T17 fix
+  // round 1); the next settle replaces or clears it.
   pendingActionError String?
+  // "Couldn't apply" outcome of the last refine (change 004 FR-14): the refine
+  // ran to completion but failed verification twice, so nothing was committed.
+  // Deliberately separate from pendingActionError — "did not do what you asked"
+  // must read differently from "the run crashed". Cleared by the next
+  // successful action.
+  notAppliedReason     String?
+  // The retained rejected render for that outcome (a DraftRevision with
+  // rejectedAt set and no revisionNumber) — never a chain row. SetNull so the
+  // draft hard-delete, which removes revisions first, is unaffected.
+  notAppliedRevisionId String?
+  notAppliedRevision   DraftRevision? @relation("DraftNotAppliedRevision", fields: [notAppliedRevisionId], references: [id], onDelete: SetNull)
+  // Why the current design has no AI background, when that was NOT the
+  // model's choice (005 FR-06/FR-07): NO_PROVIDER | PROVIDER_ERROR |
+  // DECISION_ERROR, enforced in src/lib/drafts/backgroundNotice.ts (plain TEXT
+  // so a new reason needs no migration). NOT_NEEDED is never stored. The
+  // detail is the clipped (≤300 chars) error text. Null = no notice.
+  backgroundSkipReason String?
+  backgroundSkipDetail String?
+  // 031 FR-13: where the image that ran came from, `{ tier: 'personal' | 'team',
+  // provider: 'openai' | 'gemini', personalFailed?: true }`. Null = before 031 or
+  // no image provider ran.
+  imageSource          Json?
+  // The short line printed on the post image (012 FR-03/FR-09), written by the
+  // caption call. Null until it writes a valid one — design then falls back
+  // to the brief topic (captions/headline.ts designHeadline).
+  headline        String?
+  // The model that wrote `headline` (008 FR-08): the arg that crossed the
+  // boundary (apiId in API mode, cliArg in CLI mode). Plain TEXT, so a retired
+  // or non-Claude ID is kept as history. Null = unknown (pre-008). A headline
+  // edit leaves it (A6). …SubstitutedFrom = the refused value, or null.
+  headlineModel                String?
+  headlineModelSubstitutedFrom String?
+  // 024: the route that wrote `headline` (CLI | API_KEY | SERVER_KEY | OTHER),
+  // as TEXT, beside headlineModel. Written only with validated text. Null =
+  // before 024, or unknown.
+  headlineRoute                String?
+  // Mirrors the current revision's DraftRevision.model / modelSubstitutedFrom
+  // (008 FR-08): the model whose output is the live htmlContent.
+  designModel                  String?
+  designModelSubstitutedFrom   String?
+  // 009: the composition stamp for the live htmlContent, validated in
+  // src/lib/designData/stamp.ts (tolerant parse at read). Null = before 009.
+  composition     Json?
+  // 027: the post style stamp { key, version, revision } of the last generation or
+  // regeneration, validated in src/lib/postStyles/stamp.ts. Null = before 027.
+  postStyle       Json?
+  // 030: the text the live render visibly painted, { headline: { text, verified, reason? } },
+  // validated in src/lib/renderedText/stamp.ts. Null = rendered before 030.
+  renderedText    Json?
+  // 031 FR-24: what the live render noted, { fontsMissing: string[] } (the
+  // post-font families that did not load), validated in src/lib/fonts/renderNotes.ts.
+  // Null = before 031, no check, or nothing missing.
+  renderNotes     Json?
+  // 027: the facts-check result (numbers and places only, no text). Null = never checked.
+  factsCheck      Json?
   createdAt       DateTime        @default(now())
   // @default(now()) keeps the added column valid for pre-existing rows
   updatedAt       DateTime        @default(now()) @updatedAt
   posts           Post[]
-  revisions       DraftRevision[]
+  revisions       DraftRevision[] @relation("DraftRevisions")
   scheduledGenerations ScheduledGeneration[]
+  // Per-channel captions (012 FR-02). Read only through captions/store.ts
+  // loadDraftCaptions, which materializes legacy drafts first.
+  captions        DraftCaption[]
 
   @@index([briefId])
   @@index([teamId])
+  // FK lookup side for ON DELETE SET NULL when a rejected DraftRevision is removed.
+  @@index([notAppliedRevisionId])
 }
 
 model Post {
@@ -508,6 +677,9 @@ model BrandKit {
   colors    Json?
   fonts     Json?
   logoUrl   String?
+  // 031 FR-21: the font per script, { [script]: family }, keyed by the catalogue's
+  // script id (only `sinhala` is offered). Null = none (the default).
+  scriptFonts Json?
   isDefault Boolean             @default(false)
   isDeleted Boolean             @default(false)
   deletedAt DateTime?
@@ -568,6 +740,9 @@ model BrandKitPrompt {
   isActive   Boolean  @default(false)
   createdBy  String
   createdAt  DateTime @default(now())
+  // 031 (T12): the kit fonts before an assistant apply that changed them, so the
+  // History line can name them. Null = the version changed no fonts.
+  previousFonts Json?
 
   @@unique([brandKitId, version])
 }
@@ -619,15 +794,175 @@ model ChannelToken {
   @@index([teamId])
 }
 
+// Two kinds of row share this table (change 004, Phase 2 — FR-12/13/14):
+//
+//  * COMMITTED rows are the revision chain: revisionNumber 1..N, contiguous per
+//    draft, the only rows Draft.currentRevisionNumber can point at, and the only
+//    rows version switching / restore / Undo / next-number allocation see.
+//  * REJECTED rows are refine renders that failed verification twice. They are
+//    kept for diagnosis (and a possible "Use anyway" adoption) but are NOT part
+//    of the chain: they have NO revisionNumber at all (NULL), plus rejectedAt.
+//
+// A rejected row has no chain position by construction, so the pointer (an Int
+// compared to revisionNumber) can never select one and next-number allocation
+// can never count one. The migration adds a CHECK constraint making
+// "revisionNumber IS NULL" and "rejectedAt IS NOT NULL" the same statement.
+// Every reader still filters through committedRevisionWhere() in
+// src/lib/drafts/revisions.ts — never query this table for the chain directly.
 model DraftRevision {
   id             String   @id @default(cuid())
   draftId        String
-  draft          Draft    @relation(fields: [draftId], references: [id])
-  revisionNumber Int
+  draft          Draft    @relation("DraftRevisions", fields: [draftId], references: [id])
+  // Chain position. NULL exactly when the row is rejected (CHECK constraint).
+  revisionNumber Int?
   instruction    String
   htmlSnapshot   String   @db.Text
   exportUrl      String?
   createdAt      DateTime @default(now())
+  // Set when the render failed verification twice (FR-13). Non-null ⇔ rejected.
+  rejectedAt     DateTime?
+  // Free-form diagnostics for a rejected render: the classes the instruction
+  // resolved to and the verifier's stated miss (FR-13). Deliberately untyped JSON
+  // and allowed ONLY on rejected rows (CHECK constraint).
+  // FR-02 vs FR-13 ruling: FR-02 says the instruction class is transient and is
+  // not written to DraftRevision; FR-13 says a rejected render is labelled with
+  // its classes. FR-13 is the more specific requirement for rejected rows, so
+  // classes are stored here and ONLY here — never as a typed column and never
+  // on a committed row.
+  rejection      Json?
+  // "Use anyway" (FR-14a, T19): when the rejected render was adopted, and the
+  // committed revisionNumber its fresh copy became. The rejected row itself is
+  // never pointed at; a non-null adoptedAt makes a second adopt a 409.
+  adoptedAt             DateTime?
+  adoptedRevisionNumber Int?
+  // Set when a rejected render is dismissed/superseded, so adopting it later is
+  // a 409 (FR-14a "already-adopted or discarded").
+  discardedAt    DateTime?
+  // The render stamp of THIS row's render (F3, AC-04): the prompt version that
+  // produced htmlSnapshot and the font set that rasterized exportUrl — the
+  // same values Draft.promptVersion/fontSet carry while the draft shows it.
+  // Restore and "Use anyway" copy them back onto the draft. Null on rows
+  // written before this existed (unknown, and copied as null).
+  promptVersion  String?
+  fontSet        String?
+  // The model whose output is this row's htmlSnapshot (008 FR-08), part of the
+  // same render stamp: the arg that crossed the boundary, as plain TEXT. Null =
+  // unknown (pre-008). modelSubstitutedFrom = the refused value, or null.
+  model                String?
+  modelSubstitutedFrom String?
+  // 009: the composition stamp of this row's htmlSnapshot, part of the same
+  // render stamp, validated in src/lib/designData/stamp.ts. Null = before 009.
+  composition          Json?
+  // 027: the post style stamp at this row's render. Null = before 027.
+  postStyle            Json?
+  // 030: the text this row's render visibly painted. Null = rendered before 030.
+  renderedText         Json?
+  // 031 FR-24: what this row's render noted ({ fontsMissing }). Null = before 031,
+  // no check, or nothing missing.
+  renderNotes          Json?
+  // Drafts whose current not-applied outcome references this rejected row.
+  notAppliedOn   Draft[]  @relation("DraftNotAppliedRevision")
 
   @@unique([draftId, revisionNumber])
+}
+
+// One caption per draft per registry channel (012 FR-02, src/lib/channels.ts
+// CAPTION_CHANNELS). Reached only through its draft, so every caption read and
+// write sits behind the draft's access check; deleted with the draft.
+// The migration adds the CHECK DraftCaption_failed_has_no_text:
+// status <> 'FAILED' OR text = '' (A7 — FAILED means "no usable text").
+model DraftCaption {
+  id            String        @id @default(cuid())
+  draftId       String
+  draft         Draft         @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  channel       Channel
+  text          String        @default("") @db.Text
+  status        CaptionStatus @default(PENDING)
+  // Why the last write attempt for this channel failed — also set on a failed
+  // regenerate that left good text READY (A7). Cleared by the next successful
+  // write or by an edit.
+  failureReason String?
+  // The model whose output is this row's text (008 FR-08), as plain TEXT: set
+  // by the generation and a successful regenerate of this channel, left by a
+  // user edit (A6) and by a failed field. Null = unknown (pre-008, or a FAILED
+  // row with no text). modelSubstitutedFrom = the refused value, or null.
+  model                String?
+  modelSubstitutedFrom String?
+  // 024: the route that wrote this row's text (CLI | API_KEY | SERVER_KEY |
+  // OTHER), as TEXT, beside model. Written only with validated text. Null =
+  // before 024, or no text.
+  route                String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @default(now()) @updatedAt
+
+  @@unique([draftId, channel])
+  @@index([draftId])
+}
+
+// The original single caption of every pre-012 draft that a database coming
+// from `main` still held when 016 dropped Draft."copyText" (022 FR-01/FR-02).
+// Written once by prisma/migrations/20261012130000_legacy_caption_carryover,
+// which also copied the text into DraftCaption rows. A recovery record only:
+// no app code reads it, nothing ever drops it, and on a fork-era database it
+// is empty. Deliberately NO relation to Draft: it must survive a draft delete
+// and must never block one.
+model LegacyCaptionArchive {
+  draftId    String   @id
+  copyText   String   @db.Text
+  archivedAt DateTime @default(now())
+}
+
+// 023: one row per scheduler-worker loop ('scheduler' | 'generation'). The
+// table is global, not per team: the worker serves every team. The tick's
+// start and end are kept apart so a long generation tick is not read as
+// offline: lastTickEndedAt null, or before lastTickStartedAt, means "inside a
+// tick". Written best-effort by the worker; read by GET /api/scheduler/status.
+model WorkerHeartbeat {
+  loop              String    @id
+  lastTickStartedAt DateTime
+  lastTickEndedAt   DateTime?
+  updatedAt         DateTime  @updatedAt
+}
+
+// 006: where an analytics event came from. A Postgres enum because the set is
+// closed and tiny; a new source is `ALTER TYPE … ADD VALUE`, alone in its migration.
+enum AnalyticsSource {
+  web
+  scheduler
+  mcp
+}
+
+// 006: the append-only product event store. Written only by track()
+// (src/lib/analytics/track.ts), read only by src/lib/analytics/queries.ts.
+// Deliberately NO relations: teamId, userId and draftId are plain strings, so
+// the table never blocks a delete and never cascades by accident (006 FR-01,
+// like LegacyCaptionArchive). Delete behaviour is explicit (006 FR-12).
+model AnalyticsEvent {
+  id            String          @id @default(cuid())
+  at            DateTime        @default(now()) @db.Timestamptz(3)
+  name          String
+  schemaVersion Int
+  source        AnalyticsSource
+  teamId        String
+  userId        String?
+  draftId       String?
+  durationMs    Int?
+  outcome       String?
+  payload       Json
+
+  @@index([at])
+  @@index([name, at])
+  @@index([teamId, at])
+  @@index([draftId])
+}
+
+// 006: events track() could not store (dropped) or would not store because the
+// payload failed its schema (rejected), per event name. Shown on the insights
+// page so a lost event never reads as a healthy zero.
+model AnalyticsDrop {
+  name       String   @id
+  dropped    Int      @default(0)
+  rejected   Int      @default(0)
+  lastAt     DateTime @db.Timestamptz(3)
+  lastReason String
 }

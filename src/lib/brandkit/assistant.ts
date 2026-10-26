@@ -1,10 +1,14 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { runVisionModel } from '@/lib/agent/vision'
-import { runBriefingModel } from '@/lib/campaign/briefingAssistant'
+import { resolveAssistantModel, runBriefingModel } from '@/lib/campaign/briefingAssistant'
+import { pipelineMode } from '@/lib/agent/config'
+import { modelCallFor, recordModelCall } from '@/lib/models/modelCalls'
+import type { ModelKey } from '@/lib/models/catalogue'
 import { buildDocsContext } from '@/lib/campaign/documents'
 import { sampleImageColors } from '@/lib/renderer/puppeteer'
 import { fenceUntrusted, UNTRUSTED_CONTENT_GUARD } from '@/lib/agent/untrusted'
+import { extractFencedJson } from '@/lib/agent/fencedBlock'
 import { MOCK_AI, MOCK_PUPPETEER, buildMockBrandKitReply } from '@/lib/testHooks'
 
 // F5 — conversational brand-kit creation from references. Mirrors the campaign
@@ -26,11 +30,35 @@ export interface ChatMessage {
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
+export interface BrandKitFonts {
+  heading?: string
+  body?: string
+}
+
 const brandKitBlockSchema = z.object({
   voice: z.string().trim().min(1),
   tone: z.string().trim().default(''),
   style: z.string().trim().default(''),
-  fonts: z.array(z.string().trim().min(1)).max(6).default([]),
+  // 031 FR-33: { heading?, body? }. The old string[] still parses: entry 0 is the heading, entry 1 the body.
+  fonts: z
+    .union([
+      z
+        .array(z.string().trim().min(1))
+        .max(6)
+        .transform((a): BrandKitFonts => {
+          const out: BrandKitFonts = {}
+          if (a[0]) out.heading = a[0]
+          if (a[1]) out.body = a[1]
+          return out
+        }),
+      z.object({
+        heading: z.string().trim().min(1).optional(),
+        body: z.string().trim().min(1).optional(),
+      }),
+    ])
+    .default({}),
+  // 031 FR-33: { [script]: family }; checked on apply against the catalogue.
+  scriptFonts: z.record(z.string().trim().min(1)).optional(),
   // Colors explicitly stated in reference DOCUMENTS only (validated hex).
   colors: z.array(z.string().trim().regex(HEX_COLOR)).max(6).default([]),
 })
@@ -39,7 +67,8 @@ export interface BrandKitSuggestion {
   voice: string
   tone: string
   style: string
-  fonts: string[]
+  fonts: BrandKitFonts
+  scriptFonts?: Record<string, string>
   // Document-declared colors first (authoritative), then colors sampled from
   // the reference images — never colors guessed by vision from pixels. Font
   // guesses ARE from vision, so the UI presents them (and everything else) as
@@ -47,20 +76,10 @@ export interface BrandKitSuggestion {
   colors: string[]
 }
 
-const BLOCK_FENCE = /```brandkit\s*\n([\s\S]*?)```/g
-
 // Parse the LAST ```brandkit block. Returns null when missing/malformed.
 export function extractBrandKitBlock(text: string): Omit<BrandKitSuggestion, 'colors'> & { colors: string[] } | null {
-  let match: RegExpExecArray | null = null
-  for (const m of text.matchAll(BLOCK_FENCE)) match = m
-  const raw = match?.[1]?.trim()
-  if (!raw) return null
-  try {
-    const parsed = brandKitBlockSchema.safeParse(JSON.parse(raw))
-    return parsed.success ? parsed.data : null
-  } catch {
-    return null
-  }
+  const r = extractFencedJson(text, 'brandkit', brandKitBlockSchema)
+  return r.ok ? r.data : null
 }
 
 // Reference images the vision model + color sampler work from (feedToAI only).
@@ -169,11 +188,18 @@ function mergeColors(docColors: string[], sampled: string[]): string[] {
 export async function runBrandKitChat(
   kitId: string,
   messages: ChatMessage[],
-  teamId: string
+  teamId: string,
+  userId: string | null,
+  requested?: ModelKey,
 ): Promise<BrandKitChatResult> {
   const { imageUrls: urls, docs } = await collectBrandKitGrounding(kitId)
+  // 008 FR-02: the team's ASSISTANT_BRANDKIT model, for both the vision and the
+  // text call — or the chat header's explicit pick (FR-17), refused if not allowed.
+  const model = await resolveAssistantModel('ASSISTANT_BRANDKIT', teamId, userId, requested)
 
   if (MOCK_AI) {
+    // 008 FR-16: the short-circuited call is recorded first.
+    recordModelCall(modelCallFor(model, pipelineMode(), 'brandkit'))
     const lastUser = [...messages].reverse().find((m) => m.role === 'user')
     const reply = buildMockBrandKitReply(lastUser?.content ?? '')
     const block = extractBrandKitBlock(reply)
@@ -194,7 +220,7 @@ export async function runBrandKitChat(
   const system = [
     'You are a brand designer helping an admin of bistec-studio derive a brand kit from reference material (past posts, mock-ups, logos, brand guideline documents).',
     'Study the references and the conversation, then describe the brand: its VOICE (how copy should sound), TONE, visual STYLE (layout, imagery, mood), and the FONTS in use.',
-    'In every reply once you have enough to work with, include your current best extraction inside a fenced code block that starts with ```brandkit and ends with ``` containing ONLY JSON of the shape {"voice":string,"tone":string,"style":string,"fonts":string[],"colors":string[]}. voice is a reusable brand-voice prompt (roughly 60-150 words) that will steer AI copy. colors: include ONLY hex color values the reference DOCUMENTS state explicitly (e.g. a brand guideline naming #1A2B3C) — NEVER estimate colors from images; leave the array empty otherwise (image colors are sampled separately). Font names from images are your best visual guess; the admin will confirm them.',
+    'In every reply once you have enough to work with, include your current best extraction inside a fenced code block that starts with ```brandkit and ends with ``` containing ONLY JSON of the shape {"voice":string,"tone":string,"style":string,"fonts":{"heading"?:string,"body"?:string},"scriptFonts"?:{"sinhala"?:string},"colors":string[]}. voice is a reusable brand-voice prompt (roughly 60-150 words) that will steer AI copy. colors: include ONLY hex color values the reference DOCUMENTS state explicitly (e.g. a brand guideline naming #1A2B3C) — NEVER estimate colors from images; leave the array empty otherwise (image colors are sampled separately). Font names are your best visual guess: use Google Fonts family names only; the admin will confirm them, and a name that is not a Google Fonts family is not applied. Propose scriptFonts only when the references show Sinhala text.',
     'Summarise briefly in prose above the block; the app turns the block into an editable, applyable suggestion.',
     UNTRUSTED_CONTENT_GUARD,
     docs.text
@@ -218,8 +244,8 @@ export async function runBrandKitChat(
   // mode-agnostic text call the campaign briefing assistant uses.
   const [reply, sampled] = await Promise.all([
     urls.length > 0
-      ? runVisionModel({ system, userMessage, imageUrls: urls, label: 'brandkit', teamId })
-      : runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId),
+      ? runVisionModel({ system, userMessage, imageUrls: urls, label: 'brandkit', teamId, model })
+      : runBriefingModel(system, [{ role: 'user', content: userMessage }], teamId, model, { label: 'brandkit' }),
     samplePalette(urls),
   ])
   const block = extractBrandKitBlock(reply)

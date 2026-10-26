@@ -1,0 +1,20 @@
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-22T17:37:04Z","ts":1792690624}
+{"ev":"start","span":"propose","kind":"phase","label":"propose","at":"2026-10-25T06:02:01Z","ts":1792908120}
+{"ev":"stop","span":"propose","at":"2026-10-25T06:03:21Z","ts":1792908201,"status":"ok"}
+{"ev":"start","span":"plan","kind":"phase","label":"plan","at":"2026-10-25T06:22:44Z","ts":1792909364}
+{"ev":"stop","span":"plan","at":"2026-10-25T06:35:11Z","ts":1792910111,"status":"ok"}
+{"ev":"start","span":"W1","kind":"wave","label":"wave 1","at":"2026-10-25T06:35:48Z","ts":1792910148}
+{"ev":"start","span":"T1","kind":"task","label":"dataset","parent":"W1","model":"sonnet","attempt":"1","at":"2026-10-25T06:35:48Z","ts":1792910148}
+{"ev":"stop","span":"T1","at":"2026-10-25T06:46:18Z","ts":1792910778,"status":"ok"}
+{"ev":"start","span":"W2","kind":"wave","label":"wave 2","at":"2026-10-25T06:52:52Z","ts":1792911172}
+{"ev":"start","span":"T2","kind":"task","label":"Availability by requires","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-25T06:52:52Z","ts":1792911172}
+{"ev":"stop","span":"T2","at":"2026-10-25T07:03:46Z","ts":1792911826,"status":"ok"}
+{"ev":"start","span":"T3","kind":"task","label":"Fixtures for device-screen","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-25T07:04:18Z","ts":1792911858}
+{"ev":"stop","span":"T3","at":"2026-10-25T07:12:51Z","ts":1792912371,"status":"ok"}
+{"ev":"start","span":"T4","kind":"task","label":"Probe route and runner","parent":"W2","model":"sonnet","attempt":"1","at":"2026-10-25T07:13:21Z","ts":1792912401}
+{"ev":"stop","span":"T4","at":"2026-10-25T07:20:58Z","ts":1792912858,"status":"ok"}
+{"ev":"stop","span":"W2","at":"2026-10-25T07:20:58Z","ts":1792912858,"status":"ok"}
+{"ev":"start","span":"T13","kind":"task","label":"A1 screen detection","model":"sonnet","attempt":"1","at":"2026-10-25T08:28:22Z","ts":1792916901}
+{"ev":"stop","span":"T13","at":"2026-10-25T08:53:47Z","ts":1792918427,"status":"ok"}
+{"ev":"start","span":"verify-1792978890","kind":"phase","label":"verify","at":"2026-10-26T01:41:30Z","ts":1792978890}
+{"ev":"stop","span":"verify-1792978890","at":"2026-10-26T01:48:40Z","ts":1792979320,"status":"ok"}

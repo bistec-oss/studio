@@ -101,7 +101,7 @@ PUPPETEER_EXECUTABLE_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 > exempt. If you rotate the credentials, update `.env` **and `.env.test`** together (compose derives
 > the container's root creds from these same vars), or storage E2E cases fail on MinIO auth.
 
-**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; Claude auth comes from the logged-in `claude` session by default, see §7. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
+**For real design generation:** the dev machines run **CLI mode** (`DESIGN_PROVIDER=cli`) — no `ANTHROPIC_API_KEY` needed or set; CLI mode needs a **personal or team Claude token** (connected in-app at `/settings` or `/team`; there is no env or logged-in-session fallback). Setup guide: [`docs/claude-account-setup.md`](claude-account-setup.md). See also §7. `ANTHROPIC_API_KEY` only matters if you switch to API mode (`DESIGN_PROVIDER=claude-html`).
 
 **Credentials no longer live in `.env`.** Personal Claude/OpenAI credentials are connected at **`/settings`**; a team's shared credentials (Claude, OpenAI, Instagram/LinkedIn social channels, and MCP/ACP API keys) are set at **`/team`** by a team admin, in-app, once you're signed in. For social channel setup specifically, follow **[`docs/social-publishing-setup.md`](social-publishing-setup.md)** (account setup for both channels, the Cloudflare-tunnel image path Instagram needs, and the full posting sequence) — just enter the resulting tokens at `/team` instead of `.env`.
 
@@ -158,8 +158,11 @@ kit's `createdBy` resolves to a real admin id). Both are idempotent. Result:
 
 - Admin login: username **`adminBTG`**. The initial password is **printed once by the seed script** (set `SEED_ADMIN_PASSWORD` beforehand to choose it; otherwise a random one is generated) — change it after first login. **The password is per-machine** (each dev machine has its own DB — see the §0 warning); the person setting up the machine picks and owns it. The account is a **SUPER_ADMIN** (can manage users at `/admin/users`); sign-in is by username since the username switch — the email `admin@bisteccare.lk` is internal (and still works in the login form as a legacy fallback). A password can be reset directly via better-auth's hash + `internalAdapter.updatePassword` (see `PATCH /api/admin/users/[id]` for the in-app flow; super-admin accounts must be reset via script/DB since the API refuses super-admin targets).
 - Default **"Bistec"** brand kit: Glacier palette, Inter + JetBrains Mono (Google Fonts), active brand-voice prompt v1
+- A **"Bistec"** team, created by `seed-brandkit.mjs` to hold that kit. **Since change 016 the migrations create no team:** a fresh database has zero teams until something creates one. `npm run db:seed` is a dev demo seed, not part of a fresh system's boot.
+  - **Without the demo content** (a fresh system: run only `node --env-file=.env scripts/seed-admin.mjs`): sign in as the super admin; the dashboard says there are no teams yet and links to **`/admin/teams`** to create the first one.
+  - **With the seed:** the super admin works in the Bistec team straight away (super admins act in any live team). Editors need a membership, added at `/admin/teams`.
 
-Optional: seed a 3:4 portrait template on the default kit so Path A has a portrait option out of the box (the brief filters templates by the chosen size):
+Optional: seed a 4:5 portrait template on the default kit so Path A has a portrait option out of the box (the brief filters templates by the chosen size):
 
 ```bash
 node --env-file=.env scripts/seed-portrait-template.mjs   # idempotent
@@ -192,6 +195,20 @@ npm run dev   # http://localhost:3000
    **Unfinished** row with Resume/Discard; Resume reopens the wizard exactly where you left it.
 5. (If AI keys set) Create a brief and generate a design end-to-end — completing
    Generate clears the unfinished row from step 4.
+
+---
+
+### Refresh the Google Fonts list (031, operator step)
+
+The font picker and the font request read a snapshot in `src/lib/fonts/catalogue.json` (dated in the file; the kit page shows the date). The snapshot is not fetched at runtime and is never refreshed in CI. Refresh it by hand when a family you need is missing or the snapshot is old:
+
+```bash
+node scripts/refresh-google-fonts.mjs   # one fetch of Google's public font metadata, no key
+git diff --stat src/lib/fonts/catalogue.json
+git add src/lib/fonts/catalogue.json && git commit -m "Refresh the Google Fonts snapshot"
+```
+
+The script never removes a family: one that Google no longer lists is kept and marked `delisted`. If the fetch fails, the script exits non-zero and writes nothing; there is no fallback list. Run `npx vitest run tests/unit/fonts*.test.ts` after the refresh.
 
 ---
 

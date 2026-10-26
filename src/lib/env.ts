@@ -1,4 +1,8 @@
 import { z } from 'zod'
+// The catalogue has no imports at all, so this can't form a cycle (config.ts
+// imports env.ts).
+import { CATALOGUE, MODEL_KEYS, type ModelKey } from './models/catalogue'
+import { parseImageTier } from '@/providers/imageCapabilities'
 
 // Centralized, zod-validated environment configuration. Server-only — never
 // import from client components ("use client" files): non-NEXT_PUBLIC_ vars
@@ -16,6 +20,39 @@ import { z } from 'zod'
 //   - src/lib/auth-client.ts — NEXT_PUBLIC_APP_URL is inlined into the client
 //     bundle by Next.js at build time and must remain a literal
 //     process.env.NEXT_PUBLIC_APP_URL expression.
+
+// `next build` runs with NODE_ENV=production and imports every route while
+// collecting page data — but produces no runtime state, so a dev machine
+// building with dev credentials must not be rejected. Runtime (server start)
+// still enforces the checks: NEXT_PHASE is only set during the build.
+const IS_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
+
+// The values CLAUDE_CLI_MODEL accepts (008 FR-04, A4): a catalogue key in any
+// case, or a CURRENT apiId. A retired ID (previousApiIds) is rejected: the
+// system default must name a model the catalogue still runs.
+const CLI_MODEL_ACCEPTED: readonly string[] = [
+  ...MODEL_KEYS.map((k) => k.toLowerCase()),
+  ...CATALOGUE.map((e) => e.apiId),
+]
+
+/**
+ * Parses CLAUDE_CLI_MODEL to a ModelKey (008 FR-04). Unset or blank is
+ * undefined; anything else that is not a key or a current apiId throws —
+ * including today's `default`, which used to omit --model and run the costly
+ * account default. Pure, so tests/unit/envModel.test.ts calls it directly.
+ */
+export function parseCliModelEnv(raw: string | undefined): ModelKey | undefined {
+  const value = raw?.trim().toLowerCase() ?? ''
+  if (value === '') return undefined
+  const key = MODEL_KEYS.find((k) => k.toLowerCase() === value)
+  if (key) return key
+  const entry = CATALOGUE.find((e) => e.apiId === value)
+  if (entry) return entry.key
+  throw new Error(
+    `CLAUDE_CLI_MODEL must be one of ${CLI_MODEL_ACCEPTED.join(', ')} ` +
+      `(got "${(raw ?? '').slice(0, 80)}"). It is now the system default, not a global override.`,
+  )
+}
 
 const envSchema = z.object({
   NODE_ENV: z.string().optional(),
@@ -52,10 +89,29 @@ const envSchema = z.object({
 
   // --- Claude Code CLI mode (DESIGN_PROVIDER=cli) ---
   CLAUDE_CLI_PATH: z.string().optional(),
-  // Global model override across every `claude -p` call; unset = per-path split.
-  CLAUDE_CLI_MODEL: z.string().optional(),
+  // The system default model in CLI mode (008 FR-04): below team defaults and
+  // explicit picks, no longer a global override. A key or current apiId,
+  // validated to a ModelKey; an invalid value fails the load in every NODE_ENV
+  // (a config bug in dev too), but not during `next build`.
+  CLAUDE_CLI_MODEL: z
+    .string()
+    .optional()
+    .transform((raw) => {
+      if (!IS_BUILD_PHASE) return parseCliModelEnv(raw)
+      try {
+        return parseCliModelEnv(raw)
+      } catch {
+        return undefined
+      }
+    }),
   // Diagnostics on by default; "0" silences (claudeCli.ts compares !== "0").
   CLAUDE_CLI_DEBUG: z.string().default('1'),
+
+  // --- Hero image quality (009 FR-16) ---
+  // standard | high (any case). Applied only to the hero image styles' image
+  // call, never to a classic post. Unset, blank or unknown is treated as unset:
+  // a tuning knob must never fail the boot (unlike CLAUDE_CLI_MODEL).
+  IMAGE_QUALITY: z.string().optional().transform((raw) => parseImageTier(raw)),
 
   // --- Puppeteer renderer ---
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
@@ -77,8 +133,9 @@ const envSchema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().optional(),
 
   // --- Build metadata (FR-P0-3) --- Baked into the runner image as ENV by the
-  // Dockerfile from a CI build-arg (docker-publish.yml); read by /api/health.
-  // Unset locally (no build-arg passed) — the route falls back to "unknown".
+  // Dockerfile from --build-arg GIT_SHA=<sha>, passed by whoever builds the
+  // image (e.g. a future deploy workflow); read by /api/health. Without it the
+  // route reports commit "unknown".
   GIT_SHA: z.string().optional(),
 })
 
@@ -93,13 +150,8 @@ export const env: Env = envSchema.parse(process.env)
 //   - BETTER_AUTH_SECRET placeholder rejection (src/lib/auth.ts)
 //   - MinIO "minioadmin" default rejection (src/lib/storage/minio.ts)
 // Dev keeps the convenient defaults and lazy failures exactly as before.
+// (IS_BUILD_PHASE is defined at the top of this file.)
 // ---------------------------------------------------------------------------
-// `next build` runs with NODE_ENV=production and imports every route while
-// collecting page data — but produces no runtime state, so a dev machine
-// building with dev credentials must not be rejected. Runtime (server start)
-// still enforces the checks: NEXT_PHASE is only set during the build.
-const IS_BUILD_PHASE = process.env.NEXT_PHASE === 'phase-production-build'
-
 if (env.NODE_ENV === 'production' && !IS_BUILD_PHASE) {
   const problems: string[] = []
 

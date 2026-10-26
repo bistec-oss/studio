@@ -1,13 +1,1118 @@
 # bistec-studio — Session Handoff
 
-**Date:** 2026-07-28 (latest: a copy edit was flipping `Draft.status` to `IN_PROGRESS`, breaking the library, Refine, regenerate-copy and the copy field at once — fixed, with a read-time + migration heal for stranded drafts. Earlier: team-admin brand-kit access + Sinhala font rendering; **PR #39** made deploys apply migrations; **PR #40** removed the wizard's stale COPY-provider gate.)
-**Repo:** https://github.com/bistec-oss/studio (formerly `bistec-oss/designer`)
-**Branch:** `main` — **PR #40** `21f95035` (brief-wizard CLI copy gate) on top of **PR #39** `16e1a069` (migrate on boot), **PR #38** `b35d96bd` (team-name reuse), PR #37 `fb8216c3`, PR #35 `d01ac4d2`, PR #36 `3dcac485`, prod-fix PR #30 `4e8e6e3e`, team-tenancy PR #29 `2a118a73`. All merged; no open branches.
-**Production:** `https://studio.bistecglobal.com`
+**Date:** 2026-10-26 (latest: **031 v2 final polish BUILT (T1 to T18; T19 docs done); the gate and `/specclaw:verify` are next**; earlier: **031 PLANNED (approved architectural; spec 50 FR / 46 AC; 19 tasks)**; **031 PROPOSED; deep panel CHANGES_REQUESTED; the user answered every BLOCK**; **030 stale-headline badge VERIFIED PASS 20/20**; earlier: **030 PROPOSED, deep panel answered**; **025 hero product screenshots VERIFIED PASS 18/18**; earlier: **025 BUILT (T1 to T14)**; **025 OP-025 PASSED at all three sizes after Amendment A1 (screen detection)**; earlier 2026-10-25: **025 Group A built (T1 to T5)**; **028 image looks (027b) VERIFIED PASS 21/21: OP-028 ran (full-bleed-scene passed, spotlight failed) and T7 moved Event and Hiring; 029 CLI usage-limit message VERIFIED PASS 5/5; CI green at `5db8953`; next is 025**; earlier 2026-10-24: **027a post styles VERIFIED PASS 22/22**; **006 product observability VERIFIED PASS 17/17**; earlier: **007 VERIFIED PASS 22/22; 009 OP-1 PASSED 6 of 6 (local run); 006 planned; 026 VERIFIED PASS 11/11; draft PR #43 closed; 010 dropped**). Earlier 2026-10-23: **024 caption credential route VERIFIED PASS, 17/17 ACs**; gates: unit 3024/3024, render 47/47, E2E 431/3/0/0, CI green at `cd9d411` (runs 39837152549, 39837162772; the PR run passed on one rerun after a CI-runner Chromium launch timeout in the render harness)). 2026-10-21: **009 hero imagery Phase 1 VERIFIED PASS (25/25), commit `d3534e0`; OP-1 is the user's pending step**; before it: **023 scheduler heartbeat VERIFIED PASS**; gates: unit 2947/2947, render 47/47, E2E 422/3/0/0, CI green at `f8f063c` (runs 39604699552, 39604706638)). 2026-10-20: **020 Create post button, 019 claim token, 021 Graphite re-theme, 018 and 022 VERIFIED PASS; the build order is complete**. 2026-10-19: this repo adopted the fork's `v2` on 2026-10-18. The fork-era sections, 2026-10-07 to 2026-10-14, moved to [`fork-history.md`](fork-history.md). Previous: 2026-10-07 (005 verified PASS; 011 planned, wave 1 built). Previous: 2026-10-03 (004 finished and verified PARTIAL, Phase 0 only; 005 built 9/10, waiting on one operator check). Before that: 2026-09-28 (build session — 004 Waves 1–3 built, MinIO → silo, PR #42 + draft PR #43). Before that: 2026-09-23 (later, later the same day: proposal **012** per-channel captions + copy→caption rename, a floating **Create post** button folded into 011, and a launch-video legibility pass. Before that: planning session — proposals 008–011 + roadmap, 004 re-planned to 24 tasks incl. Phase 0, and the deploy pipeline found broken: Coolify 401 since 2026-09-15). Previous: 2026-07-28 (copy-edit status clobber fix).
+**Repo:** https://github.com/bistec-oss/studio, which `origin` points to. **The repo rules (branches, remotes, the `fork` remote; draft PR #43 was closed on 2026-10-23) are in [`CLAUDE.md`](../CLAUDE.md)'s top entry, which is authoritative.** This file does not repeat them.
+**Branch:** work continues on **`v2`**, pushed to `origin v2`. `main` is `671ad6e9` (PR #42) and deploys to company prod. `v2` → `main` is one PR, merged only on the user's go-ahead and after the pre-merge prod checklist below.
+**Production:** `https://studio.bistecglobal.com` serves company `main`. Its migration head is `20260728120000_heal_copy_edit_clobbered_drafts`. Merges to `main` build but do not deploy until the Coolify token is rotated (see CLAUDE.md).
 
 ---
 
-## ⏸️ 2026-07-28 (latest) — PICK UP HERE
+## ⏸️ 2026-10-27 — PICK UP HERE: the `v2` → `main` release PR [#45](https://github.com/bistec-oss/studio/pull/45); the user authorized the merge once GitHub CI is green, before the operator steps
+
+**Merged before the operator steps (the user's decision, 2026-10-27).** Prod does not change at the merge (the Coolify token is dead), but the merge's build pushes the release image to GHCR `:latest`. The first deploy that works ships the whole release, so the "Blocking operator steps" in the checklist below now come **before the token rotation**, and nobody redeploys either resource until they are done. The order is in [`devops-deploy-handover.md`](devops-deploy-handover.md) section 1.
+
+**State.** 031 is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md)), so every change on `v2` is verified. #45 carries changes 004 to 031: 414 commits and 22 new migrations. `main` (`671ad6e`) is the merge base, so there are no conflicts and the merge can fast-forward. `main` has no branch protection; #45 is a draft so it cannot be merged by accident. Close or recreate the ten old Dependabot PRs (#21 to #34) after the release.
+
+**For DevOps:** [`devops-deploy-handover.md`](devops-deploy-handover.md). Prod still runs `sha-09a38b71` (no deploy since 2026-09-15, no `/api/health`); `main` is one commit ahead (PR #42, Node 22, no migration), and the handover suggests deploying it first once the token is rotated.
+
+**The review server is stopped:** the :3002 app against `bistec_studio_op1` (real models) ran for the user's review and was stopped at the end of the session.
+
+## 2026-10-27 (superseded as the pickup point by the section above) — 031 (v2 final polish) is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md))
+
+**State.** Every 031 group is built and committed on `v2`: T1 to T18, plus the CI timeout commit `5621bff`. T19 wrote these docs, recaptured `docs/ui-reference/screen-light.png` and `screen-dark.png` (011 T13's method), and ran the full gate below. Nothing merges to `main`. The plan is in [`.specclaw/changes/031-v2-final-polish/`](../.specclaw/changes/031-v2-final-polish/) (spec, design, tasks, `reports/T1.md` to `T19.md`, `measure/` and `look-check/`).
+
+**Gate (T19).** unit 4553, render 154, lint 0 errors / 7 warnings, tsc clean, full clean mock E2E 598 passed / 3 skipped / 0 failed / 0 flaky (2026-10-26, at `daf120b` plus the T19 docs), `test:upgrade` all 4 scenarios pass; NFR-04 diff since `0f42017` lists only `src/mcp/tools/brandkit.ts`, and under `src/lib/agent/prompts/` only `shared.ts` changed. **CI green at `a511013`** (run 40374348999: unit, build and the full E2E). CI at `37b1e64` (T1 to T15) was fully green (run 40359025530).
+
+**The groups as built** (commit ids from `git log`):
+
+| Group | Commits                         | What was built                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H     | `3a13203`                       | Temp dirs removed by their exact path, plus one lost-claim cleanup (`discardOnLostClaim`) that regenerate design also uses; the AC-17 recheck (the Dockerfile is on node:22).                                                                                                                                                                                                                     |
+| G     | `4e06a67`, `43d62a3`            | The MEDIUM wording items and the stale docs (T2); the glossary in `DESIGN_SYSTEM.md` §12 "Words"; the LOW naming sweep; `tests/unit/uiWordingGuard.test.ts`; the W-01 to W-41 table in `reports/T3.md`. Routes, API fields and DB names are unchanged.                                                                                                                                            |
+| C     | `63d9b0f`, `86a8e6a`, `a440af5` | `src/providers/keyPrefix.ts` (`detectKeyProvider`), the additive migration `20261028120000_personal_image_key_provider`, the personal route, the resolver, one fallback to the team provider with a notice, `Draft.imageSource`; the card "Image generation key" (OpenAI or Gemini), the team page and §AI.                                                                                       |
+| B     | `4685be1`, `fa9e2e3`, `dabd1e4` | `src/lib/fonts/` (the catalogue snapshot `catalogue.json`, the refresh script, lookup, URL builder, `/api/fonts`, save validation); the migration `20261029120000_post_fonts`, `applyPostFonts` at Path A, Path B and refine, `PROMPT_VERSION_BASE` bumped once, the render font check, `renderNotes`, the font notice; the searchable picker, the Sinhala picker, `googleFonts.ts` deleted, §AJ. |
+| E     | `216154f`, `d95590a`            | Three `typography` entries and `checkKitTypography` (non-blocking findings); `runRuleUpgrade`, `POST /api/campaigns/[id]/briefing/upgrade`, the review panel in the briefing editor; §AK.                                                                                                                                                                                                         |
+| F     | `1faf90d`, `98d3f54`            | The briefing assistant's schedule uses post styles (a bad or retired key is replaced and flagged); the brand-kit assistant proposes and applies fonts through `POST /api/admin/brandkits/[id]/assistant/apply` (all or nothing, `previousFonts` in History); §AL.                                                                                                                                 |
+| A     | `43272c2`, `a45add9`, `37b1e64` | `src/lib/applyText/` and `parse5`; the re-measure gate (97.2%, so not beta); the in-render check (`acceptRender` on `commitDraftRevision`, fail-closed); the migration `20261030120000_apply_text_action`, `POST /api/drafts/[id]/apply-text`, the `draft.text_applied` event, the UI, §AM.                                                                                                       |
+| D     | `26db51c`, `eb27ed8`, `daf120b` | The busy evidence for spotlight (`look-check/evidence.md`); the spotlight v2 contract and its candidate fixtures; the OP-031 runner (cap 4, rule 2 of 2). OP-031 **PASSED 2 of 2 using 2 of 4 calls** (`look-check/results.json`); T18 applied the pass: spotlight v2 current, Promotion and Milestone on v2 (default Spotlight), post-style revision 12 (`+ps12`).                               |
+
+**The re-measure (Apply, FR-35).** On `bistec_studio_op1`, read-only, 35 of 36 sets passed: 97.2%, at or above the 80% gate, so `APPLY_TEXT_BETA` is `false` and Apply is not labelled beta. The sample is 35 drafts and is **not representative**; `measure/results.md` says so. 29 of 35 matched elements hold child elements, so the splice flattens their styling (L2).
+
+**OP-031 (the operator real-image check, 2026-10-26).** Run on `bistec_studio_op1` with the user's OpenAI key, on the user's go. Five additive migrations were applied there with an explicit `DATABASE_URL`: 025's `20261026120000_composite_source`, 030's `20261027120000_rendered_text`, and the three 031 migrations. Two attempts, both kept the look and both were accepted, so the verdict is a pass (2 of 4 calls). Full detail in `reports/T17.md`.
+
+### Migrations and their checks
+
+Three migrations are new in 031. Each is additive. The down script is `prisma/rollback/031-v2-final-polish.down.sql`, and it runs in **reverse order**: section A (`apply_text_action`), then B (`post_fonts`), then C (`personal_image_key_provider`). Run only the sections whose migration was applied, with an explicit database name. Each migration has its own "Check before the merge" line in the pre-merge checklist below.
+
+- `20261028120000_personal_image_key_provider`: one column on `UserOpenAiKey` (`provider TEXT NOT NULL DEFAULT 'openai'`), and one on `Draft` (`imageSource JSONB`).
+- `20261029120000_post_fonts`: four nullable JSONB columns (`BrandKit.scriptFonts`, `Draft.renderNotes`, `DraftRevision.renderNotes`, `BrandKitPrompt.previousFonts`).
+- `20261030120000_apply_text_action`: `ALTER TYPE "DraftAction" ADD VALUE 'APPLY_TEXT'` and nothing else.
+
+### Release notes
+
+- **A personal Gemini key is mock-verified only** (L1). The live Gemini call is out of scope by the user's decision. An OpenAI personal key behaves as before.
+- **A rollback deletes non-OpenAI personal keys.** Section C deletes every `UserOpenAiKey` row whose `provider` is not `openai`, then drops both columns, so Gemini users must reconnect after a rollback.
+- **The font snapshot is dated 2026-10-26** (`src/lib/fonts/catalogue.json`, 1950 families). A family that has left Google is marked `delisted`, never removed. The refresh is an operator step: `node scripts/refresh-google-fonts.mjs`, then commit `src/lib/fonts/catalogue.json` (see `docs/cold-start.md`).
+- **The Apply re-measure rate is 97.2%** (35 of 36, a non-representative sample), so Apply is **not** beta. The gate stays in code: a future rate below 80% sets `APPLY_TEXT_BETA` back to `true`.
+- **The OP-031 verdict: spotlight is v2 and current** (passed 2 of 2). Promotion and Milestone default to Spotlight in the wizard at every size. Queued, MCP and ACP posts stay classic. The post-style revision is 12, so `PROMPT_VERSION` and `CAPTION_PROMPT_VERSION` end in `+ps12`. Spotlight v1 is kept as `SUPERSEDED_FIXTURES` in the render suite and still resolves for stamps and refine.
+
+### Known limits
+
+- **L1.** Gemini is mock-verified only (out of scope by the user's decision).
+- **L2.** Apply flattens styling inside the headline element; Undo restores it (FR-45).
+- **L3.** Script fonts reach only declarations that exist. A design with no `font-family` uses the OS fallback (the Noto Sans Sinhala package in the image).
+- **L4.** The snapshot ages; the refresh is an operator step (above).
+- **L5.** The typography prose rules are checked as text, like the other 007 entries; only FR-27's two rules are checked against the kit's fonts.
+- **L6.** The Apply in-render check reads `innerText`, so an old headline painted only through CSS `::before`/`::after` content is not detected (T14). The `old-still-painted` fixture uses a second DOM element, and a fixture pins the pseudo-element limit.
+- **Personal key and the team fallback (T4).** When the personal key fails and the team provider's retry also fails, the result is a plain `PROVIDER_ERROR` skip with no `imageSource`, so the draft does not record that the user's key failed. FR-13 does not cover this case.
+- **The catalogue is 263,944 bytes,** above the NFR-09 target of 250 KB. Getting under it would mean dropping a field, which FR-16 does not allow. One family per line.
+- **`catalogue.ts` has no `import 'server-only'`.** The package is not installed, and the real one throws outside Next, so the MCP and scheduler runtimes would crash. `fontsBoundary.test.ts` guards the module instead.
+- **The FONT artifact upload** (`src/app/api/admin/brandkits/[id]/artifacts/route.ts`, about line 126) writes `fonts` without the 6-entry cap.
+- **The render font check** does not use `document.fonts.check()`, which is false for any face no text used. A family counts as missing only when it has no face or every face errored.
+- **`applyPostFonts` skips unquoted `style=` attributes and stops at a never-closed tag.** Both leave the document unchanged, so that declaration gets no font.
+- **`loadDefaultStyle`** (`src/lib/campaign/briefingAssistant.ts`) reads the campaign by id only. This is safe because the chat route returns 404 for a foreign campaign first.
+- **Brand-kit assistant Apply (T12).** On a kit with no active voice version, Apply writes the fonts but makes no version, so `previousFonts` is not recorded. `previousFonts` is read before the transaction, so a concurrent kit PATCH can make it stale. An Apply whose fonts equal the stored ones still makes a version. The panel's exact-match lookup relies on the family being in `/api/fonts`'s top 20; a miss shows the font as not in the list.
+- **Undo after Apply (T15).** Undo is captured before Apply's call and stays visible after an asynchronous failure. It restores the unchanged current revision: harmless, but misleading.
+- **W-14 was dropped** (it sits in `src/acp`, frozen by NFR-04). **W-28** (the admin nav split) and **W-36** (the headline panel position) were left as layout questions, not wording changes.
+
+### CI
+
+- **The e2e job timeout is 40 minutes** (was 25; `5621bff`). Run 40346142128 reached 578 passed in 22.4 minutes and was cut at 25 minutes in teardown. Run 40350594784 then had 582 passed, one flaky (analytics TC-OBS-17, passed on retry) and one failure: `surfaces.test.ts`, where T12 had renamed a button. T15 fixed the locator. The lesson from T12: a UI rename must be grepped across every suite, not only the suites the task ran.
+- **Render-harness flake.** The T2 push run (40324807659) and run 40362600934 each failed one render case on the CI-runner Chromium launch timeout (`WS endpoint`, in `tests/render/composite.test.ts`). Not a code change, but it happened twice in one day in the same file; watch it.
+
+### Resume (in a new session)
+
+1. Read the CLAUDE.md top entry, then this section.
+2. Run `/specclaw:verify 031-v2-final-polish`, which runs the gates and writes `verify-report.md`.
+3. After a PASS: the user's go-ahead for the `v2` → `main` merge, after the pre-merge checklist below.
+
+## 2026-10-26 — 030 stale-headline badge is VERIFIED PASS (superseded as the pickup point by the 031 section above) (20/20 ACs, [verify-report](../.specclaw/changes/030-stale-headline-badge/verify-report.md)); nothing is mid-build. It was BUILT in T1 to T6
+
+**State.** 030 is built on `v2`, T1 to T6, and nothing is mid-build. Its files are in `.specclaw/changes/030-stale-headline-badge/` (the spec has 18 FR, 8 NFR and 20 AC; `reports/` and `reviews/` hold each task's record). The decisions D1 to D5 are under "User Decisions" in [`proposal.md`](../.specclaw/changes/030-stale-headline-badge/proposal.md) and govern the spec. No real model or image call was made.
+
+**What it does.**
+
+- **The stamp.** Every design write that renders a PNG records the headline its render visibly painted: `Draft.renderedText` and `DraftRevision.renderedText`, shaped `{ headline: { text, verified, reason? } }`. The check runs in the same Chromium page that makes the PNG (FR-08 geometry: visible, inside the canvas, not clipped, topmost at each line centre). It is bounded at 5 s and never fails a render. A null stamp means "rendered before 030" and shows nothing, permanently (D3).
+- **The four states,** computed at read time and never stored: `fresh`, `stale`, `unconfirmed`, `unknown`. A case-only or whitespace-only edit is `fresh`.
+- **The badge.** `HeadlineImageNotice` on the draft page, for `stale` and `unconfirmed`, with Edit inline and Regenerate design. When a SCHEDULED post exists, it says so (D5).
+- **The publish dialog.** One non-blocking line for `stale` and `unconfirmed`, on the draft page and the library page. Publishing is never blocked (D5).
+- **The events.** `draft.headline_edited` (new; one emitter, `trackHeadlineEdited`), `publish.settled.headlineState` and `generation.finished.headlineCheck`. No payload holds headline text.
+
+**The commits (on `v2`).** T1 `a643316` (the pure module), T2 `315175e` (`renderPost`, the in-page check, the mock stand-in), T3 `f714be0` (the columns, the stamp on every design writer, the writer guard), T4 `7a4dca1` (the read side and the events), T5 `6562240` (the badge, the publish line, E2E section AH). Lint fix `0069333` makes eslint ignore `.specclaw/`, so the 030 measurement script no longer crashes it. T6 is these docs and the gate; the orchestrator commits it.
+
+**Known limits.**
+
+- **L1.** Contrast and colour are not checked. Text the same colour as its background reads as painted.
+- **L2.** The check confirms that the headline text is painted, not that it is the design's headline. It could sit in a footer.
+- **L3.** A partly covered line passes when its centre is uncovered.
+- **L4.** The mock stand-in sees text, not CSS. Only the sentinel `__MOCK_HEADLINE_HIDDEN__` produces `not-visible` in mock runs.
+- **L5.** An overlay with `pointer-events: none` is not seen by `elementFromPoint`, so text it covers still reads as painted.
+- **L6.** A page whose CSP forbids `unsafe-eval` gives `not-checked`. The in-page collector is built with `new Function`, so the badge then says the check could not run.
+
+**The migration.** `20261027120000_rendered_text`: two nullable JSONB columns, `Draft.renderedText` and `DraftRevision.renderedText`, with no backfill. The manual down script is `prisma/rollback/030-stale-headline-badge.down.sql`.
+
+**Check before the merge.**
+
+- **030 stale-headline badge (FR-01, NFR-06).** This is a check, not a blocking step. The migration is additive: two nullable JSONB columns, no backfill. A redeploy applies it. Drafts and revisions from before 030 show no badge, permanently (D3). **No env var.** No model or image call is added (NFR-01), and publishing is never blocked by the badge (D5).
+
+**Gates (T6, 2026-10-26).** unit 4253/4253 · render 134/134 · lint 0 errors / 7 warnings · tsc clean · build passes · full clean mock E2E 559 passed / 3 skipped / 0 failed / 0 flaky (548 + 10 §AH + 1 a11y) · `test:upgrade` passes (T3) · CI green at `57fce05` (run 40291119564: unit, build, E2E). The T3 and T4 runs were red: `modelBoundary.test.ts` mocked `renderHtmlToPng` but not `renderPost`, so four CLI design cases launched a real Chromium and timed out at 5 s on the CI unit runner; fixed test-only at `57fce05`. **The first full run failed 5 §T inline-edit cases:** the badge's Edit inline button shared its accessible name with the toolbar's, so a strict-mode locator matched both. The badge buttons now carry contextual names ("Edit inline to fix the headline", "Regenerate design to fix the headline"; the visible label is kept, so label-in-name holds) and the old locators use `exact: true`.
+
+**Resume.** `/specclaw:verify 030-stale-headline-badge`. Then push `v2` and check `gh run list --branch v2` until CI is green.
+
+**Deferred.** Apply to image is a later change, gated on `draft.headline_edited`, `publish.settled.headlineState` and `generation.finished.headlineCheck` (D1). Its Insights-page queries are part of that change's evidence step; 030 records the events only.
+
+## ⏸️ 2026-10-26 — 030 stale-headline badge was PROPOSED, the deep panel returned CHANGES_REQUESTED, and the user answered D1 to D5 (superseded as the pickup point by the section above)
+
+**The problem.** A headline edit (`saveHeadlineEdit`, `src/lib/captions/store.ts`) and Regenerate headline change `Draft.headline` but never the design. The preview and the published PNG keep the old headline, and nothing says so.
+
+**Measured 2026-10-26** on 35 real Path B drafts in `bistec_studio_op1` (read-only, no model calls): the headline is one text node in 5 of 35, a raw substring match is sometimes not visible text (`<title>`), and one innermost element holds it in 32 of 35. That is why the check is a Chromium geometry test, not a text match.
+
+**Decisions (answered 2026-10-26; recorded in `proposal.md`).** D1 the badge, the stamp and the events now, Apply to image later and gated on the events. D2 the stamp is the headline verified as painted at each design write. D3 pre-030 drafts show nothing, permanently. D4 one field-keyed JSONB stamp. D5 the publish event records staleness and the dialog shows one line, never a gate. The panel is [`party-report.md`](../.specclaw/changes/030-stale-headline-badge/party-report.md). The build that followed is in the section above.
+
+## 2026-10-26 — 025 hero product screenshots is VERIFIED PASS (18/18) (superseded as the pickup point by the 030 section above)
+
+**Latest:** all of 025 is built. Group A (T1 to T5), Amendment A1 (screen detection, T13) and Group B (T6 to T11, plus these docs as T12) are on `v2`. **OP-025 PASSED at all three sizes** (7 of 9 image calls, 2026-10-25/26; the user accepted all six kept renders). The OP-025 result is in its own subsection below. **VERIFIED PASS 18/18 (2026-10-26, [verify-report](../.specclaw/changes/025-hero-reference-images/verify-report.md))** at `703d263`. Next: the stale-headline badge (`/specclaw:propose`). The `v2` → `main` merge stays on the user's go-ahead. Gates: unit 4131/4131, render 119/119, lint 0 errors / 7 warnings, tsc clean, build passes, `test:upgrade` passes, full clean mock E2E 548/3/0/0, CI green at `5531d29` (run 40235850520).
+
+**Group A (T1 to T5), built before OP-025.**
+
+- T1 `03389a5`: the composite purpose, `device-screen` v1, the blank check, the reasons, the stamp field and the prompt text.
+- T2 `159083d`: availability by `requires` (the picker, the resolver, the plan and `POST /api/briefs`).
+- T3 `cd19491`: the fixtures for `device-screen` (pass, busy, contrast and screen, per size), 48 rows at that point.
+- T4 `cf00ffb` (review WARN, explained below): the probe route `POST /api/admin/look-probe` and `run-look-check.mjs --probe`.
+- T5 `09000ab`: the docs, the spec amendment, the E2E plan §AG, the roadmap and CLAUDE.md.
+- Fixes made during OP-025: `217fa8a` (CI note), `dcbe75a` (the probe runs the background step inside `withClaudeAuth`; CLI mode needs it), `264b313` (the geometry pin, see below), `e9fc1bf` (the ledger after 4 attempts), `a095256` (the OP-025 result, and the runner records `rect`).
+
+**Group B (T6 to T11), built on the user's go after OP-025.** T12 is these docs. Each row is one commit, with the review recorded for it.
+
+| Task | Commit    | Review                     | What it built                                                                                                                                                                                                   |
+| ---- | --------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T6   | `2c8989b` | none (orchestrator, small) | The OP-025 result recorded. No size was removed, so `device-screen` v1 keeps SQUARE, PORTRAIT and STORY. The guard is `tests/unit/op025Results.test.ts`.                                                        |
+| T7   | `4627251` | NOTE                       | Private storage, the upload and preview routes, `Brief.compositeSource`, brief drafts and draft delete.                                                                                                         |
+| T8   | `8fe11bc` | WARN (1), fixed            | The composite engine, the renderer check and generation. Fixed: an API-mode run that ends in prose with a composite set now throws `composite-not-rendered`, and the fallback deletes every export of that run. |
+| T9   | `3f46f96` | NOTE                       | Refine, Override, inline edit, restore, export, the verifiers and the editor.                                                                                                                                   |
+| T10  | `22a204b` | NOTE                       | The wizard: the screenshot field, the picker, review, autosave and resume.                                                                                                                                      |
+| T11  | `90bbcd6` | none (orchestrator, small) | E2E §AG complete and the NFR-05 end-to-end check.                                                                                                                                                               |
+
+**What 025 does now, end to end.**
+
+- **The wizard (step 1, Path B only).** A "Product screenshot" field sits under the image-style cards. The author uploads a PNG, JPEG or WebP. The type is decided by magic bytes. The file is at most 10 MB, at least 640×400, at most 25 MP, and each side is at most 8 000 px. It goes to the private `BUCKET_DOCS` at `screenshots/<teamId>/<userId>/<timestamp>-<random>.<ext>`. The route returns `{ key, width, height }`, never a URL.
+- **The picker.** The `device-screen` card ("Product screen") is enabled only once a screenshot is attached. A "Will be letterboxed" advisory shows when the screenshot's aspect differs from the size's screen by more than 10%. It never refuses. Review shows "Product screenshot: W×H".
+- **Storage.** The brief stores `Brief.compositeSource` (kind `brief-upload`, with `key`, `width` and `height`). Migration `20261026120000_composite_source` adds one nullable JSONB column. No env var.
+- **Generation.** The image model is asked for a blank laptop screen; the geometry pin carries the exact contract lines. `runHeroCheck` detects the screen (Amendment A1) and stamps `composites` with the region, the source and the detected rect. Code then inserts one canonical `<div data-composite="0">` at the detected rect, holding an `<img>` whose `src` is the token `__COMPOSITE_0__`, with `object-fit: contain`. The renderer resolves the token to a `data:` URI from the private object just before `setContent`. It then checks the element in the page: loaded, within 2 px of the rect, and topmost at the centre and four inset points. **The stored HTML only ever holds the token** (NFR-05).
+- **Failures.** A failed render falls back to classic **without** the hero image (no second image call), with `composite-not-rendered`. A screen that is not blank falls back with `composite-not-blank`. A missing or foreign object gives `composite-source-missing`.
+- **Re-renders.** Refine, Override, inline edit, restore and export keep the screenshot from the stamp. Nothing re-detects. A failed placement fails the action with "The product screenshot could not be placed; nothing was changed", and writes nothing.
+- **The editor.** The inline editor shows the screenshot from `GET /api/briefs/screenshots?key=…&draftId=…`. It is not editable and is labelled "Product screenshot (placed automatically)".
+- **Unattended surfaces never use it.** Scheduled, MCP and ACP posts stay classic (`unattended-classic`).
+- **Drafts and cleanup.** Autosave and Resume keep the screenshot. Discard, eviction and expiry delete it. An admin draft delete that removes the orphaned brief deletes it too.
+
+**Known limits (from the reviews; none is fixed in this change).**
+
+1. One author can attach the same uploaded key to two briefs. Deleting the last draft of one brief, or discarding its brief draft, removes the object the other still uses. The other then fails closed with `composite-source-missing`. This is not cross-tenant.
+2. An upload that is removed, replaced or never attached stays in `BUCKET_DOCS` until a discard, eviction or expiry cleanup. There is no per-user quota.
+3. The pure HTML check counts the literal `data-composite` anywhere in the HTML. A stray mention in a comment fails closed with a classic fallback.
+4. `screenshotWillLetterbox` uses the first look with `requires`. Pass the picked key if a second such look ships.
+5. A classic inline edit that pastes an http URL containing `/screenshots/` is refused (the NFR-05 guard).
+6. The editor iframe is checked only through unit tests of its pure parts and the T10 wizard screenshots. The editor itself has no browser-level test.
+
+**Check before the merge.**
+
+- **025 hero product screenshots (FR-08, NFR-05).** This is a check, not a blocking step.
+  - The migration `20261026120000_composite_source` is additive: one nullable JSONB column, `Brief.compositeSource`. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/025-hero-product-screenshots.down.sql`; it discards every stored `compositeSource`.
+  - **No env var.** The `BUCKET_DOCS` bucket already exists (campaign documents).
+  - Each `device-screen` generation makes one image call, as any hero look does.
+  - Scheduled, MCP and ACP posts never use the screenshot, so nothing changes for them.
+
+### Amendment A1 (2026-10-25, the user's decision): code detects the screen
+
+The image model draws good blank screens, but never exactly on the contract rect. It lands 2 to 7% of the canvas off. So code now finds the screen after the image is made.
+
+- `detectScreenRect` (pure, `src/lib/designData/composite.ts`) runs on a luminance grid (`sampleLuminanceGrid` in `src/lib/renderer/puppeteer.ts`) over the region widened by `DETECT_MARGIN_PCT = 12`. The seed patch must be blank. Five scans per axis move each edge to `SCREEN_EDGE_DELTA = 0.10`, and the medians are taken.
+- It accepts the screen only when all four hold: the interior (inset 3%) is blank (`BLANK_STDDEV_MAX = 0.04`); the aspect is 16:10 within 5%; the area is at least `MIN_SCREEN_AREA_RATIO = 0.6` of the region; and it does not intersect a text region.
+- Every failure is `composite-not-blank`. Its notice now says that no clear blank screen was found.
+- The detected rect (canvas percent, two decimals) goes on the check result and into the stamp's `composites[].rect`. The field is required: inside the canvas, 16:10 within 5%, and no text overlap. Group B inserts and checks at that stamped rect. Nothing re-detects.
+- One shared check, `runHeroCheck` (`src/lib/renderer/heroCheck.ts`), serves generation and the recheck.
+- The mock sentinel `__MOCK_HERO_SCREEN_OFFSET__` moves the synthetic screen, so the stamped rect differs from the region. The fixtures are 57 rows, 9 of them new (an offset pass, a text-overlap fail, a small-screen fail, per size).
+- Commits: the spec, design §21 and tasks T13 and T14 in `c110ce3`; the code and the review fix in `347a34c`.
+
+### OP-025 result (2026-10-25/26): PASSED at all three sizes
+
+A size passes when two attempts keep the look and the user accepts both. The attempts are in ledger order. The rects are canvas percent (x, y, w, h), taken from `recheck.rect` in `results.json`.
+
+| Slot                   | Attempt | Outcome                                                                                                             | Detected rect           |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| device-screen:SQUARE   | #1      | Fell back `busy`. This was before the geometry pin, and the laptop ran into the text band.                          | none                    |
+| device-screen:SQUARE   | #2      | Failed live (`composite-not-blank`, the old fixed-rect check). Re-judged with the shipped detector: kept. Accepted. | 18.76 39.72 62.59 37.78 |
+| device-screen:PORTRAIT | #1      | Failed live (`composite-not-blank`). Re-judged with the shipped detector: kept. Accepted.                           | 9.17 39 81.48 41.19     |
+| device-screen:STORY    | #1      | Failed live (`composite-not-blank`). Re-judged with the shipped detector: kept. Accepted.                           | 6.2 41.95 86.3 30.83    |
+| device-screen:SQUARE   | #3      | Ran live with the detector: kept. Accepted.                                                                         | 19.31 40.46 61.48 38.15 |
+| device-screen:PORTRAIT | #2      | Ran live with the detector: kept. Accepted.                                                                         | 13.98 40.63 72.04 35.56 |
+| device-screen:STORY    | #2      | Ran live with the detector: kept. Accepted.                                                                         | 10.09 46.84 80 28.13    |
+
+- Seven calls in all. SQUARE used three, PORTRAIT two and STORY two. Six attempts kept the look, and the user accepted all six renders.
+- The three re-judged attempts (SQUARE #2, PORTRAIT #1 and STORY #1) were judged offline by `--probe --recheck`. That made no image call.
+- The runner records `rect` for every attempt that reached the check, so the detected rect is in `results.json`.
+- The renders are in `look-check/renders/` and are gitignored. The ledger and `results.json` are committed.
+
+### OP-025 procedure (the operator's real-image check, on the user's go)
+
+The procedure runs on the scratch database, never on `bistec_studio`. It uses the OP-1 and OP-028 setup in `CLAUDE.md` "Gotchas".
+
+**The server.**
+
+- Stop any `:3002` server first. There is one `next dev` per checkout, and they share `.next`.
+- Check the scratch database is at the `v2` head: `DATABASE_URL=<the bistec_studio_op1 url> npx prisma migrate status`. Pass an explicit `DATABASE_URL` every time. Group A adds no migration, so OP-028 should have left it at head.
+- Start it with the env file from `CLAUDE.md` "Gotchas" (the OP-1 environment): `npx dotenv -e <that env file> -- next dev -p 3002`. The file sets `DESIGN_PROVIDER=cli`, the `MOCK_*` flags off, and the scratch `DATABASE_URL`.
+- Sign in as a super admin. The probe route is 404 in production and 403 for anyone who is not a super admin.
+- The probe uses the team's default brand kit (409 if the team has none). It resolves the image provider as generation does for the signed-in user: their personal OpenAI key at `/settings` first, then the team's default IMAGE row. Connect the user's own OpenAI key at `/settings` if it is not already connected.
+
+**The env vars (a run only, never written to a file or the ledger).** `LOOK_CHECK_USERNAME`, `LOOK_CHECK_PASSWORD` and `LOOK_CHECK_TEAM`. The runner refuses a run without all three. Probe mode does not read `LOOK_CHECK_KIT`. The dry run needs none of them.
+
+**The commands (from the repo root, one at a time).**
+
+1. Dry run first. It prints each slot's next attempt or its refusal, the ledger total and the cap, and makes no call:
+   `node scripts/look-check/run-look-check.mjs --probe --base http://localhost:3002 --dry-run`
+2. The run. It takes the three slots in order, `device-screen:SQUARE`, `device-screen:PORTRAIT` and `device-screen:STORY`, one probe call each. `--only device-screen:PORTRAIT` runs one slot:
+   `node scripts/look-check/run-look-check.mjs --probe --base http://localhost:3002`
+   Each probe is one Haiku decision call and one image call. The PNGs land in `look-check/renders/`, which is gitignored.
+3. Look at each render with the user, and record its verdict straight after its render. A verdict makes no call. Record `accept` or `reject` against the slot and attempt number:
+   `node scripts/look-check/run-look-check.mjs --probe --verdict device-screen:SQUARE#1=accept`
+   The `--verdict` command prints the current verdict for every slot. Use the same `--out` directory, which defaults to `.specclaw/changes/025-hero-reference-images/look-check/`.
+4. Re-run the same command as needed. The planner gives each slot at most 3 attempts, and the cap is 9 attempts in all (3 slots times 3). It refuses a slot in these cases: `awaiting-verdict` (an attempt kept its look and has no verdict yet), `already-passed` (2 accepted), `max-attempts` (3 used) and `cannot-pass` (a slot can no longer reach 2 accepts). A refused slot is printed and skipped. The run stops when the cap is reached.
+5. **The recheck (Amendment A1).** It makes no image call. Run it after the live attempts, in a plain shell with no `MOCK_*` variables (it refuses under them), and with `PUPPETEER_EXECUTABLE_PATH` set to the local Chrome:
+   `node scripts/look-check/run-look-check.mjs --probe --recheck`
+   It re-judges every saved render with the shipped check. It rewrites `recheck` in `results.json` and writes `look-check/recheck.html`. In that page, red is the detected screen, dashed blue is the contract region, and dotted orange is the text bands.
+
+**The ledger and the cap.** `look-check/ledger.jsonl` is the append-only record. Each line is one attempt, written before its request, with `mode: 'probe'`, and it counts towards the cap whether or not the request succeeds. **Never delete `ledger.jsonl`, and use one fixed `--out` directory for every run.** Deleting it resets the cap, and that is not allowed. The ledger lines carry `threshold` and `promptHash` as `null`, because they are written before the request. The real values are in `results.json` for each attempt, with `styleKept`, `fallbackReason`, `render` and the `accepted` verdict. The last result for an attempt counts.
+
+**The pass rule.** A size passes when 2 attempts kept the look (`styleKept`, which is the check's `ok`) and the user accepted both. A fallback is a failed attempt, and a rejection is a failed attempt. A size that does not pass is removed from `device-screen` v1 by T6, because the look was never released. If no size passes, T6 removes the look and T7 to T12 are cancelled, and the change stops there. A size that does pass stays in the look.
+
+**The A1 pass-rule note.** The first four ledger attempts (SQUARE #1, SQUARE #2, PORTRAIT #1 and STORY #1) ran before the detector existed. For those four, read `recheck.styleKept` and not `styleKept`. The live `styleKept` of those four is the old fixed-rect verdict, so it is not the verdict to use. Every later attempt reads `styleKept`, which the detector computes live. Use the same rule when judging any re-run.
+
+**Commit the results.** Once every slot has a passing or failed outcome, commit `look-check/ledger.jsonl` and `results.json` under `.specclaw/changes/025-hero-reference-images/look-check/`. Do not commit `renders/`.
+
+**Reading the results.** Look at the renders for every slot, including the STORY slot. The check measures the screen region only, so a kept look can still show a poor device placement. The user judges that by eye, as the spec's edge case says.
+
+## ⏸️ 2026-10-23 (end of day; superseded by the 2026-10-25 section above): 007 VERIFIED PASS and 009 OP-1 PASSED; 006 planned; 026 VERIFIED PASS; nothing is mid-build
+
+### Where things stand
+
+| Change                                          | State                                                                                                           | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 018 post-008 small fixes                        | ✅ **VERIFIED PASS** (8/8 ACs)                                                                                  | E2E 390/3/0/0; CI green at `432a036f`; [verify-report](../.specclaw/changes/018-post-008-small-fixes/verify-report.md)                                                                                                                                                                                                                                                                                                                            |
+| 022 prod data and deploy restore                | ✅ **VERIFIED PASS** (11/11 ACs)                                                                                | E2E 390/3/0/0; CI green at `12ef7e6c`; [verify-report](../.specclaw/changes/022-prod-data-and-deploy-restore/verify-report.md)                                                                                                                                                                                                                                                                                                                    |
+| 021 Graphite re-theme                           | ✅ **VERIFIED PASS** (19/19 ACs; AC-05 font-data carve-out)                                                     | E2E 397/3/0/0; render 15/15; CI green at `aa5f7a8`; [verify-report](../.specclaw/changes/021-graphite-retheme/verify-report.md)                                                                                                                                                                                                                                                                                                                   |
+| 019 draft-action claim token                    | **VERIFIED PASS** 9/9 ACs                                                                                       | E2E 397/3/0/0; unit 2681/2681; test:upgrade 3/3; CI green at `7e86b96` (runs 39445592883, 39445602043); [reports](../.specclaw/changes/019-draft-action-claim-token/reports/T4.md)                                                                                                                                                                                                                                                                |
+| 020 Create post button off the draft page       | **VERIFIED PASS** 7/7 ACs                                                                                       | E2E 399/3/0/0; unit 2681/2681; CI green at `8d0d633` (runs 39466314229, 39466320752); [reports](../.specclaw/changes/020-create-post-button-draft-page/reports/T2.md)                                                                                                                                                                                                                                                                             |
+| 023 scheduler heartbeat                         | **VERIFIED PASS** 11/11 ACs                                                                                     | E2E 405/3/0/0; unit 2706/2706; lint 0 errors / 7 warnings; CI green at `f43669a` (runs 39493017393, 39493027033); [reports](../.specclaw/changes/023-scheduler-heartbeat/reports/T2.md)                                                                                                                                                                                                                                                           |
+| 009 hero imagery, Phase 1                       | **VERIFIED PASS** 25/25 ACs; **OP-1 PASSED 6/6** (2026-10-23)                                                   | T1 `bfe3d57` to T6 `ea1c36e`, verify `d3534e0`; E2E 422/3/0/0; unit 2947/2947; render 47/47; CI green at `f8f063c` (runs 39604699552, 39604706638); [verify-report](../.specclaw/changes/009-hero-image-design/verify-report.md)                                                                                                                                                                                                                  |
+| 024 caption credential route                    | **VERIFIED PASS, 17/17 ACs**                                                                                    | T1 `d772715`, T2 `d4d14f2`, T3 `03961b9`; E2E 431/3/0/0; unit 3024/3024; render 47/47; CI green at `cd9d411` (runs 39837152549, 39837162772; the PR run passed on one rerun after a CI-runner Chromium launch timeout in the render harness); [reports](../.specclaw/changes/024-caption-credential-route/reports/T3.md)                                                                                                                          |
+| 007 brandkit design rules                       | **VERIFIED PASS** 22/22 ACs                                                                                     | T1 `e267a08`, T2 `212b7b8`, T3 `3fc0811`; unit 3147/3147; E2E 442/3/0/0; render 47/47; lint 0 errors / 7 warnings; CI green at `56c4b92` (runs 39886027978, 39886033084; the push run passed on one rerun after a CI-runner Chromium launch timeout in the render harness); [reports](../.specclaw/changes/007-brandkit-design-system/reports/T3.md)                                                                                              |
+| 006 product observability                       | ✅ **VERIFIED PASS** (17/17 ACs)                                                                                | T1 `0c199b0`, T2 `98f3c62`, T3 `f94eb17`, T4 `28540b7`, T5 `a19a8b0`; gate: unit 3283/3283; render 47/47; E2E 473/3/0/1 (the one flaky was a Playwright worker-process crash in `regression.test.ts` H7, not an assertion; that suite then re-ran clean 3 of 3); CI green at `851f224` (run 40084041397); [spec](../.specclaw/changes/006-product-observability/spec.md), [reports](../.specclaw/changes/006-product-observability/reports/T5.md) |
+| 026 drop WhatsApp caption; Refine under preview | ✅ **VERIFIED PASS (11/11 ACs, 2026-10-24)**                                                                    | T1 `3053695`, T2 `66d2e15`, T3 `8bef317`; CI green at `8bef317` (run 40002885901); gate: unit 3150/3150; render 47/47; lint 0 errors / 7 warnings; full clean mock E2E 444/3/0/0; build and `test:upgrade` pass; [proposal](../.specclaw/changes/026-drop-whatsapp-caption-refine-under-preview/proposal.md); bounded; panel skipped by the user                                                                                                  |
+| 027a post styles and the facts check            | ✅ **VERIFIED PASS** (22/22 ACs)                                                                                | T1 `a13692a`, T2 `53e8682`, T3 `8816d89`, T4 `483ed7d`, T5 `7d7e25a`, T6 `bbb250b`, T7 `721f746`; gate: unit 3737/3737; render 47/47; E2E 517/3/0/0; CI green at `c199270` (run 40111923100); [spec](../.specclaw/changes/027-post-styles/spec.md), [reports](../.specclaw/changes/027-post-styles/reports/T7.md)                                                                                                                                 |
+| 028 image looks (027b)                          | ✅ **VERIFIED PASS 21/21** (OP-028 and T7 done: Event and Hiring moved to `full-bleed-scene`; spotlight failed) | T1 `959fc35`, T2 `f722f92`, T3 `e36068f`, T5 `87c7fba`, T4 `b2ea5ff`, final fixes `cfc55bc`, T6 docs; gate: unit 3894/3894; render 84/84; lint 0 errors / 7 warnings; E2E 529/3/0/0; CI green at `1639b1e` (run 40128829845); [spec](../.specclaw/changes/028-image-looks/spec.md), [reports](../.specclaw/changes/028-image-looks/reports/T6.md)                                                                                                 |
+
+- **006 (VERIFIED PASS, 17/17 ACs, [verify-report](../.specclaw/changes/006-product-observability/verify-report.md); [spec](../.specclaw/changes/006-product-observability/spec.md), [design](../.specclaw/changes/006-product-observability/design.md), [tasks](../.specclaw/changes/006-product-observability/tasks.md)):** product observability. The app now keeps an append-only event store in its own Postgres and one super-admin page that reads it. No PostHog, no external service, no session replay. T1 `0c199b0`, T2 `98f3c62`, T3 `f94eb17`, T4 `28540b7`, T5 `a19a8b0`. Gate: unit 3283/3283; render 47/47; lint 0 errors / 7 warnings; full clean mock E2E 473/3/0/1 (the one flaky was a Playwright worker-process crash in `regression.test.ts` H7, not an assertion; that suite then re-ran clean 3 of 3); build and `test:upgrade` pass; CI green at `851f224` (run 40084041397).
+  - **What is recorded.** `AnalyticsEvent` rows hold ids, enums, counts, durations, redacted failure reasons and the refine instruction (capped at 2 000 characters). **Never** prompt text, model output, captions, headline text, HTML or keys. Free text passes one shared `redactText` (URLs, `sk-` and `AIza` keys, `key=`, host:port). There are no foreign keys: `teamId`, `userId` and `draftId` are plain strings.
+  - **One emitter per event.** Server events: `generation.finished`, `generation.swept`, `draft_action.settled`, `draft_action.swept`, `revision.edited`, `revision.override`, `revision.adopted`, `revision.restored`, `publish.settled`, `scheduled_generation.settled`, `brief.submitted`, `brief.abandoned`. The one client event is `wizard.step`, posted to `POST /api/events`. Each name has a zod schema and a `schemaVersion` in `src/lib/analytics/catalogue.ts`; vocabularies are imported (Prisma enums, the model catalogue keys, the 009 archetype keys), and `analyticsCoverage.test.ts` fails if a `DraftAction`, `Channel` or `source` value has no event that can carry it. A change that adds an action, a channel, a generation path or a publish path owns its events.
+  - **`track` never fails the action.** It is bounded at 2 s and never throws in production. A dropped or rejected event is counted in `AnalyticsDrop` and shown on the page. Under `MOCK_AI` or `NODE_ENV=test` an invalid payload throws, so a drifting change fails its own tests.
+  - **The four decisions and where each is read** (`/admin/insights`, super admin only, global across teams, ranges 7d, 30d, 90d):
+    1. **Did 004 work?** Section "Did refine work": the applied rate per instruction class and overall, by week, split by verifier model and `VERIFIER_PROMPT_VERSION`, with override, adopt and restore counts beside it.
+    2. **Catch regressions.** Section "Catch regressions": generation and action failure rate per day by prompt version and design model, the top 10 failure reasons, swept counts.
+    3. **009 image styles.** Section "Image styles": per requested style, generations, applied-as-requested rate, fallback reasons and the mean refines per draft.
+    4. **Model and route choices.** Section "Model and route choices": p50 and p90 by surface, model and route, and token totals with the not-reported share.
+    - Also on the page: the wizard funnel, activity per team, events lost and retention health (the oldest event's age and the retention loop's last tick).
+  - **The applied rate** is `ok ÷ (ok + not-applied)` (AC-12). FR-10's wording, "ok ÷ settled REFINE", would also count conflict and failed settles; the page caption states the AC-12 formula. **Mean refines per draft** counts every REFINE settle on the draft, with no date bound.
+  - **Retention.** A third worker loop, `retention`, runs through `runTick` every 60 s and deletes at most 5 000 events older than 180 days per tick (the cutoff is computed in SQL). It writes its own `WorkerHeartbeat` row but is **not** in the scheduler banner's loop list, so it cannot raise "Scheduler offline". Read its health on the page: the oldest event should stay under about 180 days, and the last tick should be under a few minutes old. A stale tick means the worker is not running (B4). **The loop starts with the next worker deploy.**
+  - **Deletes.** Soft-deleting a team removes its events in the same transaction. Deleting a draft keeps its events and sets `draftId` to null. Deactivating a user changes nothing.
+  - **The purge script.** `scripts/purge-analytics.mjs --team <id> | --user <id> | --draft <id> [--dry-run]`. It **refuses to run without an explicit `DATABASE_URL`** in the environment (exit 2), prints the database name and the count, then deletes. The guard runs before the `@prisma/client` import because that import loads `.env`, which holds the shared `bistec_studio` URL. Run `--dry-run` first.
+  - **`POST /api/events`** takes only `wizard.step`. It sets team, user and source from the session and ignores any such field in the body, accepts a brief draft id only if it belongs to the caller, caps the body at 2 KB while streaming, and allows 60 events per user per minute. The excess answers **204** and is counted in `AnalyticsDrop` as `rate-limit`, so a client never sees an error.
+  - **Limits, stated plainly.**
+    - **The stuck sweep is lazy.** `generation.swept` and `draft_action.swept` are written only when someone reads the stuck draft; an unread stuck draft is recorded when it is read.
+    - **CLI tokens are not reported.** The CLI's plain-text output carries no usage, so CLI-mode events hold null tokens, shown as "not reported". A run that mixes CLI and API calls reports only the API tokens. Totals exclude null events and the page shows the not-reported share. Reading CLI usage needs an output-mode change in `claudeCli.ts` and is a proposal, not built.
+    - **Cache tokens are not counted.** No `cache_control` is set in `src` today; if it is added, the token fields need the cache counts.
+    - **The verifier grades itself.** A refine's applied rate depends on the verifier's verdict, so a change to the verifier moves it. The page splits by verifier model and `VERIFIER_PROMPT_VERSION`; read a change in the rate against that split.
+    - **A timed-out insert can be stored and also counted as dropped.** The 2 s race does not cancel the insert, so the dropped count can overstate by a few.
+    - **`GET /api/campaigns` caps at 200,** so E2E suites must not create a campaign per test.
+    - A cookie-less request to `/api/admin/insights` is redirected to `/login` by the proxy; a bogus session gets 401.
+  - **PostHog, if wanted later.** Writes go through `track`; reads go only through `src/lib/analytics/queries.ts`. Adopting an external backend means replacing that module or dual-feeding it. Replacing the write wrapper alone is not enough.
+  - **Follow-ups (proposals, not built):** the stale-headline badge (split out by the user, 2026-10-23), CLI token usage, a "kept in the final post" refine metric, an external backend behind `queries.ts`.
+  - **New migration:** `20261024120000_analytics_events` (two tables and one enum), with the manual down script `prisma/rollback/006-product-observability.down.sql`. No env var.
+  - **Operator step (a check, not a blocker):** after the deploy, open `/admin/insights` as a super admin and confirm that retention health shows a recent tick. The page fills as people use the app; nothing is back-filled.
+- **028 (phase b of 027, image looks; VERIFIED PASS 21/21 after OP-028 and T7, CI green at `5db8953` (run 40165715965); [spec](../.specclaw/changes/028-image-looks/spec.md), [design](../.specclaw/changes/028-image-looks/design.md), [tasks](../.specclaw/changes/028-image-looks/tasks.md), [proposal](../.specclaw/changes/028-image-looks/proposal.md), [party report](../.specclaw/changes/028-image-looks/party-report.md)):** the 9:16 size is open to the image looks, and two new looks join the two existing ones. Commits: plan `701fe0f`; T1 `959fc35`; T2 `f722f92`; T3 `e36068f`; T5 `87c7fba`; T4 `b2ea5ff`; the final whole-branch review fixes `cfc55bc`; T6 is these docs and the gate. Gate: unit 3894/3894; render 84/84 (47 plus 36 look fixtures plus 1 guard); lint 0 errors / 7 warnings; tsc clean; full clean mock E2E 529/3/0/0; build passes; `test:upgrade` passes; CI green at `1639b1e` (run 40128829845). **No migration and no env var.** The first `/specclaw:verify 028-image-looks` runs after this T6. The user's four panel decisions (2026-10-24) and A4 (2026-10-25) are in the proposal's "Decisions after the panel".
+  - **The four looks (FR-02).** Every look is light text over a dark backdrop, and every text region is `minAreaPct: 20`. Rows marked "copy" are unchanged from v1.
+
+    | Look (version)               | Sizes                                  | Text                                                                                               | Subject                                                                                             |
+    | ---------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+    | `product-showcase` (v2)      | SQUARE, PORTRAIT (copy), STORY (added) | left 45% (copy); top 38% (copy); top 36%                                                           | a device or object on the right 55%, the lower 62%, or the lower 64%                                |
+    | `editorial-split` (v2)       | SQUARE, PORTRAIT (copy), STORY (added) | left 50% (copy); top 50% (copy); top 48%                                                           | a photographic scene on the right 40%, the bottom 40%, or the bottom 42%                            |
+    | `full-bleed-scene` (v1, new) | SQUARE, PORTRAIT, STORY                | a band along the bottom 38% (SQUARE, PORTRAIT) and 35% (STORY)                                     | a wide scene filling the top of the frame, falling into a plain dark foreground                     |
+    | `spotlight` (v1, new)        | SQUARE, PORTRAIT, STORY                | a headline band at the top 24% (22% STORY) and a call-to-action band at the bottom 24% (22% STORY) | one subject centred in the middle 52% (SQUARE), 42% (PORTRAIT, tuned before release) or 56% (STORY) |
+
+    At 9:16 a Launch brief pre-fills Product showcase and an Announcement brief pre-fills Editorial split (A4). The labels are "Full-bleed scene" and "Spotlight"; `product-showcase` keeps its label (A5).
+
+  - **The key rule and the version rule.** A look key is never renamed and never reused for a different meaning. A retired look stays in the dataset and still resolves for stamps, labels and refine; it is hidden from the picker, and a new generation or regenerate on it falls back to classic with `retired-classic` (resolver) or `unknown-archetype` (generation). A released version is never edited: "released" means the change that adds it is VERIFIED PASS. v1 of both existing looks is byte-identical, and its committed hashes are in `lookDataset.test.ts`.
+  - **`variantOf` is validation only.** It marks a variant of a base look, and the dataset validator checks it. No variant ships. A future variant key is `<base>-<suffix>` (for example `product-showcase-light`); the key is never parsed to decide what is a variant. The light variants and the Abstract brand forms are a follow-up, not this change.
+  - **How to add a look or a size.** A new look: its contracts at `versions[1]` for each size it supports (the regions and subject live only in `src/lib/designData/composition.ts`), a committed hash and a key-list entry in `lookDataset.test.ts`, a label and a summary, a `use` on each text region that needs a name (Spotlight bands), and three fixtures per contract in `tests/render/lookFixtureTable.ts`. `lookFixtureCompleteness.test.ts` fails until the fixture table matches the dataset. A post-style default moves only in a new post-style version (027's rule), never by editing version 1. A new size: a new contract for every look that declares it, with its own fixtures. A change to a released contract is a new version, never an edit.
+  - **What the fixtures prove and do not prove (NFR-11).** The 36 fixtures (12 current contracts, three kinds each: pass, busy and contrast) run through real Chromium in `npm run test:render`. They prove the pixel check discriminates a calm text area from a busy one and from a low-contrast one, for every contract and both properties. They do **not** prove that a real model image passes a look. That is OP-028's job, and OP-028 gates only the interactive post-style defaults (T7). The fixtures are synthetic (L1).
+  - **OP-028 procedure (the operator's real-image check, on the user's decision).** It runs only after this T6 is merged to `v2` and the gate is green. It uses the OP-1 setup in `CLAUDE.md` "Gotchas": a `next dev` on `:3002` against a scratch database (`bistec_studio_op1`, or another scratch database with the user's agreement; never `bistec_studio`), with the user's own Claude token and OpenAI key connected at `/settings`, `DESIGN_PROVIDER=cli` and the `MOCK_*` flags off.
+    1. Set the four credentials for the run only, in the environment, never in the source or the ledger: `LOOK_CHECK_USERNAME`, `LOOK_CHECK_PASSWORD`, `LOOK_CHECK_TEAM` and `LOOK_CHECK_KIT` (the team and kit ids of the scratch team). The runner refuses to start without all four.
+    2. Dry run first. It prints the eight slots, the cap and the ledger total, and makes no call: `node scripts/look-check/run-look-check.mjs --out .specclaw/changes/028-image-looks/look-check --dry-run`.
+    3. The run, one generation at a time: `node scripts/look-check/run-look-check.mjs --base http://localhost:3002 --out .specclaw/changes/028-image-looks/look-check`. `--only <slot>` runs one slot (for example `--only spotlight:PORTRAIT`). Every call prints `[look-check] call <n> of 16`.
+    4. Look at each render with the user. The PNGs land in `look-check/renders/`, which is gitignored. Record each verdict: `node scripts/look-check/run-look-check.mjs --out .specclaw/changes/028-image-looks/look-check --verdict <slot>=accept|reject`. A verdict makes no call.
+    5. A failing slot may be re-run once (the second attempt). The runner refuses a third attempt on a slot, a re-run of a slot that passed, and a re-run of a slot with no verdict yet.
+    - **The rules the runner enforces, and the ones the operator must keep.**
+      - **Use one fixed `--out` directory for every run, and never delete `ledger.jsonl`.** The 16-call cap lives in that ledger. The attempt count is the number of ledger lines, not the number of results, so a crash, a timeout or an error after a line still counts. Deleting the ledger resets the cap, and that is not allowed.
+      - `--base` must be `http://localhost:<port>` or `http://127.0.0.1:<port>`. Anything else is refused.
+      - The cap is 16 calls (`capFor` of the eight slots, computed, never typed). Stop when it is reached.
+      - Commit `ledger.jsonl` and `results.json` under `.specclaw/changes/028-image-looks/look-check/` once every slot has a verdict. Do not commit `renders/`.
+    - **The pass rule.** A look passes when every one of its new contracts kept its style (the applied look equals the requested look, `styleKept`) and the user accepted the render. The last result for a slot counts. A pending verdict is not a pass; a fallback, a rejection or a failed re-run fails the slot, and so the look. `full-bleed-scene` and `spotlight` are the only looks whose result moves a default. The two STORY slots are reported; a failure there moves nothing and is the user's call (tune with a new version, or accept).
+    - **The scope of that bar.** One render per contract is a weak sample (L2). It is accepted here only because it gates an interactive default that already falls back to classic on a failed pixel check. It is not a standard for unattended use. A later change that puts looks on scheduled, MCP or ACP posts must set its own bar, and must answer the 028 panel's two security BLOCKs first.
+    - **Where the results go and what they decide (FR-15, FR-16).** T7 (after OP-028, operator-gated) writes the post-style versions only for the looks that passed, and `tests/unit/lookCheckResults.test.ts` fails if a moved style names a look that did not pass. The verdicts are in "OP-028 result" below; T7 ran on 2026-10-25 (`7ba50b1`).
+  - **OP-028 result (2026-10-25, run locally on the user's decision; 11 of 16 calls used).** Scratch database `bistec_studio_op1` (migrated to the `v2` head first: `20261024120000_analytics_events` and `20261025120000_post_styles`), `:3002`, `DESIGN_PROVIDER=cli`, the Bistec kit for every slot. Call 1 failed before any image call because the old account's Claude subscription had hit its weekly limit. It still counts in the ledger, so `product-showcase:STORY` ran on its second attempt. The user connected another account's token at `/settings` and the run continued. The user rated every render that kept its look "better" than a classic post, so each was recorded as accepted.
+    - **Passed:** `full-bleed-scene` (SQUARE, PORTRAIT and STORY kept the look at v1 on attempt 1), and T7 (`7ba50b1`) moved Event and Hiring to it: post-style `versions[2]` of `event` and `hiring` copy v1 and change only `defaultImageStyle`; `POST_STYLES_REVISION` 8 → 10, so `PROMPT_VERSION` and `CAPTION_PROMPT_VERSION` end in `+ps10`; E2E TC-LOOK-13 to TC-LOOK-16. `product-showcase` STORY (v2, attempt 2). `editorial-split` STORY (v2): attempt 1 fell back on `contrast`; attempt 2 kept the look with a `layout-violation` observation (the call to action sat just below the 48% band).
+    - **Failed:** `spotlight`. SQUARE fell back on `busy` on both attempts, so the look fails although PORTRAIT and STORY kept it and were accepted. Promotion and Milestone stay classic in T7. Fixing it needs a new `spotlight` SQUARE version and a new real check, in a later change.
+    - **Found during the run; fixed by 029 (`0b62bdd`, 2026-10-25):** with CLI 2.1.310 a usage limit prints `You've hit your weekly limit · resets …` on stdout. `USAGE_LIMIT_RE` in `src/lib/agent/claudeCli.ts` does not match that wording, and a text-mode error quotes only stderr, so the draft failed with the empty reason `Claude CLI exited with code 1: `. Scheduled runs would not name the limit either. 029 widens `USAGE_LIMIT_RE` to the new wording and names the limit in the message (`Claude CLI exited with code 1: Claude usage limit reached. …`); an empty stderr now reads `(no error output on stderr)`; stdout is never quoted.
+  - **The 009 evidence query is unchanged.** The query in the 009 section below still works. Rows with `contractVersion` 2 now also appear for the two existing looks at STORY, and rows for the two new looks appear once they are generated.
+  - **Tests changed in T4 (no case deleted).** §AA `hero-image.test.ts`: `KEPT` reads the dataset's current version; TC-HERO-09 is now "a look at 9:16 is kept with version 2, notice null"; TC-HERO-13's 9:16 part asserts every card is enabled. §AE `post-styles.test.ts`: TC-PS-31's 9:16 tail asserts a hand-picked Classic stays Classic and the looks are enabled at 9:16; TC-PS-32's 9:16 Review row reads "Product showcase (from the post style)". The new section AF is in `docs/e2e-test-plan.md`.
+  - **Known limits (from the spec).** L1: the fixtures are synthetic. L2: one real render per contract is weak. L3: the `unsupported-size` notice still names "9:16"; a future look with fewer sizes must reword it. L4: the layout observation records text outside the bands and does not hold or re-render a post; on interactive posts the user sees the notice. L5: the pixel check does not see the design's own text colour or a shadow.
+  - **Not in this change.** Light variants and Abstract brand forms (a follow-up); unattended looks (a later change, with its own bar); 025 hero product screenshots; the stale-headline badge; 009 Phase 3.
+  - **Next, in order:** 025 hero product screenshots (`/specclaw:propose`); the stale-headline badge (no proposal yet). 028 and 029 are VERIFIED PASS (2026-10-25).
+- **029 (CLI usage-limit message; VERIFIED PASS 5/5, [verify-report](../.specclaw/changes/029-cli-usage-limit-message/verify-report.md); [spec](../.specclaw/changes/029-cli-usage-limit-message/spec.md), [proposal](../.specclaw/changes/029-cli-usage-limit-message/proposal.md)):** bounded, no party panel (the user's choice). T1 `0b62bdd`, review PASS; unit 3903/3903; CI green at `5db8953`. `USAGE_LIMIT_RE` (`src/lib/agent/claudeCli.ts`) now matches CLI 2.1.310's `You've hit your weekly limit · resets …`. `finalizeText` classifies before it words the message: a usage limit reads `Claude CLI exited with code <n>: Claude usage limit reached. Try again after the plan limit resets, or connect another account's token at /settings.`; an empty stderr reads `(no error output on stderr)`; otherwise the message is unchanged. stdout is never quoted (the `ClaudeCliError` field contract). Stream-json mode, retries and the scheduler are unchanged; the scheduler's usage-limit prefix now applies to this wording. No migration, no env var.
+- **027 (phase a, post styles and the facts check; VERIFIED PASS 22/22, [verify-report](../.specclaw/changes/027-post-styles/verify-report.md); [spec](../.specclaw/changes/027-post-styles/spec.md), [design](../.specclaw/changes/027-post-styles/design.md), [tasks](../.specclaw/changes/027-post-styles/tasks.md), [proposal](../.specclaw/changes/027-post-styles/proposal.md), [party report](../.specclaw/changes/027-post-styles/party-report.md)):** a Post style replaces the Goal picker, and a code-only facts check holds an unattended post that carries an invented value. T1 `a13692a`, T2 `53e8682`, T3 `8816d89`, T4 `483ed7d`, T5 `7d7e25a`, T6 `bbb250b`, T7 `721f746`; T8 is these docs and the gate. Gate: unit 3737/3737; render 47/47; lint 0 errors / 7 warnings; full clean mock E2E 517/3/0/0; build and `test:upgrade` pass; CI green at `c199270` (run 40111923100). The deep panel's verdict was CHANGES_REQUESTED; the user's decisions answered it and seven findings moved to 027b (see the proposal).
+  - **The eight styles.** `general`, `launch`, `promotion`, `event`, `hiring`, `announcement`, `tip`, `milestone`. Each carries a goal, a default tone, a default image style (only looks that exist today) and a checklist of measurable rules, each marked `caption` or `image`. The text lives in `src/lib/postStyles/styles.ts`. Every value rule reads "only if the brief states it"; no rule uses an adjective.
+  - **Where to edit a style.**
+    - **Never edit a released version.** Add `versions[n+1]` and move `current`. The committed hash table in `postStylesDataset.test.ts` fails on an in-place edit.
+    - **The key rule is permanent.** A key is never reused for a different meaning and never renamed. A retired style (`status: 'retired'`) stays resolvable and is hidden from pickers, so stored briefs, queue entries, campaigns and stamps keep working. A future team-owned style gets its own id column, never a bare string in `Brief.postStyle`.
+    - **The prompt versions follow.** `PROMPT_VERSION` and `CAPTION_PROMPT_VERSION` end in `+ps<POST_STYLES_REVISION>`, derived from the dataset, so a dataset edit changes the stamped prompt version by itself.
+  - **One resolver.** `resolvePostStyle` (`src/lib/postStyles/resolve.ts`, pure) is the only place a style maps to a goal, a tone, an image style and a checklist. The wizard, `POST /api/briefs`, the queue and its runner, MCP, ACP and regenerate all call it. Precedence: explicit style, then the campaign default, then `general`. `postStylesBoundary.test.ts` fails on any other file that maps a key. An unknown key is a 400 `UNKNOWN_POST_STYLE` at write time (422 on ACP) and a named failure at run time; it is never treated as "no style".
+  - **`goal` is a snapshot.** The server is the only writer of `Brief.goal`, taken from the style's goal. A pre-027 client's `goal` picks a style only when no `postStyle` is sent (`hiring` and `announcement` map to their own styles; anything else maps to `general`) and is ignored when a style is sent. A row with no `postStyle` keeps the user's own goal and tone and gets no checklist.
+  - **The stamp.** `Draft.postStyle` and `DraftRevision.postStyle` hold `{ key, version, revision }` of the last generation or regeneration (null means before 027). Refine uses the stamped version. A draft whose copy and design ran under different versions shows the later one (limit L3).
+  - **The facts check** (`src/lib/factsCheck/`, pure, no model call). After the captions are written, it pulls telephone numbers, dates, times, currency amounts, percentages and other numbers from the headline and the Instagram and LinkedIn captions, and compares them with the brief topic and description, the active campaign briefing, the kit voice prompt and the parsed text of the campaign documents. A value found in none of them is flagged. It runs on every generation, styled or not.
+    - **What it writes.** `Draft.factsCheck`: `{ v, status: clear | flagged | error, flagged: [{ kind, value, where }] }`, at most 20 flags. It holds the matched number and where it was found, never caption text or brief text. A check that cannot run stores `error`.
+    - **When it recomputes.** On a generation, a regenerate copy and a manual caption or headline edit. Regenerate design, refine, inline edit, override, adopt and restore leave it alone.
+    - **Exemptions.** Integers 0 to 10 as bare numbers, `24/7`, aspect-ratio and size tokens, list markers, `Step n` and `Tip n`, a year in a copyright line, a number attached to letters (`Q3`), and anything inside a URL, email, handle or hashtag. A year is not exempt, so "Join us in 2027" is flagged unless a source states 2027. A source date supports only its own year as a bare number (a T3 review fix).
+    - **Limits (stated, not hidden).** L1 a number in a hashtag or attached to letters is not checked. L2 digit sets other than ASCII, Arabic-Indic, Devanagari, Sinhala, Tamil and fullwidth are not normalised. L3 the stamp is the last run's. L4 `9 years of experience` and `nine out of ten` pass. L5 the check reads the captions and the stored headline, not the HTML, so a refine that prints a new number on the image is not checked. L6 the comparison is textual, so "the best in the country" is not caught. L7 a held entry's draft is a normal draft and a person can publish it by hand.
+  - **The hold.** After a scheduled entry generates, a `SCHEDULE_PUBLISH` or `PUBLISH_NOW` entry whose check is `flagged` or `error` creates **no `Post` row**. It still settles `COMPLETED` with its draft, `postAction` unchanged, and `ScheduledGeneration.heldReason` set to a fixed sentence naming up to five values. `HOLD` entries are unaffected. MCP and ACP `generate_post` never publish; `publish_post` and the web Publish dialog are explicit decisions and are not blocked.
+    - **Where an operator sees it.** The campaign queue table shows `heldReason` as an amber line under the status, with the flagged values in its title. The draft page shows the flagged values in the facts-check notice.
+    - **Re-running.** A held entry (`COMPLETED` with a `heldReason`) is re-runnable, and the re-run clears `heldReason` (a T5 review fix). The queue `PATCH` keeps the stored style when none is sent.
+  - **Reading the "Post styles" flag rate.** `/admin/insights` has a fifth section, "Post styles": one row per dataset style (a style nobody chose shows zeros) with briefs chosen, generations, generations flagged, flag rate and entries held. "Chosen" counts wizard briefs (`brief.submitted`); queued entries have no such event, so they appear under generations and held only. A high flag rate on one style points at its rule text or at briefs that omit the facts; a style nobody chooses is a candidate for retiring, never deleting. The new event fields (`postStyle`, `factsStatus`, `factsFlagCount`, `held`) are additive, with no `schemaVersion` bump, and never hold a caption or a flagged value.
+  - **Other review fixes.** A blank `postStyle` string is the same as absent (T2). Regenerate copy stamps only when a target validated (T4).
+  - **The ACP manifest is `1.2.0`.** `postStyle` is optional, `goal` and `tone` are no longer required, and the `generate_post` and `get_draft` results carry `postStyle` and `factsCheck`. MCP is stdio, so there is no MCP E2E; the unit tests and the shared `generatePost` through the ACP E2E cover it.
+  - **UI.** The Post style picker is on wizard step 1 (Size & Design), above the size choices, and pre-fills Tone and the image style until the user changes them by hand. The Goal select is gone from the Content step. A campaign has an admin-only default post style. The queue modal takes a style. The draft page shows the facts-check notice (Publish stays enabled) and a "Post style" line in Generated with.
+  - **Known UI follow-ups (noted by reviews, not fixed).** The eight-card picker is about 900 px tall at 390 px. The queue's held line wraps to five or six lines at narrow widths. The T7 dark screenshots did not switch the theme (`emulateMedia` does not drive the app's theme), so the dark rendering of the "Post styles" section is checked only by the axe pass.
+  - **Release notes (read before the merge).**
+    - **Held first runs.** The facts check runs on every generation after the deploy. A queued auto-publish entry created before 027 is gated on its first run: if its output contains a value not found in its brief, briefing, kit voice text or campaign documents, the entry completes with its draft and a `heldReason`, and nothing publishes until a person publishes from the draft page or re-runs the entry.
+    - **The Goal picker is gone,** and the Post style picker is on wizard step 1.
+    - **A pre-027 `goal` sent without a `postStyle`** now picks a style (`hiring` and `announcement` to their own, anything else to `general`) and is ignored when a style is sent.
+    - **The ACP manifest is `1.2.0`.**
+  - **For 027b.** A variant look key is `<base>-<variant>` (for example `product-showcase-light`). The styles that default to `classic` move to the new looks as a new version of each style, never by editing version 1.
+  - **No real-model check was run.** The merge bar is mock-only (the seeded corpus and §AE). **OP-1 (optional, the user's call; its bar is left to the user):** generate one post per style on a scratch database with a real model, read the notice on each, and count how many flags are true invented values.
+  - **New migration:** `20261025120000_post_styles` (seven nullable columns, nothing else), with the manual down script `prisma/rollback/027-post-styles.down.sql`. No env var.
+- **026 (VERIFIED PASS 11/11, 2026-10-24; CI green at `8bef317` (run 40002885901); [verify report](../.specclaw/changes/026-drop-whatsapp-caption-refine-under-preview/verify-report.md); [spec](../.specclaw/changes/026-drop-whatsapp-caption-refine-under-preview/spec.md), [tasks](../.specclaw/changes/026-drop-whatsapp-caption-refine-under-preview/tasks.md)):** the WhatsApp caption is gone, and Refine design sits under the Preview card. T1 `3053695`, T2 `66d2e15`, T3 `8bef317`. Gate: unit 3150/3150; render 47/47; lint 0 errors / 7 warnings; full clean mock E2E 444/3/0/0; build and `test:upgrade` pass
+  - **What changed.**
+    - WhatsApp left the caption registry (`CAPTION_CHANNELS` in `src/lib/channels.ts`). New drafts, retry, regenerate, scheduled generation and MCP/ACP generation write Instagram and LinkedIn captions only. `CAPTION_PROMPT_VERSION` is `2026-10-23.1`.
+    - The caption panel lost the WhatsApp soft-guide counter and the "Not published from Studio yet" helper (`softLimit` and `publishable` are gone from `CaptionChannelSpec`). `CHANNEL_LABELS` keeps `WHATSAPP: 'WhatsApp'` for old `Post` rows.
+    - **Old WhatsApp `DraftCaption` rows are hidden, not deleted.** `loadDraftCaptions` orders by the registry, so they drop out of the API, MCP `get_draft`, ACP and the page. Retry and the generation failure path only touch registry channels, so a hidden row is never changed. `{channel:'WHATSAPP'}` on PATCH or regenerate-copy is a 400. Restoring the registry entry shows the rows again.
+    - Publishing to WhatsApp still fails closed; the reason is now "WhatsApp publishing isn't available." The ACP manifest's caption channel enum is `INSTAGRAM`, `LINKEDIN`.
+    - **Draft page layout:** the left column is the Preview card, then the Refine Design card; the right column is Captions. Below `xl` the order is Preview, Refine Design, Captions.
+    - **010 (WhatsApp Channel posting) is dropped** (the user, 2026-10-23).
+  - **E2E:** TC-CAP-21 (a legacy WhatsApp row stays hidden and unchanged) and TC-CAP-22 (layout at 1440 px and 390 px, with axe) are new. TC-CAP-01, -02, -06, -09, -14, -15, -17 and -18, TC-MODEL-01, -06, -07, -16 and -17 and the a11y label loop were retargeted to two channels (`docs/e2e-test-plan.md` §W and §Y).
+  - **No operator steps. No migration, no env var, no schema change.**
+  - **Release note for `v2` to `main`:** new drafts carry two captions. Old WhatsApp captions are hidden, not deleted; restoring the registry entry shows them again.
+- **007 (VERIFIED PASS, 22/22 ACs; [verify-report](../.specclaw/changes/007-brandkit-design-system/verify-report.md), [spec](../.specclaw/changes/007-brandkit-design-system/spec.md), [design](../.specclaw/changes/007-brandkit-design-system/design.md)):** brand-kit design rules, a detector and an upgrade. The kit voice prompt is where authors write adjectives ("generous clear space", "similar visual heights") that the design model reads as nothing. This change finds those phrases and helps the author replace them with a measured rule.
+  - **The flow.**
+    1. In the kit's New Version editor (`/admin/brandkits`), a live detector flags vague design phrases as the author types. It runs in the browser, makes no request and costs nothing.
+    2. "Improve this version" seeds the editor from the active version. "Upgrade" asks the model for measurable wording for each flagged phrase.
+    3. Each proposal shows the removed text beside the inserted text, a provenance label and a rationale. The author accepts or rejects each one, and an accept only edits the textarea.
+    4. The existing **Save** creates and activates a new version through the unchanged save route. **Restore means the old way:** every earlier version stays in the history, and restoring one makes it the active version again.
+  - **What the code decides and what the model decides.** The detector picks every anchor (the quote, its position and the dataset entry). The model only fills wording, inside the entry's allowed ranges. Code builds each edit and sets its provenance (`dataset` for an in-range number, `unverified` for one outside the range, shown as "Number not from the dataset, check it"). The prompt names roles ("brand colour 1", "the headline font"), never a hex or a font name.
+  - **Dataset.** Seven entries in `src/lib/designData/authoring/`: `logo-clear-space`, `mark-size-match`, `element-scale`, `margin-even`, `canvas-share`, `whitespace-share`, `edge-blend`. Generation prompts cannot import it (`designDataBoundary.test.ts`).
+  - **Improve with AI** gains one response field, `lostRules`: the measurable spans the rewrite dropped, shown above the editor. Its prompt and its draft are otherwise unchanged.
+  - **Limits, stated plainly.**
+    - It is a **text check only.** Nothing renders a post to confirm a new rule works.
+    - The stale-base check on Save is **client-only** (the save route is unchanged, so the server cannot refuse). The upgrade route itself does refuse a stale `baseVersion` with 409.
+    - A quote is replaced only when it occurs **exactly once** in the text. A repeated phrase is flagged but its edit is disabled as stale.
+    - The detector word list is **data and may miss or over-flag phrases.** For example a bare "dominates" flags `canvas-share` with no design noun, and "ample parking space" flags `logo-clear-space`. Flags are advisory and can be dismissed.
+    - 9:16, typography and the briefing editor are not covered (follow-ups).
+  - **Logs and how to grep them.** Every upgrade call logs one line: `[kit-upgrade] team=<id> kit=<id> candidates=<n> edits=<n> rejected=<n> entries=<keys>`. It holds no prompt text. `grep "\[kit-upgrade\]"` the app log. **A parse failure also logs up to 2000 characters of the model's raw reply.** A model that quotes the base text puts that text in the log, so treat the log as holding kit prompt text in that case.
+  - **The evidence query** (FR-17). Run it read-only against prod after the deploy, with the deploy date. Each new version is a Save that followed an edit session, since an accept is invisible to the server:
+
+    ```sql
+    SELECT "brandKitId", count(*) AS versions, max("createdAt") AS latest
+    FROM "BrandKitPrompt" WHERE "createdAt" >= '<deploy date>' GROUP BY 1 ORDER BY 2 DESC;
+    ```
+
+  - **OQ-1 (resolved, user 2026-10-23: "no stamp for now").** No column records which entries an accepted version drew on, and the accept rate is not observable. Uptake is measured by the log line and the query above. A later change can add a nullable `BrandKitPrompt.upgradeEntries` column.
+  - **Operator step: the navy/teal drift on the Hearts Academy kit** (a check, not a blocker; FR-18). The kit's "teal-to-green is the primary canvas" has no number, so renders drift navy. To close it, a team admin opens the Hearts Academy kit on prod (`cms3jg09p000at5ijivpi3zhe`) at `/admin/brandkits`, uses "Improve this version", accepts the `canvas-share` edit with the numbers they choose (for example brand colour 1 at 60% of the canvas), and saves. **The author chooses the numbers.** Then update CLAUDE.md's "One open drift" line.
+  - **Operator step (optional): a real-model look.** Run one upgrade on a real kit and read the edits. The build makes no real model call and does not claim the real wording is good.
+  - **T4:** these docs and the gate. Gate: unit 3147/3147; render 47/47; lint 0 errors / 7 warnings; E2E 442/3/0/0; CI green at `56c4b92` (runs 39886027978, 39886033084; the push run passed on one rerun after a CI-runner Chromium launch timeout in the render harness). No migration, no env var.
+- **024 (VERIFIED PASS, 17/17 ACs; [verify-report](../.specclaw/changes/024-caption-credential-route/verify-report.md), [spec](../.specclaw/changes/024-caption-credential-route/spec.md), [design](../.specclaw/changes/024-caption-credential-route/design.md)):** 005 item 2. A team's admin names the caption route at `/team`: **Claude CLI (OAuth)** or **Anthropic API key**. The choice is stored on the team and read by one shared selector, so interactive, scheduled and MCP captions all use it and `/team` shows the same answer. **A team that never chooses keeps today's behaviour exactly** (the user's decision, 2026-10-22).
+  - **T1 (`d772715`):** the `CaptionRoute` enum (`CLI`, `API_KEY`), `Team.captionRoute` (null means never chosen), the stamp columns `Draft.headlineRoute` and `DraftCaption.route` (TEXT, nullable), the additive migration `20261023120000_caption_route` and its manual down script `prisma/rollback/024-caption-credential-route.down.sql`.
+  - **T2 (`d4d14f2`):** the pure `selectRoute('CAPTION', input)` (`src/lib/models/route.ts`); the loader `loadCaptionRoute` (`src/providers/captionRoute.ts`); `resolveCopyProvider` decides before the `MOCK_AI` seam; the route is stamped on each caption and headline row; an `API_KEY` run counts as the team credential tier for the Opus gate (`captionCredential` on `GET /api/models`); a chosen route stores the brief's key as `'cli'` and ignores a brief key; `POST /api/briefs` returns `422 CAPTION_ROUTE_NOT_READY` for a chosen route that is not ready; the model-calls record gains `route`; the guard test `modelArgParity.test.ts`.
+  - **T3 (`03961b9`):** `GET`/`PUT /api/team/caption-route` (PUT is team-admin only); the `/team` route card with its state line; the COPY slot is visible in both modes, with "Serving captions" chips on the rows (the false "Not used in CLI mode" label is gone); the wizard gate and the server's message on the Review step; E2E section AB, TC-ROUTE-01 to TC-ROUTE-09.
+  - **T4:** the checklist line below, these docs and the full gate. Gate: unit 3024/3024; render 47/47; lint 0 errors / 7 warnings; E2E 431/3/0/0; CI green at `cd9d411` (runs 39837152549, 39837162772; the PR run passed on one rerun after a CI-runner Chromium launch timeout in the render harness).
+  - **Fails closed.** A chosen route with no usable credential never falls to the other route or to the server key: `API_KEY` with no enabled `anthropic` COPY row (or `CLI` in an API-mode server) reads `not-ready` on `/team`, and every caption run (interactive, scheduled, MCP) fails with a route-named message.
+  - **What it does not do.** The design step still needs a team Claude token, so this change alone does not make a scheduled post succeed on a team with none. The briefing assistant, brand-kit assistant, vision and the refine verifier are untouched (spec FR-12).
+  - **The evidence query.** Run it read-only against prod after the deploy and after a team has chosen a route:
+
+    ```sql
+    SELECT "route", count(*) FROM "DraftCaption" WHERE "route" IS NOT NULL GROUP BY 1;
+    ```
+
+    Rows written before 024 have a null `route` and are not counted.
+- **009 (VERIFIED PASS, 25/25 ACs, OP-1 pending; [verify-report](../.specclaw/changes/009-hero-image-design/verify-report.md), [spec](../.specclaw/changes/009-hero-image-design/spec.md), [design](../.specclaw/changes/009-hero-image-design/design.md)):** a Path B brief can opt into a per-post **image style** (`product-showcase` or `editorial-split`). The image model is asked for a hero subject and told which part of the frame to leave empty; the returned image is **checked on real pixels** and fails closed; the design step puts the text and logo only in the empty part; the outcome is recorded as a **composition stamp** on every draft and revision; after the final render the text and logo positions are observed (recorded, never a fallback). `classic` is the default and today's behaviour, unchanged. Scheduled, MCP and ACP briefs are always classic. It does not close cause 5 (no reference images, so a device screen cannot show the real product UI): that is Phase 2.
+  - **T1 (`bfe3d57`):** three columns: `Brief.imageStyle` (TEXT, default `'classic'`, so a retired key needs no migration), `Draft.composition` and `DraftRevision.composition` (JSONB, null means "before 009"); the additive migration `20261022120000_hero_composition` and its manual down script `prisma/rollback/009-hero-image-design.down.sql`.
+  - **T2 (`81d6521`):** `src/lib/designData`: the dataset, the canvas-to-image region mapping, the pure `evaluateRegions`, the planner and `settleComposition`, the stamp schema, the prompt text, the layout comparison and the quality tier parser.
+  - **T3 (`9894a99`):** the Chromium sampler in `puppeteer.ts`, `layoutFacts`, the real-render fixtures, and the thresholds tuned on synthetic fixtures (OP-1 checks them against real images) (render suite 47/47 at T5).
+  - **T4 (`fb0ff0e`):** the prompts (a golden-string guard keeps classic byte-identical), the pipeline wiring, the fail-closed check, `IMAGE_QUALITY`, the action budget (two new bounded steps), the mock seams, and the stamp on every revision writer. `PROMPT_VERSION` is `2026-10-21.1`.
+  - **T5 (`f8f063c`):** the wizard picker (Path B only, disabled for 9:16) and `imageStyle` on `POST /api/briefs`; `composition` and `compositionNotice` on `GET /api/drafts/[id]` and the draft notice; refine carries the contract, and a refine that replaces the image re-stamps; regenerate design re-resolves from the brief; E2E section AA (TC-HERO-01 to TC-HERO-16).
+  - **T6 (`ea1c36e`):** the docs and the full gate; verify PASS at `d3534e0`. Phases 2 (reference images and product screenshots) and 3 (full AI render) are not proposed; they wait on OP-1.
+  - **The fallback rule.** A hero image that fails the check (`busy`, `contrast`, `region-invalid`, `check-error`) is **kept and reused under the classic prompt**; no second image call is made, so a fallback never doubles the image spend. No image at all is `no-image`; a retired or unknown key is `unknown-archetype`; 9:16 is `unsupported-size`.
+  - **One deviation from the design (T5, amended in design section 8):** a rejected refine render carries its own commit stamp (`refineReplacedStamp(prev)` when the refine replaced the background), not `prev`, so "Use anyway" adopts a stamp that describes the render.
+  - **E2E seams:** the four `__MOCK_HERO_*__` sentinels; see [`e2e-test-plan.md`](e2e-test-plan.md) section AA.
+  - **The evidence query** (design section 9). Run it read-only against prod after OP-1: how often a non-classic request was kept, and why not.
+
+    ```sql
+    SELECT "composition"->>'requestedArchetype' AS requested,
+           "composition"->>'appliedArchetype'   AS applied,
+           "composition"->>'fallbackReason'     AS reason,
+           "composition"->>'imageQuality'       AS quality,
+           ("composition"->'observations') ? 'layout-violation' AS layout_violation,
+           count(*)
+    FROM "Draft"
+    WHERE "composition" IS NOT NULL AND "composition"->>'requestedArchetype' <> 'classic'
+    GROUP BY 1,2,3,4,5 ORDER BY count(*) DESC;
+    ```
+
+  - **OP-1: real-look validation (the user's step, on prod, after the merge decision; not an acceptance criterion).** The build makes no real model calls, so it cannot claim this. Steps, verbatim from the spec:
+    1. Fix **six briefs**: three per size (`SQUARE`, `PORTRAIT`), covering announcement, event and product content.
+    2. Render each under classic, `product-showcase` and `editorial-split` with real models, in one session.
+    3. The user compares each non-classic render with its classic one and records "better", "same" or "worse".
+    4. **The hypothesis holds if the user prefers a non-classic render on at least 4 of the 6 briefs.**
+    5. Read the stamps for those runs (the evidence query): how often the check kept the archetype, and why it did not. A fallback on nearly every run means the thresholds are too tight, not that the feature works.
+    6. Confirm at that session that `IMAGE_QUALITY` `standard` (sent to OpenAI as `medium`) and `high` are accepted by the deployed `gpt-image-2` model (see Notes, correction 9), and whether `high` finishes inside the 120 s image bound. (The env word is `standard`; `medium` is not a recognised value and is ignored as unset.)
+
+    If the bar is not met, the change stays opt-in and nothing flips. A failed bar is a result, not a defect.
+
+    **OP-1 PASSED (2026-10-23, run locally on the user's decision, not on prod):** a styled render was preferred on **6 of 6** briefs (bar: 4). editorial-split was better on 6 of 6; product-showcase better on 5 and worse on 1 (portrait announcement). All 12 styled renders kept their style (no fallback); two recorded a `layout-violation` observation (portrait announcement editorial-split, portrait product product-showcase). `IMAGE_QUALITY`: the env values are `standard` (OpenAI `medium`) and `high`; both are accepted by `gpt-image-2`; the hero took 11 to 22 s unset, 35.5 s at `standard` and 99.0 s at `high` (inside the 120 s bound, 21 s margin). Keep it unset on prod.
+    - **How it ran:** the user chose to run it locally because prod deploys are blocked (the Coolify token). A scratch database `bistec_studio_op1` holds the seeded users and a read-only copy of the Bistec and Hearts Academy brand kits; the dev server ran on :3002 in CLI mode with the user's personal Claude token and OpenAI key. Six briefs (square and portrait; announcement, event and product), each under classic, product-showcase and editorial-split: 18 renders of 91 to 181 s each.
+    - **One infrastructure failure, not a design one:** with three generations running at once, one render failed with Prisma's "Unable to start a transaction in the given time" (connection pool); it passed when re-run alone. Worth watching if prod runs several generations at once.
+
+- **023 (VERIFIED PASS, 11/11 ACs; [verify-report](../.specclaw/changes/023-scheduler-heartbeat/verify-report.md), [spec](../.specclaw/changes/023-scheduler-heartbeat/spec.md)):** the scheduler reports its own health, so the next B4 is visible. 006 item 7 moved here.
+  - **T1 (`708c80e`):** the `WorkerHeartbeat` table (one row per loop), the additive migration `20261021120000_worker_heartbeat` and its manual down script `prisma/rollback/023-scheduler-heartbeat.down.sql`.
+  - **T2 (`f43669a`):** the worker wraps each loop in `runTick` (`heartbeat.ts`), which writes the tick start and end and never fails the job; the pure `loopHealth` rule (`heartbeatStatus.ts`); `GET /api/scheduler/status`; the "Scheduler offline" banner on the campaign queue panel; `errorReason` shown while an entry is retrying; the test seam `POST /api/test/worker-heartbeat`; and E2E section Z (TC-HB-01 to TC-HB-06).
+  - **T3:** these docs, the ROADMAP refresh and the full gate.
+  - **Gate:** unit 2706/2706; lint 0 errors / 7 warnings; E2E 405/3/0/0; CI green at `f43669a` (runs 39493017393, 39493027033).
+- **019 (VERIFIED PASS, 9/9 ACs; [verify-report](../.specclaw/changes/019-draft-action-claim-token/verify-report.md)):**
+  - **T1 (`d521e11`):** the nullable `Draft.pendingActionClaimId` column, the migration `20261020120000_draft_action_claim_id` and its manual down script `prisma/rollback/019-draft-action-claim-token.down.sql`.
+  - **T2 (`1b549b6`):** the claim mints a token; the heartbeat, release, complete, the caption settles and the stale sweep are guarded on it.
+  - **T3 (`7e86b96`):** the content writes from a claimed run are guarded on the claim. A run that lost its claim throws `DraftClaimLostError`, rolls back, and removes the export it uploaded.
+  - **T4 (`0b7608a`):** the checklist line below, the docs and the full gate.
+  - **Gate:** unit 2681/2681; lint 0 errors / 7 warnings; tsc clean; build passes; `test:upgrade` 3/3; full clean mock E2E 397/3/0/0. CI: green at `7e86b96` (runs 39445592883, 39445602043).
+  - **Known leftover (T3 review):** when Regenerate design loses its claim, the revision rolls back but the PNG it already uploaded is orphaned. This is out of scope per the spec, the same as a design failure today.
+
+### What happened on 2026-10-18
+
+- **This repo adopted the fork's `v2` by fast-forward** (`c82fdb0` → `1c38dbb`, 119 commits), on the user's instruction. The `fork` remote stays, with push disabled. From now on, fork code arrives only as a reviewed PR into `v2`: see "Importing from the fork" in [`fork-history.md`](fork-history.md).
+- **The user's decisions:**
+  - the Graphite theme (021), with the old `BistecStudioLogo.png`;
+  - keep company prod data working (022);
+  - pushes to `origin v2` are allowed; never commit or push to `main`;
+  - restore `docker-publish.yml`;
+  - build order 018 → 022 → 021 → 019 → 020;
+  - draft PR #43 stays a draft and is never merged (superseded 2026-10-23: closed on the user's decision as redundant; see CLAUDE.md);
+  - `v2` → `main` only on the user's go-ahead;
+  - prod's `CLAUDE_CLI_MODEL` is a catalogue key;
+  - no prod dump (the named waiver in the checklist below).
+- **022 so far:**
+  - **T1:** the back-dated carry-over migration `20261012130000_legacy_caption_carryover` converts legacy captions before 016's drop and archives the text in `LegacyCaptionArchive`. `npm run test:upgrade` proves the upgrade from `main`'s schema (3 scenarios, also a CI step).
+  - **T2:** the entrypoint runs an env preflight before `migrate deploy`; `catalogue.ts` has the prod-boot comment; `docker-publish.yml` is restored byte-for-byte from `origin/main`.
+- **Incident:** a T1 subagent migrated the shared `bistec_studio` database (the fork checkout's dev DB) to `v2` head by mistake. No data was lost; details are in 022 [`reports/T1.md`](../.specclaw/changes/022-prod-data-and-deploy-restore/reports/T1.md). **Never run a prisma or DB command without an explicit `DATABASE_URL`** that points at `bistec_studio_test` or a scratch database. The CLAUDE.md gotchas say why.
+
+### Resume, in order
+
+1. ~~022~~ and ~~021~~ are done: both VERIFIED PASS (2026-10-19 and 2026-10-20).
+2. ~~019~~ and ~~020~~ are done: both VERIFIED PASS (2026-10-20). The build order 018 → 022 → 021 → 019 → 020 is complete.
+3. ~~023~~ and ~~009~~ (Phase 1) are done: both VERIFIED PASS (2026-10-21). 009 OP-1 is the user's step.
+   - **024** and **007** are VERIFIED PASS. **009 OP-1 PASSED 6 of 6** (2026-10-23; run locally on the user's decision; result and evidence in the 009 section and `.specclaw/changes/009-hero-image-design/op1/`).
+   - **026** (drop the WhatsApp caption, hide old rows; Refine design under the preview) is **VERIFIED PASS (11/11 ACs, 2026-10-24)**; CI green at `8bef317` (run 40002885901). Bounded, no migration.
+   - **006** (product observability) is **VERIFIED PASS (17/17 ACs, 2026-10-24)**. See its section above.
+   - **027a** (post styles and the facts check) is **VERIFIED PASS (22/22 ACs, 2026-10-24)**; CI green at `c199270` (run 40111923100). See its section above.
+   - The user's order (2026-10-24): **027a** (this) → **027b** image looks (proposal next) → **025** hero product screenshots (OP-1 passed 2026-10-23) → the **stale-headline badge** (split out of 006; to be proposed). **010 is dropped.**
+4. **The `v2` → `main` merge** waits on the user's go-ahead and the checklist below.
+5. **Company prod to-dos, live again:** B4, the team Claude tokens, the Coolify token rotation and MinIO → silo on prod. They are listed in CLAUDE.md.
+
+**Next step for a new session:** write the 027b proposal (`/specclaw:propose`; the 7 findings deferred from the 027 panel are in `.specclaw/changes/027-post-styles/spec.md`), then ask the user whether to start it or to prepare the merge. Do not start any change unprompted. The user's own pending step is the **merge go-ahead**. The OP-1 scratch environment (`bistec_studio_op1`, a dev server on :3002) may still be present: stop any :3002 server before a build or E2E run (CLAUDE.md → Gotchas).
+
+**Process:** one task at a time; an implementer subagent, then `specclaw:code-reviewer`, then the orchestrator re-runs tsc, lint and unit and commits; a full clean mock E2E and a CI check close each change; no real model calls. The user prefers subagent-driven work routed to the cheapest workable model (haiku for mechanical work, sonnet for implementation and review, opus only when needed). Party panels are on for proposals: ask before spending, and show the roster and the bill.
+
+**Gotchas added 2026-10-20/21:**
+
+- After a power cut or reboot, Docker Desktop may be stopped. Start it, and wait for `docker exec designer-postgres-1 pg_isready` before any DB or E2E work.
+- `npm run test:e2e:db` does not drop the test DB. A clean run drops `bistec_studio_test` first, then runs it. Never run prisma or a DB command without an explicit `DATABASE_URL`.
+- Haiku gate agents have twice handed back before a long E2E run finished. Wait on the run's log for a `MOCK_EXIT` line.
+- `specclaw-build check-report` needs a `## Verification` heading exactly; prettier may rewrite a report, so re-read it before checking.
+- After each push, check `gh run list --branch v2`. On 2026-10-22, CI at `f05f9bc` was red on a TC-HB-01 race (the response listener attached after `page.goto`, missing the only status response before the 60 s refetch). Fixed test-only at `d2daa38`; CI green at `4461ce2` (runs 39819431904, 39819438923: E2E 422/3/0/0). A `waitForResponse` must be created before the action that triggers the request.
+
+**Gates now** (024 T4, 2026-10-23): unit 3024/3024, render 47/47, lint 0 errors / 7 warnings, full clean mock E2E 431/3/0/0, build and `test:upgrade` pass. The baseline before 024 was unit 2947/2947, render 47/47 and E2E 422/3/0/0 (009 T6).
+
+---
+
+## 🚦 Pre-merge prod checklist: `v2` → `main` (022 FR-08)
+
+`main` deploys to company prod (`studio.bistecglobal.com`), which holds real data: the Hearts Academy team, its kit and the IRP posts. `v2` carries changes 004–031 (22 migrations at `caf0c0b`; regenerate the list at merge time). The DevOps handover is [`devops-deploy-handover.md`](devops-deploy-handover.md). Nothing in this section merges or deploys. **The merge waits on the user's go-ahead and on the three blocking steps below.**
+
+### The named waiver
+
+> **"synthetic dry run only, no prod dump — user, 2026-10-18".**
+
+There is no prod dump. So the upgrade path was proven only on synthetic, prod-shaped data: `npm run test:upgrade`, scenarios 1–3 (022 `reports/T1.md`). The three operator steps below are the compensating control, and they block the merge.
+
+### Blocking operator steps (all three, before the merge)
+
+1. **Back up prod with `pg_dump`.** For example, `pg_dump -Fc -f studio-prod-<date>.dump "<prod DATABASE_URL>"`. Keep the file off the prod server, and record where it is.
+2. **Run the legacy-count query on prod,** and record both numbers:
+
+   ```sql
+   SELECT count(*) FILTER (WHERE "copyText" IS NOT NULL) AS legacy,
+          count(*) FILTER (WHERE status = 'IN_PROGRESS' OR "pendingAction" IS NOT NULL) AS in_flight
+   FROM "Draft";
+   ```
+
+   - `legacy` is the number of drafts the carry-over converts. The post-deploy checks use it.
+   - **`in_flight` must be 0 at deploy time.** Re-run the query just before the deploy, and wait for running generations and draft actions to finish.
+
+3. **Know the recovery before deploying.**
+   - **If the deploy breaks prod after the migrations ran:** restore the `pg_dump` backup, then redeploy the previous SHA. Rolling back the image alone does not work: once 016 has dropped `Draft.copyText`, the old image cannot read drafts.
+   - **If the carry-over migration itself fails** (its guard raises `022 legacy_caption_carryover: …`): the carry-over is one atomic block, so it wrote nothing. The migrations before it in the same run (012's three and 008's) did commit, but they are additive and the previous image still reads them. The entrypoint's `set -e` fails the boot, and the previous container keeps serving. **Run `npx prisma migrate resolve --rolled-back 20261012130000_legacy_caption_carryover` against prod's `DATABASE_URL` at once.** Until then the failed row in `_prisma_migrations` makes every `migrate deploy` fail with P3009, so any container that restarts through the entrypoint (the previous app container or the scheduler resource included) cannot boot.
+
+### After the deploy (operator)
+
+Run these right after the deploy, before users create new drafts:
+
+- `SELECT count(*) FROM "LegacyCaptionArchive";` equals `legacy`.
+- `SELECT count(*) FROM "DraftCaption";` equals 3 × `legacy`. The baseline is 0 by construction: the `DraftCaption` table is created by `20261011130000_draft_captions`, which is in this same deploy, so it does not exist on prod beforehand.
+- `docker-publish.yml` confirms that `/api/health` serves the merged commit.
+- Open one converted draft. Instagram and LinkedIn show the old caption, and WhatsApp is empty.
+
+### Check before the merge
+
+- **031 v2 final polish (NFR-02, NFR-07).** This is a check, not a blocking step. Three additive migrations, one line each: `20261028120000_personal_image_key_provider` (one column, `UserOpenAiKey.provider` with default `openai`, and `Draft.imageSource`); `20261029120000_post_fonts` (four nullable JSONB columns); `20261030120000_apply_text_action` (one enum value, `APPLY_TEXT`, which a rollback cannot drop). A redeploy applies all three. The manual down script is `prisma/rollback/031-v2-final-polish.down.sql`, run in reverse order (A, B, C). **Release note:** a rollback deletes every non-OpenAI personal image key. **Release note:** Promotion and Milestone now pre-fill Spotlight in the wizard, and the prompt versions end in `+ps12`; queued entries stay classic.
+- **028 image looks (FR-05, FR-13, FR-16, A4).** This is a check, not a blocking step. There is no migration and no env var.
+  - Interactive Path B briefs can now pick Full-bleed scene and Spotlight, and the two existing looks are at STORY. Scheduled, MCP and ACP posts stay classic.
+  - **Release note (A4, decided 2026-10-25):** at 9:16 a Launch or Announcement brief now pre-fills its look (Product showcase and Editorial split) in the wizard, where it used to pre-fill Classic. A failed pixel check still falls back to classic, with the notice on the draft.
+  - **Release note:** a stored brief with a look at 9:16 (009 accepted and stored it) gets that look on regenerate design, where it recorded `unsupported-size` before.
+  - **Post-style defaults moved for Event and Hiring (T7, `7ba50b1`).** Release note: the wizard now pre-fills Full-bleed scene for an Event or Hiring post at every size; Promotion, Milestone and the rest are unchanged. Queued entries are unaffected because they stay classic. `PROMPT_VERSION` and `CAPTION_PROMPT_VERSION` move to `+ps10`.
+- **029 CLI usage-limit message.** This is a check, not a blocking step. No migration and no env var. A text-mode CLI failure now names a usage limit and never ends in an empty reason.
+- **`CLAUDE_CLI_MODEL`.** The user said on 2026-10-18 that prod sets a catalogue key, so the boot passes. **Re-read it in Coolify at merge time,** on both resources (app and scheduler). The accepted values are in the 008 runbook below. Since 022, any other value, `default` included, stops the boot at the env preflight, before any migration runs.
+- **019 claim token (FR-08).** This is a check, not a blocking step.
+  - The migration `20261020120000_draft_action_claim_id` is additive: one nullable column. A redeploy applies it, and it appears in the migration list below without a hand edit.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/019-draft-action-claim-token.down.sql`.
+  - The `in_flight = 0` step covers in-flight claims. It also makes the one rolling-deploy edge case unlikely: an old container's sweep leaves the token, and a stalled new-image run could then match a claim the old container took on the same draft and action. That needs a stall of more than 15 minutes, so it is accepted.
+- **009 hero imagery (FR-19).** This is a check, not a blocking step.
+  - The migration `20261022120000_hero_composition` is additive: three columns, `Brief.imageStyle` (NOT NULL with the constant default `'classic'`, a metadata-only change in Postgres 11 and later, so no table rewrite) and the nullable `Draft.composition` and `DraftRevision.composition`. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script: its `brief.create` omits `imageStyle` (the default applies) and it never reads the other two. The manual down script is `prisma/rollback/009-hero-image-design.down.sql`; it discards every stored style choice and every stamp.
+  - **`IMAGE_QUALITY` is optional and off by default.** Leave it unset on prod until OP-1 has decided whether `high` is worth its cost. No env change is needed for the merge.
+  - **Nothing changes for existing posts or for scheduled, MCP and ACP runs:** every brief defaults to `classic`. The image styles are opt-in per post in the wizard.
+- **023 scheduler heartbeat (FR-08).** This is a check, not a blocking step.
+  - The migration `20261021120000_worker_heartbeat` is additive: one new table, no change to an existing one. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/023-scheduler-heartbeat.down.sql`.
+  - **After the deploy, confirm the banner:** with the scheduler resource running, the "Scheduler offline" banner on a campaign's queue panel clears within about a minute of its first tick. A banner that stays means the scheduler resource is not running (B4); read [`scheduler-b4-diagnosis-2026-08-03.md`](scheduler-b4-diagnosis-2026-08-03.md). The banner is also the quick B4 signal.
+- **006 product observability (AC-01, AC-13).** This is a check, not a blocking step.
+  - The migration `20261024120000_analytics_events` is additive: two new tables and one enum, no change to an existing table. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/006-product-observability.down.sql`; it drops both tables and the enum, so it discards every recorded event.
+  - **No env var.** The retention loop starts with the next worker (scheduler) deploy. After the deploy, `/admin/insights` shows a recent retention tick; a stale tick means the scheduler resource is not running (B4).
+- **027 post styles and the facts check (FR-01, FR-16, A12).** This is a check, not a blocking step.
+  - The migration `20261025120000_post_styles` is additive: seven nullable columns (`Brief.postStyle`, `ScheduledGeneration.postStyle` and `heldReason`, `Campaign.defaultPostStyle`, `Draft.postStyle` and `factsCheck`, `DraftRevision.postStyle`), no default and no table rewrite. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/027-post-styles.down.sql`; it discards every stored style key, stamp and facts-check result. **No env var.**
+  - **Release note (mandatory):** queued auto-publish entries created before this change can be held by the facts check on their first run after the deploy. The entry completes with its draft and a `heldReason`, and nothing is published until a person publishes from the draft page or re-runs the entry. After the deploy, look at the campaign queues for a held line.
+  - Also in the release notes: a pre-027 `goal` sent without a `postStyle` now picks a style (`hiring` and `announcement` to their own, anything else to `general`) and is ignored when a style is sent; the ACP manifest is `1.2.0`; the Goal picker is gone and the Post style picker is on wizard step 1.
+- **025 hero product screenshots (FR-08, NFR-05).** This is a check, not a blocking step.
+  - The migration `20261026120000_composite_source` is additive: one nullable JSONB column (`Brief.compositeSource`). A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/025-hero-product-screenshots.down.sql`; it discards every stored `compositeSource`. **No env var.**
+- **026 drop the WhatsApp caption.** This is a check, not a blocking step. There is no migration and no env var. After the deploy, a new draft shows Instagram and LinkedIn captions only, and the Refine Design card sits under the Preview. Old drafts show no WhatsApp panel; their rows are still in `DraftCaption`.
+- **024 caption credential route (FR-13).** This is a check, not a blocking step.
+  - The migration `20261023120000_caption_route` is additive: one enum, one nullable column on `Team` and two nullable `TEXT` columns (`Draft.headlineRoute`, `DraftCaption.route`), no rewrite. A redeploy applies it.
+  - The previous image runs against it, so an image rollback needs no down script. The manual down script is `prisma/rollback/024-caption-credential-route.down.sql`; it discards every team's chosen route and every route stamp.
+  - **Nothing changes for a team that has not chosen a route.** After the deploy, choose each team's route at `/team`, and only after every container (app and scheduler) serves the new image. Until then behaviour is today's.
+  - **A team that chooses `API_KEY` needs an enabled `anthropic` COPY row first,** or its captions (interactive, scheduled and MCP) fail closed with the route-named error.
+  - **The design step still needs a team Claude token,** so this change alone does not make a scheduled post succeed on a team with none.
+- **007 brand-kit design rules (FR-18).** This is a check, not a blocking step.
+  - **No migration and no env var.** The change adds one route (`POST /api/admin/brandkits/[id]/prompts/upgrade`), one additive field on the Improve response and the editor panel.
+  - **Nothing changes for a team that does not use the new buttons.** Generation prompts, `buildBrandKitSystemContext` and `PROMPT_VERSION` (`2026-10-21.1`) are unchanged, and so is the save route. An image rollback needs no down script.
+  - **The Hearts Academy drift fix is an operator step** (the 007 section above), not a blocker.
+- **External `copyText` callers.** 016 removed the `copyText` field from MCP `get_draft` and `generate_post`, ACP `generate_post` and `POST /api/generate/copy`. The operator confirms that no external caller reads it, using each prod team's `/team` API keys and their last use. Any revert of these removals is its own change.
+- **The migration list.** Produce it at merge time; never keep it by hand:
+
+  ```
+  git fetch origin
+  git diff --name-only origin/main origin/v2 -- prisma/migrations
+  ```
+
+  The entrypoint applies them all in one `migrate deploy` on boot. The carry-over `20261012130000` sorts before 016's `20261013120000`.
+
+- **Release notes for the merge PR:**
+  - **005 NFR-03:** teams whose IMAGE key isn't flagged default start using, and spending, it for scheduled, MCP and agent images.
+  - **008:** the 008 runbook's release note (models are chosen per team; `CLAUDE_CLI_MODEL` is the system default).
+  - **022:** every legacy caption is copied whole to Instagram and LinkedIn, and WhatsApp starts empty. The original text is kept in `LegacyCaptionArchive`. Users can edit each channel afterwards.
+- **The deploy window.** Between 016's drop and the cutover to the new container, the old container's draft reads fail, because `Draft.copyText` is gone. Deploy at a quiet time, with `in_flight` at 0.
+- **The deploy itself needs a live Coolify token.** Until `COOLIFY_API_TOKEN` is rotated, a merge to `main` builds and pushes the image, but the redeploy step fails and prod is not updated.
+
+---
+
+## 🛠️ 016 runbook — fresh-start cleanup: deploy, first run, rollback
+
+**016 was written for fresh-start systems; since 022 it also deploys over a database coming from `main`.** 016 deletes the code that existed only to repair, convert, carry or roll back data written by older versions. Older sections of this file that describe that machinery are marked **"Removed by 016"**; they are history, not instructions. A database coming from `main` (company prod) is converted by 022's carry-over migration first (see Deploy below).
+
+### What 016 removed
+
+- **Scripts:** `scripts/export-posts.mjs`, `import-posts.mjs`, `fix-data-uri-logos.mjs`, `migrate-to-teams.mjs` and `reseed-single-admin.mjs`. The runtime `data:` logo guards stay.
+- **The 012 legacy caption machinery:** the columns `Draft.copyText` (`legacyCaptionText`), `Draft.captionMigration` and `DraftCaption.needsReview`, the enum `CaptionMigration`, the migrate-on-read loader, `migrationPlan.ts` / `backfill.ts` / `src/scripts/backfill-captions.ts`, the `captions:backfill` / `captions:report` npm scripts, the boot backfill in `docker-entrypoint.sh` (and its Dockerfile bundle), and `CaptionPanel`'s "migrated from the old single caption" notice. `loadDraftCaptions` now reads the rows and fills a missing channel with an empty READY row, nothing else.
+- **The copy-edit status heal** (`recovery.ts`, 2026-07-28), the regenerate-design null-pointer snapshot and refine's pre-008 conflict branch.
+- **Both rollbacks:** `prisma/rollback/012-per-channel-captions.down.sql` and `prisma/rollback/008-model-selection.down.sql`, with TC-CAP-13 and TC-MODEL-12 (and TC-CAP-11/12/19, `makeLegacyDraft`).
+- **The `copyText` alias:** MCP `get_draft`, MCP/ACP `generate_post` and `POST /api/generate/copy` return only `headline` and `captions`. Callers read the channel's entry in `captions`. A `{copyText}` PATCH body is still refused with 400.
+
+### Deploy
+
+- **Two migrations, applied on boot** by the entrypoint's `prisma migrate deploy`:
+  - `20261013120000_drop_legacy_captions` drops the three columns and the enum;
+  - `20261013130000_drop_empty_default_team` deletes the migration-created "Bistec" team (`team_bistec_default`) **only when it is empty**: no members, no rows in any team-owned table, and no team Claude token. A team in use is kept.
+- **A database coming from `main` is converted first, by 022's carry-over.** 016's first migration raises on any draft that still holds a legacy single caption (`copyText` and no `DraftCaption` rows). Every draft on a database coming from `main`, such as company prod, is like that. So **`20261012130000_legacy_caption_carryover` (change 022) runs first,** in the same `migrate deploy`, because it sorts before `20261013120000`.
+  - It archives every non-null `copyText` in `LegacyCaptionArchive`. That table is never dropped and has no foreign key.
+  - It gives each unconverted draft three READY rows. Instagram and LinkedIn get the whole `copyText`, verbatim. WhatsApp gets `''`, and so do all three when the caption is blank.
+  - Its own content guard raises `022 legacy_caption_carryover: …` and writes nothing if any row is wrong.
+  - After it, 016's guard cannot trip. On a database that already dropped `copyText`, the carry-over is a no-op that creates the empty archive table.
+  - **Proof:** `npm run test:upgrade` (also a CI step in the `e2e` job) migrates a scratch database from `main`'s head to `v2` head with prod-shaped drafts. See 022 `reports/T1.md`.
+- **For prod, do the pre-merge prod checklist above first.**
+- **016's guard stays as the last line of defence.** If it ever raises, `migrate deploy` fails with this message (its advice predates 022):
+
+  ```
+  ERROR: 016 drop_legacy_captions: this system is fresh-start only (change 016), but this database still holds legacy single captions that were never migrated to per-channel captions. Reset the database, or run the 012 caption backfill on a pre-016 build first.
+  ```
+
+  Under the entrypoint's `set -e` the boot fails and the previous container keeps serving. Do not reset a database that holds real data. Find out why the carry-over did not convert it.
+
+- **Locally:** `npx prisma migrate deploy`, always with an explicit `DATABASE_URL` for the database you mean (see the shared-database gotcha in CLAUDE.md). A fork-era dev or test database that already applied 016 gets the carry-over as an out-of-order no-op.
+
+### First run on a fresh database
+
+- **A fresh database has zero teams.** Sign in as the super admin that `seed-admin` creates. The dashboard says there are no teams yet and links to **`/admin/teams`** to create the first one. Non-super-admins with no team see the old "no team" message.
+- **`npm run db:seed` is a dev demo seed,** not part of a fresh system's boot. It creates a "Bistec" team by name (through `seed-brandkit`) with demo content. The E2E setup (`npm run test:e2e:db`) creates its own Bistec, ClientX and NoKitCo teams the same way.
+
+### Rollback
+
+- Run **`prisma/rollback/016-fresh-start-cleanup.down.sql` before the pre-016 image boots**, e.g. `npx prisma db execute --file prisma/rollback/016-fresh-start-cleanup.down.sql --url "$DATABASE_URL"` or `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f …`.
+  - It re-creates the `CaptionMigration` enum and re-adds `Draft.copyText` (nullable), `Draft.captionMigration` (nullable) and `DraftCaption.needsReview` (`NOT NULL DEFAULT false`), so a pre-016 image boots.
+  - It un-records both 016 migrations in `_prisma_migrations`, so a later 016 redeploy re-applies them by itself (L24).
+  - It is idempotent. **It restores no data:** no caption text and not the deleted team.
+- There is no rollback to before 012 or 008 any more.
+- **On prod, use the checklist's recovery instead:** restore the `pg_dump` backup and redeploy the previous SHA. This down script re-adds `Draft.copyText` empty; on a database converted by 022, the original caption text is in `LegacyCaptionArchive`.
+
+---
+
+## 🛠️ 008 runbook — model selection: migration, rollback, `CLAUDE_CLI_MODEL`, procedures
+
+**Release note:**
+
+- _Models are now chosen per team at /team → Models._
+- _`CLAUDE_CLI_MODEL` is the system default, not a global override, and `default` is no longer accepted._
+- _Freeform design and the assistants move from Sonnet 4.6 to Sonnet 5.5._
+- Also: every caption, headline and design revision now records the model that wrote it, and users can pick a model per post, per regenerate and per chat. A team that changes nothing keeps today's split (Haiku for captions and template fill, Sonnet for the rest), on current IDs.
+
+### The catalogue
+
+`src/lib/models/catalogue.ts` is the only file under `src/` allowed to hold a model literal (`tests/unit/modelLiteralGuard.test.ts`; ALL-CAPS keys are exempt).
+
+| Key      | Name       | `apiId` = `cliArg`  | `previousApiIds`            | $/MTok in / out | Tier  | Template fill (Path A) | Gated by the switch |
+| -------- | ---------- | ------------------- | --------------------------- | --------------- | ----- | ---------------------- | ------------------- |
+| `HAIKU`  | Haiku 4.5  | `claude-haiku-4-5`  | `claude-haiku-4-5-20251001` | 1 / 5           | `$`   | yes                    | no                  |
+| `SONNET` | Sonnet 5.5 | `claude-sonnet-5-5` | `claude-sonnet-4-6`         | 2 / 10          | `$$`  | yes                    | no                  |
+| `OPUS`   | Opus 5.5   | `claude-opus-5-5`   | —                           | 4 / 20          | `$$$` | **no**                 | **yes**             |
+
+- **System defaults:** captions and template fill → Haiku; freeform design, both assistants → Sonnet; refine → Haiku on a Path A draft, Sonnet on Path B.
+- **Internal steps** (the background decision, the refine verifier, the token ping) always run Haiku. They ignore the team allow-list.
+- **The tier is computed** from the numeric prices (`modelTier`), never written. The prices' dated source is the entry's `priceSource`.
+- **Timeouts per model and surface** are in design.md §5. The Opus values are **placeholders** until AC-32 measures them.
+
+### The migration
+
+- **One migration, `20261012120000_model_selection`.** It only adds: the enums `ModelKey` and `ModelSurface`, the tables `TeamModelPolicy` and `TeamModelDefault`, `Brief.captionModel` / `designModel`, and the eight nullable `TEXT` stamp columns (`Draft.headlineModel`, `headlineModelSubstitutedFrom`, `designModel`, `designModelSubstitutedFrom`; `DraftRevision.model`, `modelSubstitutedFrom`; `DraftCaption.model`, `modelSubstitutedFrom`).
+- **The entrypoint's `prisma migrate deploy` applies it on boot.** There is no backfill: pre-008 rows read as null, which means "unknown" (004's stamp rule). A regenerate on a null stamp starts at the team default.
+- **The previous image runs against the migrated schema unchanged,** because it never reads the new columns. A rolling deploy is safe.
+- **Locally:** run `npx prisma migrate deploy` on the dev DB before running the dev app. The Prisma client selects the new columns, so a dev DB without the migration can't load drafts.
+
+### Rollback
+
+- **To go back to the pre-008 image, boot it. No SQL step is needed.** It ignores everything 008 added. If its `migrate deploy` refuses because a newer migration is applied, boot it with `SKIP_MIGRATIONS=1`.
+- **Removed by 016 (2026-10-13):** the full-removal script below, `prisma/rollback/008-model-selection.down.sql`, and TC-MODEL-12 are deleted. There is no rollback to before 008 on a fresh system; the bullet is kept as history. The only down script is 016's (see the 016 runbook).
+- ~~**Full removal only:**~~ (historical) `prisma/rollback/008-model-selection.down.sql`. Stop both 008 containers (app and scheduler) first, because 008 code reads the columns it drops. Run it with `npx prisma db execute --file prisma/rollback/008-model-selection.down.sql --url "$DATABASE_URL"` (the form TC-MODEL-12 uses) or `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f …`. It sits outside `prisma/migrations/`, so `migrate deploy` never applies it.
+  - It drops the eight stamp columns, the two `Brief` columns, both tables and both enums, in reverse order with `IF EXISTS`. **That destroys every stamp and every team model policy.** Drafts, captions and revisions themselves are kept.
+  - **It deletes its own `_prisma_migrations` row** (`20261012120000_model_selection`), so a later 008 redeploy re-applies the migration by itself. No manual roll-forward step (L24).
+  - **Proven twice:** TC-MODEL-12 in the suite (a migrate-built scratch DB: forward → down → `migrate deploy` → the same `information_schema` shape), and the literal `CREATE DATABASE … TEMPLATE bistec_studio_test` round trip in `reports/T12.md` (forward `10 | 2 | 2 | 1`, after down `0 | 0 | 0 | 0`, after redeploy `10 | 2 | 2 | 1`, shape IDENTICAL, all 203 drafts kept).
+
+### `CLAUDE_CLI_MODEL`: what changed, and the boot error
+
+- **Before 008** it was a **global override** in CLI mode: when set, it forced one model onto every `claude -p` call, and `default` meant "omit `--model`", which ran the account default (Opus).
+- **Now it is the system default** (CLI mode only), below team defaults and explicit picks. It applies on every user surface where that model is eligible; Opus leaves template fill on Haiku. Internal steps stay on Haiku. `claudeCli.ts` no longer reads it; `src/lib/models/policy.ts` does.
+- **Accepted values:** `haiku`, `sonnet`, `opus` (any case), or a **current** `apiId`. Anything else, including `default`, a retired ID such as `claude-sonnet-4-6`, and `gpt-4o`, makes `src/lib/env.ts` throw when it loads:
+
+  ```
+  CLAUDE_CLI_MODEL must be one of haiku, sonnet, opus, claude-haiku-4-5, claude-sonnet-5-5, claude-opus-5-5 (got "default"). It is now the system default, not a global override.
+  ```
+
+  `next build` reads a bad value as unset, so the build passes and the **running app and worker** fail. The fix is to unset the variable or give it an accepted value.
+
+- **The boot log line,** once per process, at the first model resolution:
+  - CLI mode: `[models] CLAUDE_CLI_MODEL=<KEY> is the system default (below team defaults and explicit picks); it no longer overrides them`;
+  - API mode (warn): `[models] CLAUDE_CLI_MODEL is set but ignored in API mode`.
+- **Before deploying, check the deployment's environment.** In this repo only `.env.example` mentions it (commented out); `.env`, `.env.test`, CI, `docker-compose*.yml` and the `Dockerfile` don't set it (T3).
+
+### What the team admin controls (`/team` → Models)
+
+- **Allowed models**, the per-surface **defaults** ("System default (…)" or an allowed, eligible model), and the switch **"Opus requires a personal token"**.
+- **A team with no saved policy** is allowed all three models and runs the system defaults. **Once saved, the list is authoritative:** a model added to the catalogue later reaches that team only when an admin ticks it, where it shows a "New" chip.
+- **`/team` refuses a policy that leaves any surface with no model,** e.g. Opus alone: "Template fill needs Haiku or Sonnet allowed".
+- **The switch only acts in CLI mode** (disabled in API mode, "Only applies in CLI mode."). With it on, a run on the team token can't use Opus: an explicit pick is a 400, and a stored or default Opus is substituted and recorded.
+- **The allow-list is checked at every tier at call time.** A stored value that is no longer allowed (a stamp, a team default, `Brief.captionModel` / `designModel`, `CLAUDE_CLI_MODEL`) falls through to the next tier and is recorded in the stamp's `…SubstitutedFrom`. Each substitution logs `[models] <surface>: <value> not available (<reason>) → <KEY> (<source>)`, at `warn` for scheduled, MCP and ACP runs.
+- **Scheduled, MCP and ACP runs** have no model input. They use the team default (then the system default) on the team credential.
+- **A scheduled run that hits a Claude usage limit** gets `errorReason` prefixed with "Claude usage limit reached on the team's credential — ". Retries and backoff are unchanged.
+
+### Adding a model (design.md §2)
+
+1. **Add one `CATALOGUE` entry:** key, `apiId`, `cliArg`, prices with a dated `priceSource`, speed, the eligible `surfaces` with their timeouts, and the two decisions `defaultAllowed` and `personalTokenGated`. Keep the catalogue cheapest first (the fallback tier takes the first entry).
+2. **A new family key** (for example `FABLE`) needs a migration with `ALTER TYPE "ModelKey" ADD VALUE 'FABLE';` **alone in its file** (Postgres can't use a new enum value inside the transaction that adds it). Then `npx prisma generate`.
+3. **`npm run test:unit`.** The catalogue invariants (AC-01), the action budget (AC-09) and the boundary test (AC-12) re-run against the new entry. A timeout that would break a 15-minute sweep or the scheduler lease fails `actionBudget.test.ts` here.
+4. **Teams with a saved policy** don't get the model until an admin ticks it ("New"). Teams with no saved policy get it if `defaultAllowed`.
+5. **Run T2's check for the new ID** against the pinned CLI (the command is in `tasks.md` T2). If the CLI rejects the full ID, set that entry's `cliArg` to the alias.
+
+**Upgrading a family** (Sonnet 5.5 → 6) is step 1 alone: change `apiId` and `cliArg`, and push the old ID onto `previousApiIds`. Old stamps keep the ID that ran; a regenerate on one runs the new model and records it as a substitution. If the `ASSISTANT_BRANDKIT` system default's `cliArg` changes, update `VISION_MODEL` in `scripts/cli-sandbox-check.mjs` too; the drift test in `claudeCliArgs.test.ts` fails until they match.
+
+### Splitting a surface (spec FR-02)
+
+Example: `CAPTION` into `CAPTION` and `HEADLINE`.
+
+1. A migration with `ALTER TYPE "ModelSurface" ADD VALUE 'HEADLINE';`, alone in its file.
+2. A second migration that copies every team's `TeamModelDefault` row for the parent surface to the new one, so the child inherits the parent's choice.
+3. Move the call site, and add the surface to the catalogue entries' `surfaces` (with timeouts) and to the system-default table.
+
+Stamps need nothing: `DraftCaption.model` and `Draft.headlineModel` are separate columns already. The same procedure is in `catalogue.ts`'s header comment.
+
+### T2: the operator CLI check (done)
+
+**PASS, 2026-10-13** (`reports/T2.md`). The pinned CLI 2.1.287 accepted `claude-haiku-4-5`, `claude-sonnet-5-5` and `claude-opus-5-5`: exit 0, the `system/init` event echoed each ID, and each returned a non-error result. So every entry keeps `cliArg = apiId`, and a CLI-mode stamp is the exact ID that ran. This machine's global CLI is 2.1.296, so the check ran the pin through `npx -y @anthropic-ai/claude-code@2.1.287`. **Re-run it when the Dockerfile's CLI pin moves.**
+
+### AC-32: the optional Opus timing sample (operator, not a gate)
+
+- **What:** in CLI mode, with a real token, run one Path B generation and one refine on Opus 5.5 (set the team defaults at `/team` → Models, or pick Opus in the wizard and the refine box).
+- **Record in the verify report:** each call's duration against its placeholder timeout (`DESIGN_FREEFORM` 600 s, `REFINE` 540 s on Opus), and whether any call came within 20 % of it.
+- **If freeform design nears 600 s:** lower Opus `DESIGN_FREEFORM` first; don't raise the lease. The tightest segment is the scheduler's "renew before design → complete", 830 s plus a 60 s margin against the 900 s lease. `actionBudget.test.ts` fails on any timeout that breaks a segment.
+- It is the only measurement of Opus durations, and it is one sample.
+
+### Export and import
+
+**Removed by 016 (2026-10-13):** both scripts are deleted (fresh start, no import). The paragraph below is history.
+
+`scripts/export-posts.mjs` already exported every scalar column, so bundles carry the stamps; `import-posts.mjs` copies `Brief.captionModel` / `designModel` and the eight stamp columns verbatim. The manifest stays **v2**: a pre-008 bundle imports with null stamps, and a pre-008 importer drops only the stamps. The L22 `teamId` gap is unchanged.
+
+---
+
+## ⏸️ 2026-10-07 — superseded by 2026-10-21 above (kept for history)
+
+**005 is done and verified PASS.** **011 (app visual redesign) is planned, and wave 1 is built.** The build is paused at its one operator gate: **the user picks one of three design directions.** Everything is pushed to `v2`. Nothing is merged to `main`, and prod is unchanged.
+
+### Do this next, in order
+
+1. **Get the direction pick from the user: A Graphite, B Folio or C Instrument.** They may add changes, for example "B, but keep sidebar icons".
+   - **Comparison page:** https://claude.ai/artifact/XijAC8pAQRkmGErC5QYmB5. It is private to its owner. A local copy is `docs/ui-reference/direction-studies/pick.html`; open it in a browser.
+   - **Full studies:** `docs/ui-reference/direction-studies/study-{a-graphite,b-folio,c-instrument}.html`. Each opens with the exact `:root` / `.dark` token block that T4 copies into `globals.css`, plus its contrast tables. `index.html` in the same folder shows all three side by side in iframes.
+2. **Resume `/specclaw:build 011-app-visual-redesign`** (subagent-driven: one implementer subagent per task, then a `specclaw:code-reviewer` subagent, then the orchestrator commits). The next task is **T3**:
+   - record the pick, with its date, in `proposal.md` → Decisions;
+   - `git mv` Frozen Light into `docs/ui-reference/archive/frozen-light/`;
+   - write the new `docs/ui-reference/DESIGN_SYSTEM.md` from the chosen study.
+
+   Then come T4 (tokens), T5 (primitives and opaque surfaces), T6 (shell), T7–T12 (screens) and T13 (cleanup). Run them **one at a time**, because lint-staged stashes. Every task that touches `src/` ends with a full clean mock E2E run.
+
+3. ~~PR #42 merges only on the user's go-ahead.~~ **Superseded.** PR #42 was already merged on 2026-09-28, and `main` was merged into `v2` on 2026-10-09 (`2506de0b`; see [`fork-history.md`](fork-history.md)).
+
+### What happened on 2026-10-06 and 2026-10-07
+
+- **005 AC-16 passed 3/3** in the operator run: real token, temporary env file deleted afterwards, image `bistec-studio:t6` with CLI 2.1.287. T6 was marked complete (`9cb80ad1`), and the build was finalized with green gates.
+  - **🔴 The user pasted that OAuth token into the chat**, so it is in the session transcript. **The user should revoke it** and make a new one with `claude setup-token`.
+  - The auto-mode classifier blocks Claude from writing a token to a file and running docker with it. The working pattern is a ready-to-paste `! …` command that writes a temp env file, runs the check and deletes the file. This is logged as a 005 learning.
+- **005 verify: PASS, 25/25 ACs** (`e4e8e78e`, `.specclaw/changes/005-provider-flexibility-onboarding/verify-report.md`).
+  - The first E2E run failed once: the AC-23 stale-wording guard caught the 2026-10-03 handoff quoting the retired credential phrase. `f0fc1af7` reworded that line. **Never quote the phrase itself in `docs/` or `src/`:** the guard `git grep`s for it, so even a line describing the guard trips it. That happened here once, at 011 T4.
+  - The clean re-run had **261 passed, 3 skipped, 0 failed, 0 flaky**. The skips are TC-REG-H11a/b/c, and TC-GEN-05 now runs.
+  - **Open follow-ups, none of them failures:** recheck AC-17 after node:22 lands on `v2`; unit runs leave empty `bistec-cli-*` temp dirs; Gemini needs one live call; the card guide names `docs/claude-account-setup.md` as plain text, not a link.
+- **011 approved and planned** (`e398a589`). The user's decisions, recorded in `proposal.md` → Decisions:
+  - **a neutral tool UI**, with no BISTEC brand cues; each team's brand kit is the only brand on screen;
+  - **three studies, from which the user picks alone**;
+  - **the theme follows the OS**.
+
+  The planner's assumptions A1–A4 are in `spec.md`; the user did not veto them:
+  - no pixel-diff tests, with screenshots for review instead;
+  - the button shows icon + label at `md` and wider, and the icon only below that;
+  - it always starts a fresh brief;
+  - every screen works at 375 px with no horizontal scroll.
+
+  The plan is 14 FR, 8 NFR, 20 AC and 13 tasks in 7 waves.
+
+- **011 wave 1 built and pushed:**
+  - **T1 Create post button** (`3203673c`): bottom-right on every `(app)` page except `/brief`, with toasts offset above it (Sonner `offset`/`mobileOffset` 96 px). New `tests/e2e/create-post-button.test.ts`. Full E2E: 265 passed, 3 skipped, 0 failed. The review gave NOTE (5 notes, none blocking). **Carry-over for T6:** white on `#0284c7` is about 4.1:1, below AA; the button moves onto AA tokens in the shell task.
+  - **T2 three direction studies** (`bb6828c5`). All 180 contrast checks pass; all floating surfaces are opaque.
+    - **A Graphite:** warm greys, an ink accent, floating opaque islands, Plus Jakarta Sans, today's two-column layout.
+    - **B Folio:** cream paper and espresso ink, a sienna accent, Fraunces over Instrument Sans, rules instead of boxes, the post as a proof with crop marks.
+    - **C Instrument:** true neutrals, a violet accent, Geist and Geist Mono, a dense three-pane workbench.
+  - **The comparison page and screenshots are in docs** (this session's last commit): `docs/ui-reference/direction-studies/pick.html` and `shots/`.
+
+### Notes T3 onwards must honour (from the T2 report)
+
+- **A new token, `--line-subtle`,** is for decorative dividers, so `--line` can carry the 3:1 contrast needed for control edges. T4's token and contrast tests must include it.
+- **The design §4 reduced-motion rule** (1 ms on `*`) also makes every property transition for 1 ms. T5's computed-style E2E checks should wait briefly before reading.
+- **No study uses blue,** so `status-scheduled` moves from sky to amber or ochre in all three. In C, `exported` shares the accent hue.
+- **Every study regroups some controls:** Export and Edit inline move into a More menu, and Undo sits by the versions. FR-12 still requires every control to stay present and reachable. C's three panes need a 375 px plan (a bottom sheet for the inspector).
+- **The studies load Google Fonts for preview only.** The app self-hosts the chosen families through `next/font` (NFR-05).
+- **`scratchpad/contrast.mjs` from T2 isn't in the repo.** T4 rebuilds the contrast test as `tests/unit/contrast.test.ts`.
+
+### State and gates at `v2` head
+
+- **Gates:** unit **1593/1593**, lint 0 errors (the 7 known warnings), build passes. The last full clean mock E2E was **265/3/0/0**, at T1. Render harness 15/15 at its last run (011 has not touched generated posts).
+- **No new migrations since 2026-10-03.** The four migrations on `v2` but not on `main` are listed in CLAUDE.md.
+- **Open PRs:** #42 is merged, and draft #43 stays a draft and is never merged.
+
+---
+
+## ⏸️ 2026-10-03 — superseded by 2026-10-07 above (kept for history)
+
+**004 is done** (24/24, verify **PARTIAL**, solely because Phase 0 is still on unmerged PR #42). **005 is built** (9 of 10 tasks; **T6 waits on one operator check**, AC-16). Everything is pushed to `v2`. Nothing is merged to `main`, and prod is unchanged.
+
+### Do this next, in order
+
+1. **The user runs AC-16** (005 T6). It proves CLI vision inside the built image and that an injected prompt can't read files or env secrets. Claude never handles the token.
+   1. In your own editor, create `C:\Users\<you>\bistec-token.env` holding `CLAUDE_CODE_OAUTH_TOKEN=<token>`.
+   2. Run `docker run --rm --env-file C:\Users\<you>\bistec-token.env --entrypoint node bistec-studio:t6 scripts/cli-sandbox-check.mjs`.
+   3. Expect three `PASS` lines, then `PASS: 3/3 checks passed`.
+   4. Delete the file.
+   - `--entrypoint node` is required: the default entrypoint runs migrations and needs a DB.
+   - **On another machine,** rebuild the image first: `export MSYS_NO_PATHCONV=1; docker build -t bistec-studio:t6 .` from `v2`.
+2. **Record the result in `reports/T6.md`,** then `specclaw-update-task-status .specclaw/changes/005-provider-flexibility-onboarding/tasks.md T6 complete`.
+3. **`/specclaw:verify` 005.**
+   - Its inputs are `.specclaw/changes/005-provider-flexibility-onboarding/verify-notes.md`: the known limits plus the build rulings verify must judge against.
+   - Run the **full clean mock E2E** as part of it:
+     1. stop stray node processes;
+     2. `rm -rf .next`;
+     3. drop and recreate `bistec_studio_test`;
+     4. `npm run test:e2e:db`;
+     5. serve;
+     6. `npm run test:e2e:mock`.
+
+     Expect 0 failed, 0 flaky, and 3 skips (TC-REG-H11a/b/c; TC-GEN-05 now runs).
+4. **Merge PR #42 on the user's go-ahead only.** The user said "not yet" on 2026-10-01. Then merge `main` into `v2`, re-check 005 AC-17 under node:22 (`claude --version` → `2.1.287` in the image), and close 004's Phase 0 ACs (AC-P0-1/2/4; see 004's `verify-report.md` Issue 2).
+5. **Next change, per `.specclaw/ROADMAP.md`.**
+
+### What 004 finished (since 2026-09-28)
+
+- **The work:**
+  - Waves 4–5 (T17–T24);
+  - a three-slice whole-branch final review;
+  - a fix wave: F1 `5abee773`, F2 `5809e24d`, `a0926982`, F1b `d29c5b60`, F1c `ea3bd1c2`, F1d `570fb6b5`, `f8a6aa3f`;
+  - AC-04 fix F3 `543e8efa`.
+- **Verify:** `.specclaw/changes/004-design-instruction-fidelity/verify-report.md`. Phases 1–3 pass 29/29 after F3. Phase 0's ACs are pending #42 and the token rotation.
+- **Key rulings, all recorded as known limits in that report:**
+  - **A requested image swap always fails closed.** The move-intent lexicon was deleted as gameable.
+  - **The text-reduction lexicon prefers triggering.** For replace/constrain there is no judge, so not triggering is a zero-call pass.
+  - **The settle guards key on the action, not the claim.** A per-claim token is a follow-up.
+
+### What 005 built (all on `v2`)
+
+| Wave                | Commits                                                           | What                                                                                                                                                                                                                                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1, image resolution | `e6649f0a` `6c642b35` `d1c61da9` `b13f3933` `b045129b`            | The resolver falls back to the oldest enabled image provider. Slot/provider compatibility is enforced. The IMAGE-only default rules apply. /team shows the default, serving and none states. A skipped AI background shows an amber notice with its reason. The background and key-validation E2E seams make TC-GEN-05 runnable.                   |
+| 2, CLI hardening    | `a1a6ff8f` `956e7cba` `927a0953` `a6c5539e` `8fc9f6e7` `cc2feecb` | `--tools ""` on every call; an env allowlist; vision over stream-json with no temp files; settings isolation (`--safe-mode`, `--setting-sources ""`, `--no-session-persistence`, a temp cwd); auth classified only on CLI-written fields (`api_error_status` 401, or 403 "revoked"); the CLI pinned to `2.1.287`; `scripts/cli-sandbox-check.mjs`. |
+| 3, Gemini           | `7ae1b424` `129c1e75`                                             | Per-provider image sizes; Gemini (`gemini-3.1-flash-image` via generateContent), **mock-verified only** by user decision.                                                                                                                                                                                                                          |
+| 4, onboarding       | `92c91826` `8bd91ff5`                                             | `docs/claude-account-setup.md` (the native installer is primary, per Anthropic; winget is the alternative with the #6200 note); the in-app `ClaudeConnectGuide` on /settings and /team; the stale shared-credential copy is fixed.                                                                                                                 |
+
+- **Plan trail:** `.specclaw/changes/005-provider-flexibility-onboarding/`, with spec, design, tasks, `reports/T1–T10.md` and `timeline.md`. Spec amendments made during the build: the FR-08 isolation flags, AC-14 `DISABLE_AUTOUPDATER`, and FR-14/AC-22 native installer.
+- **Machine-only ledgers (gitignored):**
+  - `.superpowers/sdd/005/`: briefs and `progress.md`, which holds every ruling;
+  - `.superpowers/sdd/tasks/`: 004's reviews.
+
+  Their binding content is in the committed reports and verify notes.
+
+### State and gates
+
+- **Gates at `v2` head:** unit **1593/1593**, lint 0 errors (the 7 known warnings), `npm run build` passes.
+  - **Last full clean mock E2E:** 251 passed / 3 skipped / 0 failed / 0 flaky, at `b13f3933`, end of 005 Wave 1. Later waves ran their own E2E files green, and verify re-runs the full suite.
+  - **004's verify run:** 231/4/0.
+- **New migrations on `v2` since 2026-09-28,** applied by a redeploy (locally, `npx prisma migrate deploy`):
+  - `20261001120000_revision_render_stamps` (004 F3);
+  - `20261002120000_draft_background_skip` (005 T2).
+
+  Both are nullable columns. The down paths are in their headers.
+
+- **Release note for the eventual `v2` → `main` merge:** teams whose IMAGE key isn't flagged default start using it for scheduled, MCP and agent images, so that key starts being spent (005 NFR-03).
+
+### Gotchas from this stretch
+
+- **The D: drive logged real I/O errors on 2026-10-01** (System log events 51, 50 and 140). The user said the drive works. Push `v2` often. The drive-failure protocol in memory still applies.
+- **The account switched mid-build** after a weekly usage limit. Resumed agents kept their context.
+- **chrome-devtools and shadcn MCP disconnected after the re-login.** T10's screenshots were taken with a throwaway Playwright script instead.
+- **`git push` and forcing a stale specclaw lock may be blocked by the auto-mode classifier** until the user authorizes them in chat.
+- **Node 24 prints `DEP0190` on win32 `shell:true` spawns.** It's harmless here.
+
+### 🔴 Urgent ops (Coolify administrator), unchanged and not blocked on any merge
+
+Swap prod MinIO to silo (`docs/minio-silo-migration.md` on the #42 branch; CVE-2026-40344), and rotate `COOLIFY_API_TOKEN` (`deploy` + `read`, created by an Admin/Owner). Details are in the 2026-09-28 section below.
+
+---
+
+## 2026-09-28 — build session (superseded by the 2026-10-03 section above for status)
+
+**Build session.** 004 Waves 1–3 are built, reviewed and pushed, and MinIO is replaced by the maintained fork **silo**. **15/24 of 004's tasks are done.** Next is **Wave 4** (Phase 2 wiring). Nothing is merged to `main`, and prod is unchanged.
+
+### Where things are
+
+| What                                         | Where                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **PR #42** `fix/ci-deploy-pipeline` → `main` | Open, **not merged**. It holds 004 Phase 0 (T2–T5): readable Coolify redeploys, POST `/deploy`, `/api/health` → `{ ok, commit }`, CI verifying the deployed SHA, action majors, Node 22. Plus the **MinIO → silo** switch (`edb20b10`, `f52189e8`) and the admin runbook `docs/minio-silo-migration.md`. Local worktree: `../designer-ci`. |
+| **PR #43** `v2` → `main`                     | **Closed 2026-10-23** (user decision). It existed only so CI ran on `v2`; since 013, `e2e.yml` runs on every `v2` push, so it only duplicated each run. The `v2` → `main` merge will be a new PR, on the user's go-ahead.                                                                                                                  |
+| **`v2`**                                     | Pushed. It holds 004 Waves 2–3 plus the tracking commits.                                                                                                                                                                                                                                                                                  |
+| `main` / prod                                | `main` = `09a38b71`; **prod runs `9ea4c045`**. Deploys have been broken since 2026-09-15 (Coolify 401).                                                                                                                                                                                                                                    |
+| 004 plan and progress                        | `.specclaw/changes/004-design-instruction-fidelity/tasks.md`: task IDs were **renumbered to T1–T24** (old→new table at the top). Each task has its verification report under `reports/`.                                                                                                                                                   |
+| Wave 4 rulings                               | **In `tasks.md` itself**, as "Carried in" notes on T17–T21. Read them before building.                                                                                                                                                                                                                                                     |
+| SDD ledger                                   | `.superpowers/sdd/tasks/progress.md`, which holds every ruling, deferred minor and fix round. **It is gitignored, so it exists on this machine only.** Its binding content was copied into the tasks.md carry notes.                                                                                                                       |
+
+### What was built (all reviewed by independent task and whole-wave reviews)
+
+- **Wave 1: Phase 0, deploy pipeline** (on PR #42). T2–T5 are done; T6's CLAUDE.md note is on `v2`. **T1 (token rotation) is deferred: the Coolify admin does it.** The final review caught two things:
+  - Coolify ≥4.2.0 **rejects GET `/deploy` with 405**, so the call is now POST.
+  - A token created by a team **Member** gets HTTP 200 but queues no deployment. The step now fails on that and prints Coolify's message.
+- **Wave 2: Phase 1** (on `v2`):
+  - T10: no emoji in designs; an explicit exception covers emoji in the caption. `PROMPT_VERSION` `2026-09-27.2`.
+  - T11: `reconcileInlineAssets`.
+  - T7: `font-noto-symbols` in the runner image.
+  - T9: real-render harness in `tests/render/` (`npm run test:render`), plus an in-image glyph check `scripts/glyph-check/check-glyphs.mjs` wired into CI.
+  - T8: `Draft.fontSet` stamp, migration `20260927120000_draft_font_set`.
+- **Wave 3: Phase 2 modules** (on `v2`, **not wired into the refine route yet**):
+  - T12: `instructionClasses.ts`, the one table: semantics plus pure post-conditions over `DomFacts`. It took 4 review rounds; 9 false-pass paths were closed.
+  - T13: `refineEnvelope.ts`. The envelope carries `classes`, `supersedes` and `constrains`.
+  - T15: migration `20260927130000_refine_not_applied`. Rejected rows have a NULL `revisionNumber` and `rejectedAt`, CHECK constraints enforce this, and the down path is documented in the migration header.
+  - T16: the `COMMITTED_REVISION` filter guards every chain consumer; E2E §U.
+  - T14: `refineVerify.ts` and `renderer/domFacts.ts`. Structural classes cost zero model calls; `add` makes one Haiku-pinned call through `pinModel`. It fails closed, and `isAccepted` is true only for `pass`.
+- **Gates at `v2` head:** unit 562/562, render 15/15, full mock E2E **183 passed / 4 skipped / 0 failed**, tsc and lint clean (the 7 known warnings).
+
+### 🔴 Urgent ops (Coolify administrator), not blocked on any merge
+
+1. **Swap prod MinIO to silo now.** MinIO's community edition is dead: Docker Hub deleted it on 2026-09-11, quay.io has refused anonymous pulls since 2026-09-24, and dl.min.io returns 410.
+   - Prod's version has **CVE-2026-40344**: anyone holding an access key can write any object. **Our presigned URLs expose the access key.**
+   - The runbook is `docs/minio-silo-migration.md` (PR #42 branch): record the image, tag a rollback copy, back up the volume, change only `image:`, verify, roll back if needed.
+   - Tested: data compatibility both ways, and full E2E 180/0 against silo.
+2. **Rotate `COOLIFY_API_TOKEN`** (`docs/coolify-token-rotation.md`). It needs the **`deploy` + `read`** abilities and must be created by a team **Admin/Owner**. Before PR #42 merges, prove the token with the doc's direct POST, **not** by re-running run 34988162569, which still sends GET and gets 405.
+
+### Next actions, in order
+
+1. ✅ **CI checked (2026-09-28).** #42 is all green (build, unit, and e2e against silo). #43: build + unit are green, including the first Linux `test:render` run and the AC-01 `ci-docker-build` evidence: PR #43 build job, [run 36361971755](https://github.com/bistec-oss/studio/actions/runs/36361971755) — PASS ★ ✓ ✦ → • inside the built runner image (2026-09-28). #43's e2e is red at "Start MinIO" as expected, until #42 merges into `v2`.
+2. **Merge PR #42 on the user's go-ahead**, then **merge `main` into `v2`**. A reviewer checked this merge is conflict-free for the Dockerfile and `e2e.yml`. After the merge and the token rotation, trigger `gh workflow run docker-publish.yml --ref main`, then confirm `https://studio.bistecglobal.com/api/health` returns the SHA.
+3. **Build 004 Wave 4 on `v2`**: **T20 (test seam) first, then T17 → T18 → T19 → T21**.
+   - T17's file list was widened: runners, `revisions.ts`, `draftActions.ts`, `refineVerify.ts`.
+   - **T19's route is now `/api/drafts/[id]/rejected/[revisionId]/adopt`.**
+   - Stop at the phase boundary. Then Wave 5 (T22–T24).
+4. Then `/specclaw:verify` for 004. AC-01 is recorded as `ci-docker-build` once #43's build job is green.
+5. The earlier plan still stands after that: review/plan 005–012 in roadmap order.
+
+### Known limits, parked on purpose (tracked in the tasks.md carry notes)
+
+- **Headline replaced + logo removed.** "Change the headline to X and remove the logo" fails verification unless the new text is shorter, because `supersedes` is one flat list. T17 either makes it per-clause or adds the replace-only exemption.
+- **Re-tagged passages.** A passage moved to a new class (N5 family) can still pass `remove` when an additive clause is present. Carried to T21 as a known limit.
+- **constrain "smaller" can pass by truncating text** with the font unchanged. This is allowed by ruling and documented.
+
+### Gotchas learned this session
+
+- **Git Bash rewrites container paths.** `docker run -v vol:/data … server /data` silently becomes a Windows path. **`export MSYS_NO_PATHCONV=1`** before any docker command that has a container path. It invalidated a whole compatibility test before it was caught.
+- **Stale `.next` plus leftover servers.** A subagent's `node server.js` smoke test (ports 39xx) or a dead `next dev` on :3001 holds `.next` open, and `next dev` then 404s every route. Before a full E2E run:
+  - stop stray node processes (PowerShell `Get-CimInstance Win32_Process -Filter "Name='node.exe'"`);
+  - `rm -rf .next`;
+  - **drop and recreate the test DB** (`DROP DATABASE bistec_studio_test WITH (FORCE)`), because repeated runs hit the 200-campaign cap and fail `team-isolation`.
+- **Never run two implementers in one checkout.** lint-staged stashes unstaged changes on commit. Worktrees are the way to parallelise.
+- **specclaw quirks:**
+  - `specclaw-build-context` dumps about 457 KB, so briefs were hand-assembled from `tasks.md` + spec/design slices.
+  - Task IDs must be all-digit (`T<n>`).
+  - Report files need a `## Verification` footer with `Command:` / `Exit:` lines.
+- **Docker Desktop stopped once mid-session.** Relaunch it with `"C:\Program Files\Docker\Docker\Docker Desktop.exe"`.
+- **lint-staged commits everything already staged.** A staged `.gitignore` rode along into the task-renumber commit.
+
+---
+
+## 2026-09-23 (later) — planning: 012 + Create post button
+
+**Planning only, no product code changed.** Two additions to the roadmap, and a legibility pass on the launch video. Everything in the earlier 2026-09-23 section below still stands. **Next actions are unchanged except for step 4's order.**
+
+### What was added
+
+- **New proposal 012 — per-channel captions** ([`.specclaw/changes/012-per-channel-captions/proposal.md`](../.specclaw/changes/012-per-channel-captions/proposal.md)):
+  - **Three captions per draft: Instagram, LinkedIn, WhatsApp.** Each gets its own panel on the draft page with a per-channel counter, Regenerate, undo and copy-to-clipboard. Each is published to its own channel.
+  - **It fixes a real bug found while planning.** `Draft.copyText` is **one** unstructured string. The `**INSTAGRAM:** … **LINKEDIN:** …` blocks are the model's own habit; the prompt never asks for them and nothing parses them. As a result, `publishDraft.ts:33-44` and `jobRunner.ts:63,77` send the **whole combined string to every channel**, literal `**` included. The editor counter also measures the whole string against the smallest limit ("1451 / 2200 (Instagram)").
+  - **Rename "copy" → "caption".**
+    - **Scope (user decision): UI + docs, plus code where the change touches it.** `regenerate-copy` → `regenerate-caption`, `REGENERATE_COPY` → `REGENERATE_CAPTION`, `CopyEditor` → `CaptionPanels`, and so on.
+    - **The `COPY` provider slot and `Brief.copyProviderKey` keep their names.** That slot also drives brand-voice drafting (`providers/registry.ts:92-106`), so calling it CAPTION would be wrong.
+    - **The clipboard sense of "copy" is untouched.**
+  - **Open questions for the plan phase:** the storage shape (three columns vs a `DraftCaption` table vs JSON); which caption feeds the design agent as on-image text (proposed: Instagram); the WhatsApp length limit; whether revisions should snapshot captions.
+- **011 gains a floating "Create post" button** (item 6), as part of the app shell:
+  - **Bottom-right** on every `(app)` page, hidden on `/brief`. The dashboard's Create Post quick action **stays**.
+  - Sonner toasts are also bottom-right (`ToastProvider.tsx:28`), so they get an offset. The rule: a toast never overlaps the button.
+  - It is opaque per 011's surface rule, and **can ship early on its own** ahead of the direction studies.
+- **Knock-on edits:**
+  - **010:** item 5 (the WhatsApp caption) now belongs to 012. 010 only consumes the caption, and 012 → 010 is a new hard dependency. It also corrects 010's wrong claim that generation "writes INSTAGRAM:/LINKEDIN: sections".
+  - **008:** the surface is named `caption` and the stamp `Draft.captionModel`.
+  - **ROADMAP:** 012 is in **Stage 3, ahead of 008**, and the button is an optional Stage 1 quick win. Boundaries and parallel-work cautions are updated.
+
+### Decisions made (settled, don't re-ask)
+
+| Topic                   | Decision                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| Caption channels        | **Instagram, LinkedIn, WhatsApp.** WhatsApp is caption-only (copy + paste) until 010's handoff ships. |
+| Rename depth            | UI + docs, code identifiers where 012 touches them; `COPY` provider slot unchanged.                   |
+| Create post button      | **Bottom-right**, all app pages except `/brief`; keep the dashboard card; toasts offset above it.     |
+| Where it lives in plans | Captions = new change **012**; the button = folded into **011** (app shell), shippable early.         |
+
+### Revised step 4 of "Next actions"
+
+Review proposals 005–012 with the user, then `/specclaw:plan` them in roadmap order: **011 foundation (optionally the Create post button first) → 012 → 008 → 009 → 010**, then the rest.
+
+### Launch video (not in git)
+
+`brag-output/` is gitignored, so it exists **only on this machine**.
+
+- `bistec-studio-v2.mp4` is the current cut. It has larger workflow-step cards (titles 56px, step descriptions 19px bright mono) and much larger bottom-left scene captions (42px; the Scene 2 stack is 30px so it stays clear of the post).
+- Its poster is `brag-v2.jpg`, also baked in as frame 0.
+- The original `bistec-studio.mp4` / `brag.jpg` are kept.
+- The composition source is `brag-output/composition/index.html`. Re-render from that folder with `npx hyperframes@0.8.61 render --quality high`, with `composition/.bin` on PATH for ffmpeg.
+
+---
+
+## ⏸️ 2026-09-23 (earlier; superseded, see the top section) — planning session 008–011
+
+**Planning session, no product code changed.** Output: four new proposals (008–011), a roadmap sequencing 004–011, a revised 004 plan (now 24 tasks, including a new **Phase 0** for a broken deploy pipeline), and a handoff for the Coolify admin.
+
+### Where things are
+
+| What                                  | Where                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| All roadmap work (004–011)            | branch **`v2`** (pushed to `origin`, branched from `main` `09a38b71`). Planning commit `71cdc9ad` + this handoff commit.              |
+| `main`                                | untouched at `09a38b71`. **Prod runs `9ea4c045`** (same code; `09a38b71` was docs-only and never deployed, see the CI finding below). |
+| Order + dependencies                  | [`.specclaw/ROADMAP.md`](../.specclaw/ROADMAP.md): read it first                                                                      |
+| Proposals                             | `.specclaw/changes/{004…011}/proposal.md`; **004** also has spec/design/tasks                                                         |
+| Coolify token handoff                 | [`docs/coolify-token-rotation.md`](coolify-token-rotation.md)                                                                         |
+| Comparison evidence (ChatGPT vs ours) | `.specclaw/changes/009-hero-image-design/evidence/`                                                                                   |
+
+**Branch rule (user decision):** everything lands on `v2` and merges to `main` **in one go, only once confirmed working and the user says go**. The one exception is **004 Phase 0** (the CI/deploy fix): a small PR to `main` on its own branch, because the deploy steps only run on `main` and can't be proven from `v2`. `main` is what CI auto-deploys, so **nothing on `v2` is ever on prod** until the merge. Confirm features locally.
+
+### 🔴 CI finding: merges to `main` build but do not deploy
+
+The post-merge run for PR #41 ([run 34988162569](https://github.com/bistec-oss/studio/actions/runs/34988162569)) built and pushed the image to GHCR, then **Coolify returned `401`** on the redeploy call. `COOLIFY_API_TOKEN` is dead, and the scheduler redeploy step never ran. No harm yet, but **the next code merge will silently not ship**, and the `v2` merge would be that merge. CLAUDE.md's "a green `main` build **does** redeploy prod" is **no longer true** until this is fixed.
+
+- The **token** is rotated by the Coolify administrator (user decision: not the user, not Claude). Send them `docs/coolify-token-rotation.md`.
+- The **code hardening** is 004 **Wave 1** (T2–T6; renumbered 2026-09-27 — was T0b–T0f): readable deploy failures, both redeploys always attempted, a public `/api/health` → `{ ok, commit }` with the SHA baked into the image, CI verifying prod serves the new commit, `docker-publish.yml` actions off Node 20, and `node:20-alpine` → `node:22-alpine`.
+- Not related: the two E2E failures on PR #41 (`Start MinIO`) were already fixed inside that PR. Docker Hub withdrew `minio/minio`; every reference now uses `quay.io`.
+
+### Next actions, in order
+
+1. **Send the Coolify handoff** to whoever administers Coolify. Ask them to also read the **scheduler** resource's first log lines, which identify the B4 cause (`docs/scheduler-b4-diagnosis-2026-08-03.md`).
+2. **Build 004 Phase 0.** `git switch main && git pull && git switch -c fix/ci-deploy-pipeline`, then T2 → T6. Put **T5 (Node 22) in its own commit.** It needs Docker Desktop running for `docker build`, and a real render + `claude --version` inside the image. Open the PR to `main`. Merge only on the user's go-ahead. After merging, **merge `main` into `v2`** so `v2` carries it.
+3. **004 Phases 1 → 3 on `v2`** (Waves 1–4, hard-ordered). Phase 1's font fix (AC-01) is only provable inside the built image, never on Windows (host Chromium has Segoe UI Symbol).
+4. **Review proposals 005–012** with the user (each ends in open questions), then `/specclaw:plan` them one at a time in roadmap order: **011 foundation → 012 → 008 → 009 → 010**, then the rest. _(Revised later on 2026-09-23; see the section above.)_
+5. **Stage-0 ops still outstanding from July:** team Claude token on both prod teams; mark each team's IMAGE provider `isDefault`; B4.
+
+### Decisions made this session (settled, don't re-ask)
+
+| Topic               | Decision                                                                                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 004 emoji           | Monochrome symbol coverage only (★ ✓ →). The design prompt tells the agent **never to use emoji** in rendered designs (T10). Captions unaffected.                                                      |
+| 004 rejected refine | Preview + **Use anyway** adopts it as a normal revision (T19, new `…/revisions/[rev]/adopt` route). Rejected rows are still never pointed at.                                                          |
+| 004 verifier model  | Pinned to **Haiku**; the retry uses the user's refine model (FR-14b).                                                                                                                                  |
+| 004 Phase 0         | All four hardening items; token rotated by the Coolify admin; ships as its own PR to `main`.                                                                                                           |
+| 008 model choice    | Per post / per chat, remembered per user, team defaults. **Opus allowed for everyone by default.**                                                                                                     |
+| 010 WhatsApp        | Target is a **WhatsApp Channel**. Meta has **no official Channel posting API**, so it's **assisted**: scheduled handoff → share sheet → "mark as posted". Unofficial session APIs rejected (ban risk). |
+| 011 UI              | **New visual direction** (not a Frozen Light touch-up), guided by the `high-end-visual-design` skill. Opaque floating/fixed surfaces. Dark + light stay mandatory.                                     |
+| Release             | One integration branch `v2`; merge to `main` once confirmed + go-ahead.                                                                                                                                |
+
+### Gotchas for the next session
+
+- **specclaw `git.strategy` is now `direct`** (`.specclaw/config.yaml`), so `/specclaw:build` commits onto **whatever branch is checked out**. For Phase 0, switch to `fix/ci-deploy-pipeline` **before** building, or Phase 0 lands on `v2`.
+- **The pre-commit hook (lint-staged → prettier) reformats markdown on commit.** Expect diffs in files you only lightly edited.
+- **Unverified facts carried in the proposals, to check before relying on them:**
+  - Opus pricing/multipliers: 008 deliberately leaves this open. An earlier "≈5× Sonnet" claim was from memory.
+  - Whether WhatsApp's share sheet lists **Channels** as a destination from a phone browser (010). Needs a real device.
+  - gpt-image-2 multi-image input and transparent-background support (009).
+  - The exact Coolify v4 menu path for API tokens (the handoff says to check it).
+- **Uncommitted:** a staged `.gitignore` edit (ignores `brag-output*/`, the launch-video output) is still in the working tree, deliberately left out of commits. Commit it or drop it; it is harmless either way.
+- Local Postgres + MinIO containers (`designer-postgres-1`, `designer-minio-1`) were started this session and left running.
+- The Bistec Studio launch post was exported to `~/Downloads/` (`bistec-studio-launch-post.png`, a polished `-v2.png` + `.html`, and captions). The `v2.html` only renders with local MinIO up, because it loads the background and logo from `localhost:9000`. The DB draft (`cmrkg2f6a000g1lee5aktmqxj`) is unchanged.
+
+---
+
+## ⏸️ 2026-07-28 — previous pick-up point (superseded, see the top section)
 
 ### The through-line: a merged, deployed, CI-green fix can be completely inert
 
@@ -21,6 +1126,8 @@ Two separate bugs this session, same shape — the fix existed but something dow
 Both were reported as "the fix didn't work". Both times the code was right and the _edge_ around it was wrong. **When a merged fix appears not to work: check the schema half of the release, and check whether the client carries a duplicate of the rule you changed.**
 
 ### ✅ 2026-07-28 (latest) — editing the copy silently broke the whole draft
+
+**Removed by 016 (2026-10-13):** fix part 3, the read-time heal (`hasFinishedDesign` / `isStatusClobbered` / `healStatus` in `recovery.ts` and its call in the draft GET), is deleted: on a fresh system no draft carries a clobbered status. Parts 1 and 2 stand, and TC-ASYNC-10 still guards them. The applied migration `20260728120000_heal_copy_edit_clobbered_drafts` stays (applied migrations are never edited).
 
 **Reported:** "delete the copy completely and the Refine design option disappears; regenerate the copy afterwards and some posts say draft not ready — fix it so we don't have to regenerate every time it breaks."
 
@@ -221,7 +1328,7 @@ The prod **Bistec** team had **no brand kits** (they'd been cleaned up), so both
 
 - Dropped `@unique` from `Team.name`; new migration **`20260726120000_team_name_unique_active`** drops `Team_name_key` and creates a **partial** unique index `Team_name_active_key ON "Team"("name") WHERE "isDeleted" = false`.
 - Create + rename routes now check with `findFirst({ name, isDeleted:false })` (rename excludes self) and map a `P2002` race to 409.
-- `scripts/seed-teams.mjs` + `scripts/migrate-to-teams.mjs` moved off `findUnique`-by-name (name is no longer a Prisma unique field → would throw at runtime).
+- `scripts/seed-teams.mjs` + `scripts/migrate-to-teams.mjs` (the latter removed by 016) moved off `findUnique`-by-name (name is no longer a Prisma unique field → would throw at runtime).
 - Gates: tsc clean, lint 0 errors (7 pre-existing warnings), **unit 318/318**, and a direct-DB proof (reuse of a soft-deleted name succeeds; a second _live_ duplicate is rejected with P2002). Migration applied cleanly to the local DB.
 - **⚠️ Prod — this prediction was half right, and the wrong half mattered.** It correctly said the migration "only runs on `prisma migrate deploy` during a redeploy". It wrongly _assumed a redeploy runs one_. It does not: nothing in the image or the pipeline ever did. PR #38 merged, prod redeployed, and "Hearts Academy" still 409'd — because the index was never created. **See the 2026-07-27 section at the top of this file** for the diagnosis and the migrate-on-boot fix.
 
@@ -335,7 +1442,7 @@ Against the **Claude Testing** team (test data KEPT — IDs in the 2026-07-23 fi
    Optional additions only when actually used: `ANTHROPIC_API_KEY` (API mode), `MCP_API_KEY` (the credential a stdio MCP client presents), `MINIO_PUBLIC_ENDPOINT` (Instagram tunnel testing, see `docs/social-publishing-setup.md` §4), `CLAUDE_CLI_MODEL`/`CLAUDE_CLI_DEBUG`. Nothing else belongs in `.env` — all AI/social credentials live in the DB (`/settings`, `/team`). This machine's `.env` was brought to this exact state on 2026-07-21.
 
 4. Post-deploy ops, in-app: set the team's Claude/OpenAI/social credentials at `/team`; each user connects their own personal Claude/OpenAI token at `/settings`; re-issue MCP/ACP API keys at `/team` (the plaintext is shown once — save it immediately, the old env-list keys are dead).
-5. `scripts/migrate-to-teams.mjs --dry-run` is kept around as an inspection tool only — it is not part of the deploy path anymore (the backfill lives in migration B).
+5. **(Removed by 016, 2026-10-13: the script is deleted.)** ~~`scripts/migrate-to-teams.mjs --dry-run` is kept around as an inspection tool only~~ — it is not part of the deploy path anymore (the backfill lives in migration B).
 
 ### Testing
 
@@ -378,14 +1485,14 @@ Small UI-only change set (no schema, no API changes, no migrations, no new env v
 - **Prompt guards (defense in depth):** `buildBrandKitSystemContext` renders `Logo URL: none (embedded logo omitted)` for a `data:` logoUrl; `pathB.ts` filters `data:` URLs out of the reference-artifact list. **`PROMPT_VERSION` → `2026-07-17.1`.**
 - **Write-surface validation:** `POST/PATCH /api/admin/brandkits(/[id])` reject a non-`http(s)://` `logoUrl` with 400 (clearing with `null` still allowed); MCP `create_brand_kit` throws the same check as a tool error.
 - **Seed fix:** `scripts/seed-hearts-talk.mjs` uploads its logo assets to the brand-kits bucket (stable public URL) instead of embedding data-URIs (the presigned-URL rationale died with H10).
-- **New `scripts/fix-data-uri-logos.mjs`:** finds every `BrandKit.logoUrl` / `BrandKitArtifact.url` holding a `data:` URI, uploads the decoded bytes to the brand-kits bucket, rewrites the row. Idempotent, `--dry-run` supported, exits non-zero if any row was unparsable/skipped.
-- **Data fix APPLIED on this machine** (not a commit): Hearts Academy kit `logoUrl` → `http://localhost:9000/brand-kits/cmqroh4po00008xc8tcntem58/hearts-academy-logo-transparent.png` (background made transparent via edge-connected removal — the white knot inside the heart mark preserved); the mislabeled 136k data-URI "BISTEC Global" LOGO artifact was replaced by **"BISTEC Hearts Academy"** (`feedToAI: true`, same URL). `fix-data-uri-logos.mjs` confirms **0 data-URIs remain locally**.
+- **New `scripts/fix-data-uri-logos.mjs` (removed by 016, 2026-10-13; the runtime `data:` guards above stay):** finds every `BrandKit.logoUrl` / `BrandKitArtifact.url` holding a `data:` URI, uploads the decoded bytes to the brand-kits bucket, rewrites the row. Idempotent, `--dry-run` supported, exits non-zero if any row was unparsable/skipped.
+- **Data fix APPLIED on this machine** (not a commit; historical): Hearts Academy kit `logoUrl` → `http://localhost:9000/brand-kits/cmqroh4po00008xc8tcntem58/hearts-academy-logo-transparent.png` (background made transparent via edge-connected removal — the white knot inside the heart mark preserved); the mislabeled 136k data-URI "BISTEC Global" LOGO artifact was replaced by **"BISTEC Hearts Academy"** (`feedToAI: true`, same URL). `fix-data-uri-logos.mjs` confirms **0 data-URIs remain locally**.
 
 ### Tests + gates
 
 - **New §Q E2E suite** (`tests/e2e/async-actions.test.ts`, 9 cases, AC-1..AC-7) + `waitForAction` helper in `tests/helpers/api.ts`; `agui-refinement.test.ts` rewritten to the async contract; TC-BK-09 logo-validation cases added.
 - **TC-REG-H7a rewritten** (`tests/e2e/regression.test.ts`): the old case fired 10 PARALLEL refines expecting 10 sequential revisions — under single-flight, 9 of those now 409 **by design**. The H7 guarantee it guards (unique, contiguous revision numbers, no 500s) is preserved via 10 SEQUENTIAL refines (each 202 → `waitForAction`) asserting contiguous 2..11, plus a parallel-fire phase. **De-flaked 2026-07-22:** the parallel phase originally asserted a fixed **exactly one 202, nine 409s**, which flaked (observed 3 winners) because under the instant `MOCK_*` seams a fire-and-forget refine settles in milliseconds, so a later request in the batch legitimately re-claims a slot an earlier winner already released — the winner count is timing-dependent, not fixed. It now asserts the mock-stable H7 integrity invariant instead: every request is **202 or 409 (never 500)**, and **exactly one revision is appended per 202 winner**, numbering still distinct and contiguous. Catalog entry updated in `docs/e2e-test-plan.md`.
-- Also fixed at finalize: 3 pre-existing lint errors in `scripts/export-posts.mjs` (unused destructured rest-siblings from the 2026-07-17 transfer-scripts commit → `_`-prefixed), and `.env.test` had lost `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (re-added, mirroring `.github/workflows/e2e.yml`, so the 3 §J ACP-auth cases run locally again).
+- Also fixed at finalize: 3 pre-existing lint errors in `scripts/export-posts.mjs` (since removed by 016) (unused destructured rest-siblings from the 2026-07-17 transfer-scripts commit → `_`-prefixed), and `.env.test` had lost `BISTEC_API_KEYS`/`BISTEC_ADMIN_API_KEYS` (re-added, mirroring `.github/workflows/e2e.yml`, so the 3 §J ACP-auth cases run locally again).
 - **Gates:** tsc clean; lint **0 errors** (7 pre-existing warnings); **174/174 unit**; full mock **E2E 145 passed / 4 skipped / 0 failed** (baseline 135/4 + §Q 9 + TC-BK-09; the 4 skips are the intentional TC-GEN-05 + TC-REG-H11a/b/c); production build green (`.next` deleted afterward — stale-`.next` footgun).
 
 ### Same-day addition — brand-kit assistant source documents (campaign-style)
@@ -412,11 +1519,13 @@ The brand-kit assistant chat previously had NO upload affordance (its empty stat
 - **Brand-kit documents, live:** upload (201) → list → **real assistant chat call quoted a marker string from the uploaded doc** (grounding confirmed; the reply also described the logo artifacts — union working) → delete (200) → list empty.
 - **Logo-hygiene effect, live:** background-decision prompt 5,103 chars and design prompt 5,818 chars on the Hearts kit (vs 141k/277k during the incident); regenerate-design completed in 41s vs the 300s timeout.
 
-**⚠️ Deploy:** `npx prisma migrate deploy` (**2 new migrations**: `20260717085058_draft_pending_action`, `20260717114732_brandkit_documents` — nullable columns / new table, no backfill); no new env vars. **Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real. (The Hearts Academy voice-prompt/logo-artifact rebrand above is also machine-local data — recreate via the admin UI there if wanted.)
+**⚠️ Deploy:** `npx prisma migrate deploy` (**2 new migrations**: `20260717085058_draft_pending_action`, `20260717114732_brandkit_documents` — nullable columns / new table, no backfill); no new env vars. ~~**Machine-1 TODO:** its Hearts kit has the same data-URI rows — run `node --env-file=.env scripts/fix-data-uri-logos.mjs --dry-run`, review, then run it for real.~~ **Dropped: the script was removed by 016 (fresh start).** (The Hearts Academy voice-prompt/logo-artifact rebrand above is also machine-local data — recreate via the admin UI there if wanted.)
 
 ---
 
 ## 2026-07-17 — Cross-machine post transfer scripts + ✅ import completed on machine 2
+
+**Removed by 016 (2026-10-13):** `scripts/export-posts.mjs` and `scripts/import-posts.mjs` are deleted (fresh start, no import). Nothing in this section can be run any more; it is history.
 
 **Scripts-only commit** (no app code changes, no migrations, no new env vars). Context: the two dev machines have independent Postgres/MinIO instances; Damian wants the library posts made on machine 1 (`DamianDeCruzBISTECCa`) merged **on top of** the other machine's existing data — not a clone/overwrite.
 
@@ -431,7 +1540,7 @@ The brand-kit assistant chat previously had NO upload affordance (its empty stat
 
 Ran the same day on machine 2 (bundle landed in `Downloads\post-export`, not the recommended Documents spot). Sequence: Docker up → dry-run (clean plan, no missing owners — `adminbtg` exists locally, so no `--owner` flag) → real import → second dry-run showed everything "already present" (idempotency confirmed). Results matched the expected counts exactly: **6 briefs / 6 drafts / 16 revisions / 0 posts created, 31 objects uploaded**. The predicted link drops occurred: 1 campaign + 1 brand-kit link dropped by name-match (the "AI : a new Era" brief falls back to kit precedence). DB spot-check: all 6 drafts EXPORTED with an `exportUrl`, revision chains intact, `currentRevisionNumber` pointers valid — the two zero-revision drafts (`Data Engineering Promotion`, `AI : a new Era`) are legacy pre-F2 rows where a null pointer means "latest revision" by design. Bundle folder can be deleted. The original TODO steps are kept below for reference.
 
-### Original TODO (executed above)
+### Original TODO (executed above; the scripts were removed by 016)
 
 The export bundle lives on machine 1 at `C:\Users\DamianDeCruzBISTECCa\Documents\post-export`; Damian is copying it to the other machine (recommended landing spot: `Documents\post-export`, i.e. **outside the repo**). Then, in the project directory on the other machine:
 
@@ -509,7 +1618,7 @@ Built in dependency order and merged to `main`; per-feature plans live in `docs/
 - **Free version switching** — `Draft.currentRevisionNumber` pointer; generation records a v1 revision; restore reuses the stored PNG (instant) and can move back **and** forward.
 - **Async generation** — `assemble-a/b` return `202 {draftId}` and generate in-process; the draft page shows copy/image skeletons; failure → `Draft.failureReason` + inline Retry (`POST /api/drafts/[id]/retry`); stale drafts swept to FAILED on read. Non-interactive callers (MCP/ACP, scheduler) keep the synchronous `generateDraftForBrief`.
 - **Chat auto-scheduling** — a ` ```schedule ` block in the briefing chat → editable plan → `POST /api/campaigns/[id]/queue/batch`.
-- **Vision (F5/F6)** — first real image-input path: `runVisionModel` (`src/lib/agent/vision.ts`) uses Anthropic image blocks (API) or `claude -p --allowedTools Read` on temp files (CLI). F5: brand-kit assistant extracts voice/tone/style/fonts + a **sampled** palette (`sampleImageColors`). F6: image → slot-based Path A template (`POST …/templates/from-image`). **Vision is MOCK-verified only** — live paths not yet runtime-verified.
+- **Vision (F5/F6)** — first real image-input path: `runVisionModel` (`src/lib/agent/vision.ts`) uses Anthropic image blocks (API) or, since 005 T5, the same base64 image blocks in one stream-json message on stdin to `claude -p --tools ""` (CLI; originally `--allowedTools Read` on temp files). F5: brand-kit assistant extracts voice/tone/style/fonts + a **sampled** palette (`sampleImageColors`). F6: image → slot-based Path A template (`POST …/templates/from-image`). **Vision is MOCK-verified only** — live paths not yet runtime-verified.
 
 **Deploy:** `npx prisma migrate deploy` (migrations `20260713120000`, `20260713130000`, `20260713140000`); no new env vars.
 

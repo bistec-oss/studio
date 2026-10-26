@@ -1,0 +1,7 @@
+exit=0
+duration_s=7
+log=.specclaw/changes/023-scheduler-heartbeat/logs/test-npm-run-test-unit-1909.log
+head=df65aa0d66b3b8907175dd8d6352c3d8249ce59f
+dirty=true
+cmd=npm run test:unit
+interrupted=false

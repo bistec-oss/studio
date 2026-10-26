@@ -7,7 +7,9 @@ import { apiFetch } from '@/lib/apiFetch'
 import type { Campaign, CampaignBriefing } from '@/lib/api-types'
 import { SOURCE_LABEL } from './constants'
 import type { ResolvedKit } from './types'
-import { cardCls } from './cardCls'
+import { EYEBROW, FOCUS, ICON, TAG } from '@/components/ui/atoms'
+import { rowCls } from './cardCls'
+import { StepHead } from './StepHead'
 import { CampaignRow } from './CampaignRow'
 import type { ProjectCampaignGroup } from './useBriefWizard'
 
@@ -36,20 +38,21 @@ function BriefingPreview({ campaignId }: { campaignId: string }) {
   if (!active) return null
 
   return (
-    <div className="mb-4 rounded-xl border border-primary/20 dark:border-primary-light/20 bg-primary/5 dark:bg-primary-light/5">
+    <div className="mb-6 border-b border-line-subtle">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 p-3 text-sm font-semibold text-primary dark:text-primary-light"
+        aria-expanded={open}
+        className={`w-full flex items-center gap-2 py-3 text-left text-ui-sm font-semibold text-fg rounded-ui-sm ${FOCUS}`}
       >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        {open ? <ChevronDown {...ICON} aria-hidden /> : <ChevronRight {...ICON} aria-hidden />}
         Campaign briefing (applies to every post)
-        <span className="font-mono text-xs text-light-text-muted dark:text-dark-text-muted ml-auto">
+        <span className="ml-auto text-ui-xs font-normal text-fg-muted">
           v{active.version}
         </span>
       </button>
       {open && (
-        <p className="px-3 pb-3 text-sm text-light-text dark:text-dark-text whitespace-pre-wrap leading-relaxed">
+        <p className="pb-4 pl-[23px] text-ui-sm text-fg whitespace-pre-wrap leading-relaxed">
           {active.content}
         </p>
       )}
@@ -68,29 +71,28 @@ export function CampaignStep({
 }: CampaignStepProps) {
   return (
     <div>
-      <h2 className="text-base font-bold text-light-text dark:text-dark-text mb-1">Select Campaign</h2>
-      <p className="text-sm text-light-text-muted dark:text-dark-text-muted mb-5">
+      <StepHead title="Select a campaign (optional)">
         Group this post under a campaign. Its brand kit (or the parent project&apos;s) becomes the
         default on the next step — you can still change it.
-      </p>
+      </StepHead>
 
-      {/* Resolved brand-kit banner */}
+      {/* Resolved brand-kit line */}
       {campaignId && (
-        <div className="flex items-center gap-2.5 mb-4 p-3 rounded-xl bg-primary/8 dark:bg-primary-light/10 border border-primary/20 dark:border-primary-light/20">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-4 rounded-ui-md bg-canvas px-4 py-3 ring-1 ring-inset ring-line-subtle">
           {kitLoading ? (
-            <span className="text-sm text-light-text-muted dark:text-dark-text-muted flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin" /> Resolving brand kit…
+            <span className="text-ui-sm text-fg-muted flex items-center gap-2">
+              <Loader2 {...ICON} aria-hidden className="animate-spin" /> Resolving brand kit…
             </span>
           ) : resolvedKit ? (
             <>
-              <span className="text-sm font-semibold text-primary dark:text-primary-light">{resolvedKit.name}</span>
-              <span className="px-1.5 py-0.5 rounded text-[0.62rem] font-semibold bg-white/50 dark:bg-white/10 text-light-text-muted dark:text-dark-text-muted">
+              <span className="text-ui-sm font-semibold text-fg">{resolvedKit.name}</span>
+              <span className={TAG}>
                 {SOURCE_LABEL[resolvedKit.source] ?? resolvedKit.source}
               </span>
-              <span className="text-xs text-light-text-muted dark:text-dark-text-muted ml-auto">Default for this post</span>
+              <span className="text-ui-xs text-fg-muted sm:ml-auto">Default for this post</span>
             </>
           ) : (
-            <span className="text-sm text-light-text-muted dark:text-dark-text-muted">No brand kit resolved.</span>
+            <span className="text-ui-sm text-fg-muted">No brand kit resolved.</span>
           )}
         </div>
       )}
@@ -98,29 +100,30 @@ export function CampaignStep({
       {/* Active campaign briefing preview */}
       {campaignId && <BriefingPreview campaignId={campaignId} />}
 
-      <div className="space-y-1.5">
+      {/* Ruled list on --line-subtle; the selected row is raised (021 design.md §8) */}
+      <div>
         {/* Uncategorized */}
         <button
           type="button"
           onClick={onClearCampaign}
-          className={cardCls(campaignId === '', 'w-full flex items-center gap-3 p-3.5')}
+          aria-pressed={campaignId === ''}
+          className={rowCls(campaignId === '', 'flex items-center gap-3 py-3.5 pl-4 pr-3')}
         >
-          <span className="w-3 h-3 rounded border-2 border-dashed border-light-text-muted dark:border-dark-text-muted flex-shrink-0" />
-          <span className="flex-1">
-            <span className={['block text-sm font-semibold', campaignId === '' ? 'text-primary dark:text-primary-light' : 'text-light-text dark:text-dark-text'].join(' ')}>
+          <span className="flex-1 min-w-0">
+            <span className={['block text-ui-sm text-fg', campaignId === '' ? 'font-semibold' : 'font-medium'].join(' ')}>
               No campaign (Uncategorized)
             </span>
-            <span className="block text-xs text-light-text-muted dark:text-dark-text-muted">
+            <span className="block text-ui-xs text-fg-muted">
               Pick a brand kit yourself on the next step.
             </span>
           </span>
-          {campaignId === '' && <Check size={15} className="text-primary dark:text-primary-light flex-shrink-0" />}
+          {campaignId === '' && <Check {...ICON} aria-hidden className="text-accent flex-shrink-0" />}
         </button>
 
         {/* Grouped by project */}
         {projectsWithCampaigns.map(({ project, campaigns: pcs }) => (
           <div key={project.id}>
-            <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+            <div className={`${EYEBROW} pt-6 pb-2 border-b border-line-subtle`}>
               {project.name}
             </div>
             {pcs.map(c => (
@@ -137,7 +140,7 @@ export function CampaignStep({
         {/* Standalone */}
         {standaloneCampaigns.length > 0 && (
           <div>
-            <div className="px-1 pt-3 pb-1 text-[0.62rem] font-bold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
+            <div className={`${EYEBROW} pt-6 pb-2 border-b border-line-subtle`}>
               Standalone
             </div>
             {standaloneCampaigns.map(c => (

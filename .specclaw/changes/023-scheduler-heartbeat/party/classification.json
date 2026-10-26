@@ -1,0 +1,10 @@
+{
+  "tier": "standard",
+  "domains": [],
+  "rationale": "Several subsystems change (a new WorkerHeartbeat table and migration, worker.ts writes at tick start and end, a read route, a queue-panel banner and a retry-reason tweak), but every edit is additive and best-effort, and the open questions (banner placement, 3-minute threshold) are tuning knobs that do not change what is built.",
+  "signals": {
+    "blast_radius": "New WorkerHeartbeat model and migration, worker.ts writes at tick start and end, a pure staleness helper, one team-authenticated read route, and ScheduledQueueSection.tsx for the banner and retry reason, plus docs",
+    "unresolved": "Only tuning knobs: banner placement (queue panel vs dashboard) and the 3-minute staleness threshold, neither of which changes the file list",
+    "irreversibility": "Additive table and migration with a down script; a heartbeat write failure is logged and never stops the loop, so reverting is a git revert plus dropping one table"
+  }
+}

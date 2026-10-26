@@ -7,30 +7,21 @@ import React from 'react'
 
 interface ColorSwatchProps {
   color: string
+  // Hidden from assistive tech where the swatch sits inside a control whose
+  // name it would otherwise extend (the kit-list row, 014 FR-16). The title
+  // tooltip stays for sighted users.
+  decorative?: boolean
 }
 
-export function ColorSwatch({ color }: ColorSwatchProps) {
+// A kit colour, shown as the kit's own value: the fill comes from data and is
+// never token-styled. Only its frame (a --line edge) is chrome.
+export function ColorSwatch({ color, decorative }: ColorSwatchProps) {
   return (
     <span
-      className="inline-block w-5 h-5 rounded-md border border-black/10 dark:border-white/10 flex-shrink-0"
-      style={{ background: color }}
+      className="inline-block h-5 w-5 flex-shrink-0 rounded-ui-sm border border-line"
+      style={{ backgroundColor: color }} // ui-exception: brand-kit swatch, the kit's own colour from data
       title={color}
+      aria-hidden={decorative ? 'true' : undefined}
     />
-  )
-}
-
-interface SectionHeaderProps {
-  title: string
-  action?: React.ReactNode
-}
-
-export function SectionHeader({ title, action }: SectionHeaderProps) {
-  return (
-    <div className="flex items-center justify-between mb-3">
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-light-text-muted dark:text-dark-text-muted">
-        {title}
-      </h3>
-      {action}
-    </div>
   )
 }

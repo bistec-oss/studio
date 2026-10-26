@@ -1,0 +1,7 @@
+exit=0
+duration_s=17
+log=.specclaw/changes/024-caption-credential-route/logs/build-npm-run-build-2148.log
+head=cd9d411ac465d10bafecee35c1fc11ef84d476f1
+dirty=true
+cmd=npm run build
+interrupted=false

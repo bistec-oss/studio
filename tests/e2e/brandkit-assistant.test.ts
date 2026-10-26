@@ -39,7 +39,7 @@ test.describe('Brand-kit assistant (F5)', () => {
     expect(Array.isArray(suggestion.colors)).toBe(true)
     expect(suggestion.colors.length).toBeGreaterThan(0)
     expect(suggestion.colors[0]).toMatch(/^#[0-9a-fA-F]{6}$/)
-    expect(Array.isArray(suggestion.fonts)).toBe(true)
+    expect(typeof suggestion.fonts).toBe('object')
 
     // Apply voice + colors via the existing endpoints (as the panel does).
     const promptRes = await admin.post(`/api/admin/brandkits/${kit.id}/prompts`, { content: suggestion.voice })

@@ -1,0 +1,7 @@
+exit=0
+duration_s=9
+log=.specclaw/changes/015-draft-action-settle-race/logs/lint-npm-run-lint-30636.log
+head=c4b805220501459b447e56b0d81ba3977ca40186
+dirty=true
+cmd=npm run lint
+interrupted=false

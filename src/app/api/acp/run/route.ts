@@ -33,10 +33,13 @@ export async function POST(req: NextRequest) {
         case 'generate_post': {
           const err = validateGenerateInput(input)
           if (err) return NextResponse.json({ error: err }, { status: 400 })
-          const result = await generatePost({
-            ...(input as Parameters<typeof generatePost>[0]),
-            teamId: key.teamId,
-          })
+          const result = await generatePost(
+            {
+              ...(input as Parameters<typeof generatePost>[0]),
+              teamId: key.teamId,
+            },
+            'acp',
+          )
           return NextResponse.json({ output: result })
         }
         case 'publish_post': {
@@ -62,10 +65,16 @@ export async function POST(req: NextRequest) {
 }
 
 function validateGenerateInput(input: Record<string, unknown>): string | null {
-  const required = ['topic', 'goal', 'tone', 'designMode'] as const
+  const required = ['topic', 'designMode'] as const
   for (const field of required) {
     if (typeof input[field] !== 'string' || !(input[field] as string).trim()) {
       return `${field} is required and must be a non-empty string`
+    }
+  }
+  // 027: goal, tone and postStyle are optional, but a present one must be a string.
+  for (const field of ['goal', 'tone', 'postStyle'] as const) {
+    if (input[field] != null && typeof input[field] !== 'string') {
+      return `${field} must be a string`
     }
   }
   if (!['TEMPLATE', 'GENERATE'].includes(input.designMode as string)) {

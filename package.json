@@ -15,11 +15,13 @@
     "mcp": "tsx src/mcp/server.ts",
     "db:seed": "node --env-file=.env scripts/seed-admin.mjs && node --env-file=.env scripts/seed-brandkit.mjs && node --env-file=.env scripts/seed-hearts-talk.mjs",
     "test:unit": "vitest run",
+    "test:render": "vitest run --config vitest.render.config.ts",
     "test:e2e": "playwright test",
     "test:e2e:mock": "cross-env TEST_BASE_URL=http://localhost:3001 MOCK_AI=true MOCK_PUPPETEER=true MOCK_SOCIAL=true playwright test",
     "test:e2e:reg": "node --env-file=.env.test ./node_modules/@playwright/test/cli.js test",
     "test:e2e:db": "node scripts/setup-test-db.mjs",
-    "test:e2e:serve": "dotenv -e .env.test -- next dev -p 3001"
+    "test:e2e:serve": "dotenv -e .env.test -- next dev -p 3001",
+    "test:upgrade": "node scripts/test-upgrade-path.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
@@ -36,6 +38,7 @@
     "next": "^16.2.10",
     "openai": "^4.0.0",
     "p-limit": "^7.3.0",
+    "parse5": "8.0.1",
     "pdf-parse": "^2.4.5",
     "puppeteer-core": "^22.0.0",
     "react": "^19.2.7",
@@ -49,6 +52,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.0.0",
+    "axe-core": "^4.12.1",
     "cross-env": "^10.1.0",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.4",

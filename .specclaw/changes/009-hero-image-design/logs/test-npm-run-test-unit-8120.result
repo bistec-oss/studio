@@ -1,0 +1,7 @@
+exit=0
+duration_s=6
+log=.specclaw/changes/009-hero-image-design/logs/test-npm-run-test-unit-8120.log
+head=f8c5436c295f1a0a2eb39d2f6d2d2505197d27c2
+dirty=true
+cmd=npm run test:unit
+interrupted=false
