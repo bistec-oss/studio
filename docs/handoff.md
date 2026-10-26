@@ -7,7 +7,9 @@
 
 ---
 
-## ⏸️ 2026-10-27 — PICK UP HERE: the `v2` → `main` release PR [#45](https://github.com/bistec-oss/studio/pull/45) is open as a draft; it merges only on the user's go-ahead, after the pre-merge prod checklist
+## ⏸️ 2026-10-27 — PICK UP HERE: the `v2` → `main` release PR [#45](https://github.com/bistec-oss/studio/pull/45); the user authorized the merge once GitHub CI is green, before the operator steps
+
+**Merged before the operator steps (the user's decision, 2026-10-27).** Prod does not change at the merge (the Coolify token is dead), but the merge's build pushes the release image to GHCR `:latest`. The first deploy that works ships the whole release, so the "Blocking operator steps" in the checklist below now come **before the token rotation**, and nobody redeploys either resource until they are done. The order is in [`devops-deploy-handover.md`](devops-deploy-handover.md) section 1.
 
 **State.** 031 is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md)), so every change on `v2` is verified. #45 carries changes 004 to 031: 414 commits and 22 new migrations. `main` (`671ad6e`) is the merge base, so there are no conflicts and the merge can fast-forward. `main` has no branch protection; #45 is a draft so it cannot be merged by accident. Close or recreate the ten old Dependabot PRs (#21 to #34) after the release.
 

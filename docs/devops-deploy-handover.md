@@ -30,12 +30,18 @@ The merge is **not DevOps's to make**. It waits on the product owner's go-ahead 
 
 **Contradiction to know about:** the checklist's opening line says `v2` "carries changes 004-024" (`docs/handoff.md`, line 515). That is stale. The same file adds "Check before the merge" lines for 025 to 031 below it, and the git diff shows migrations up to `20261030120000_apply_text_action` (031). Trust the git diff.
 
+### ⚠️ The release is merged to `main` (2026-10-27): the first working deploy ships it
+
+The product owner merged `v2` into `main` (PR #45) on 2026-10-27, once CI was green, **before** the operator steps in section 6.1. Prod did not change, because the Coolify token is dead. But **the first deploy that works after the token is rotated deploys the whole release** (22 migrations, including the drop of `Draft.copyText`). There is no longer a small "deploy `main` first" step.
+
+The merge's build already pushed the release image to GHCR as `:latest`. So **any** deploy now ships it: the token test (section 3, step 3), a dispatch (step 4), and a manual **Redeploy** of either resource in Coolify. **Do not redeploy either resource until section 6.1 is done.** Do the release's blocking steps before the token goes back into GitHub.
+
 ### Recommended order
 
-1. Fix the pipeline (section 3).
-2. Fix the scheduler resource (section 4).
-3. Security items (section 5). These can run in parallel with 1 and 2.
-4. The release (section 6).
+1. Security items (section 5). These can run at any time.
+2. **The release's "before" steps (section 6.1): the `pg_dump`, the legacy-count query, the recovery plan and the env checks on both resources.**
+3. Fix the pipeline (section 3): rotate the token. Its first successful deploy **is** the release (sections 6.3 and 6.4 apply to it); wait until `in_flight = 0`.
+4. Fix the scheduler resource (section 4).
 5. App-level setup by the owners (section 7).
 
 ---
@@ -155,7 +161,7 @@ The scheduler's `.env` must be **identical** to the app's. A scheduler with a di
 
    Or use **Actions, Build and push Docker image, Run workflow** with `main`. The job is guarded to `main` only (`if: github.ref == 'refs/heads/main'`).
    - **Do not re-run the old failed run** (34988162569). It would rebuild an old commit as `:latest` (`docs/coolify-token-rotation.md`, step 3).
-   - Heads-up: a dispatch deploys whatever `main` is at that moment. **Today that is `671ad6e` (PR #42), which is newer than prod.** Prod last deployed before the token died and runs `sha-09a38b71` (`docs/coolify-token-rotation.md`). The one-commit gap has **no migrations**, but it moves the image from Node 20 to **Node 22** (`Dockerfile`) and adds `/api/health`, the deploy verify step and the hardened redeploy step. That makes this dispatch a good, small first deploy: it proves the pipeline and the Node 22 image before the large release. Check one generation in the app afterwards. Once the release is merged, `main` is the new code.
+   - **Heads-up: this dispatch deploys the release.** A dispatch deploys whatever `main` is, and since 2026-10-27 `main` holds the merged `v2` release (PR #45): 22 migrations, Node 22, the drop of `Draft.copyText`. Prod still runs `sha-09a38b71` (`docs/coolify-token-rotation.md`). Do section 6.1 first, then treat this run as the release deploy (sections 6.3 to 6.5). The merge's own build already pushed the release image to GHCR as `:latest` (its redeploy step then failed on the dead token), so the direct `curl` test in step 3 deploys the release too.
 
 ### How to verify it worked
 
