@@ -13,7 +13,7 @@
 
 **For DevOps:** [`devops-deploy-handover.md`](devops-deploy-handover.md). Prod still runs `sha-09a38b71` (no deploy since 2026-09-15, no `/api/health`); `main` is one commit ahead (PR #42, Node 22, no migration), and the handover suggests deploying it first once the token is rotated.
 
-**Left running:** the app on :3002 against `bistec_studio_op1` with real models, for the user's review. Stop it before any build or E2E run.
+**The review server is stopped:** the :3002 app against `bistec_studio_op1` (real models) ran for the user's review and was stopped at the end of the session.
 
 ## 2026-10-27 (superseded as the pickup point by the section above) — 031 (v2 final polish) is VERIFIED PASS (46/46 ACs; [verify-report](../.specclaw/changes/031-v2-final-polish/verify-report.md))
 
